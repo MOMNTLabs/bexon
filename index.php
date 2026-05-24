@@ -700,7 +700,7 @@ $complianceAssetVersion = assetVersion('assets/compliance.js');
 $pwaAssetVersion = assetVersion('assets/pwa.js');
 $manifestAssetVersion = assetVersion('manifest.webmanifest');
 $profileIconAssetVersion = assetVersion('assets/Bexon---Perfil.png');
-$logoLockupAssetVersion = assetVersion('assets/logo-lockup.svg');
+$pwaLaunchLogoAssetVersion = assetVersion('assets/Bexon - Logo Horizontal.png');
 $pwaIcon180AssetVersion = assetVersion('assets/pwa-icon-180.png');
 $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
 $groupFilter = isset($_GET['group']) && trim((string) $_GET['group']) !== ''
@@ -804,7 +804,7 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
     <link rel="shortcut icon" href="<?= e(appPath('assets/Bexon---Perfil.png?v=' . $profileIconAssetVersion)) ?>">
     <link rel="apple-touch-icon" href="<?= e(appPath('assets/pwa-icon-180.png?v=' . $pwaIcon180AssetVersion)) ?>">
     <link rel="manifest" href="<?= e(appPath('manifest.webmanifest?v=' . $manifestAssetVersion)) ?>">
-    <link rel="preload" as="image" href="<?= e(appPath('assets/logo-lockup.svg?v=' . $logoLockupAssetVersion)) ?>">
+    <link rel="preload" as="image" href="<?= e(appPath('assets/Bexon - Logo Horizontal.png?v=' . $pwaLaunchLogoAssetVersion)) ?>">
     <style>
         html[data-pwa-launch-splash="active"] {
             background: #040714;
@@ -818,6 +818,16 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
                     window.navigator.standalone === true;
                 if (!isStandalone) return;
                 document.documentElement.dataset.pwaLaunchSplash = "active";
+                window.__bexonPwaLaunchSplashFailsafe = window.setTimeout(() => {
+                    document.documentElement.dataset.pwaLaunchSplash = "closing";
+                    window.setTimeout(() => {
+                        const splash = document.querySelector("[data-pwa-launch-splash]");
+                        if (splash instanceof HTMLElement) {
+                            splash.hidden = true;
+                        }
+                        document.documentElement.removeAttribute("data-pwa-launch-splash");
+                    }, 280);
+                }, 2800);
             } catch (_error) {
                 // Ignore splash bootstrap errors and continue rendering normally.
             }
@@ -859,7 +869,7 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
             <span class="pwa-launch-splash__halo" aria-hidden="true"></span>
             <img
                 class="pwa-launch-splash__logo"
-                src="<?= e(appPath('assets/logo-lockup.svg?v=' . $logoLockupAssetVersion)) ?>"
+                src="<?= e(appPath('assets/Bexon - Logo Horizontal.png?v=' . $pwaLaunchLogoAssetVersion)) ?>"
                 alt="Bexon"
             >
             <span class="pwa-launch-splash__indicator" aria-hidden="true"></span>

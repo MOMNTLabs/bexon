@@ -53,6 +53,32 @@
   const launchSplashStartedAt = launchSplashStartsActive ? Date.now() : 0;
   let launchSplashDismissScheduled = false;
 
+  const clearLaunchSplashFailsafe = () => {
+    const failsafeTimer = window.__bexonPwaLaunchSplashFailsafe;
+    if (typeof failsafeTimer === "number" && failsafeTimer > 0) {
+      window.clearTimeout(failsafeTimer);
+      window.__bexonPwaLaunchSplashFailsafe = 0;
+    }
+  };
+
+  const cleanupLegacyPwaCaches = async () => {
+    if (!("caches" in window)) return;
+
+    try {
+      const cacheKeys = await caches.keys();
+      await Promise.all(
+        cacheKeys
+          .filter((cacheKey) => {
+            const normalizedKey = String(cacheKey || "").toLowerCase();
+            return normalizedKey.includes("static-") && !normalizedKey.startsWith("bexon-static-");
+          })
+          .map((cacheKey) => caches.delete(cacheKey))
+      );
+    } catch (_error) {
+      // Ignore cache cleanup failures and continue the app boot.
+    }
+  };
+
   const dismissLaunchSplash = () => {
     if (!(launchSplash instanceof HTMLElement) || !launchSplashStartsActive) {
       return;
@@ -61,6 +87,7 @@
       return;
     }
 
+    clearLaunchSplashFailsafe();
     launchSplashDismissScheduled = true;
     const elapsed = Date.now() - launchSplashStartedAt;
     const remainingVisibleMs = Math.max(0, 520 - elapsed);
@@ -72,6 +99,14 @@
         document.documentElement.removeAttribute("data-pwa-launch-splash");
       }, 260);
     }, remainingVisibleMs);
+  };
+
+  const scheduleLaunchSplashDismiss = () => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        dismissLaunchSplash();
+      });
+    });
   };
 
   const lockViewportZoom = () => {
@@ -188,18 +223,28 @@
     lockViewportZoom();
   }
   if (launchSplashStartsActive) {
-    if (document.readyState === "complete") {
-      dismissLaunchSplash();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleLaunchSplashDismiss, { once: true });
     } else {
-      window.addEventListener("load", dismissLaunchSplash, { once: true });
-      window.setTimeout(dismissLaunchSplash, 4200);
+      scheduleLaunchSplashDismiss();
     }
+    window.addEventListener("pageshow", scheduleLaunchSplashDismiss, { once: true });
+    window.setTimeout(dismissLaunchSplash, 1600);
   }
   window
     .matchMedia?.("(display-mode: standalone)")
     ?.addEventListener?.("change", syncDisplayMode);
 
+  cleanupLegacyPwaCaches();
+
   if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker
+      .getRegistration(appScope())
+      .then((registration) => registration?.update())
+      .catch(() => {
+        // Ignore update errors and continue the app shell.
+      });
+
     window.addEventListener(
       "load",
       () => {

@@ -25,7 +25,7 @@ $trackedFiles = [
     'assets/compliance.js',
     'assets/pwa.js',
     'assets/Bexon---Perfil.png',
-    'assets/logo-lockup.svg',
+    'assets/Bexon - Logo Horizontal.png',
     'assets/pwa-icon-180.png',
     'assets/pwa-icon-192.png',
     'assets/pwa-icon-512.png',
@@ -47,7 +47,7 @@ $precachePaths = [
     pwaVersionedPath('assets/compliance.js'),
     pwaVersionedPath('assets/pwa.js'),
     pwaVersionedPath('assets/Bexon---Perfil.png'),
-    pwaVersionedPath('assets/logo-lockup.svg'),
+    pwaVersionedPath('assets/Bexon - Logo Horizontal.png'),
     pwaVersionedPath('assets/pwa-icon-180.png'),
     pwaVersionedPath('assets/pwa-icon-192.png'),
     pwaVersionedPath('assets/pwa-icon-512.png'),
@@ -93,7 +93,10 @@ self.addEventListener("activate", (event) => {
       const cacheKeys = await caches.keys();
       await Promise.all(
         cacheKeys
-          .filter((cacheKey) => cacheKey.startsWith("bexon-static-") && cacheKey !== STATIC_CACHE)
+          .filter((cacheKey) => {
+            const normalizedKey = String(cacheKey || "").toLowerCase();
+            return normalizedKey.includes("static-") && cacheKey !== STATIC_CACHE;
+          })
           .map((cacheKey) => caches.delete(cacheKey))
       );
       await self.clients.claim();
