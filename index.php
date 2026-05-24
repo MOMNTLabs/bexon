@@ -821,7 +821,7 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
                 window.__bexonPwaLaunchSplashFailsafe = window.setTimeout(() => {
                     document.documentElement.dataset.pwaLaunchSplash = "closing";
                     window.setTimeout(() => {
-                        const splash = document.querySelector("[data-pwa-launch-splash]");
+                        const splash = document.querySelector(".pwa-launch-splash[data-pwa-launch-splash]");
                         if (splash instanceof HTMLElement) {
                             splash.hidden = true;
                         }

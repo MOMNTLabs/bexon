@@ -46,7 +46,7 @@
       : "browser";
   };
 
-  const launchSplash = document.querySelector("[data-pwa-launch-splash]");
+  const launchSplash = document.querySelector(".pwa-launch-splash[data-pwa-launch-splash]");
   const launchSplashStartsActive =
     launchSplash instanceof HTMLElement &&
     document.documentElement.dataset.pwaLaunchSplash === "active";
