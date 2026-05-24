@@ -7466,6 +7466,10 @@ window.addEventListener("DOMContentLoaded", () => {
         const shouldHideDone = !groupSection.classList.contains("is-done-hidden");
         setTaskGroupDoneHidden(groupSection, shouldHideDone);
       }
+      const actionsMenu = groupDoneToggleButton.closest("[data-task-group-actions-menu]");
+      if (actionsMenu instanceof HTMLDetailsElement) {
+        actionsMenu.open = false;
+      }
       return;
     }
 
@@ -7561,6 +7565,15 @@ window.addEventListener("DOMContentLoaded", () => {
   const dashboardViewToggleButtons = Array.from(
     document.querySelectorAll("[data-dashboard-view-toggle]")
   );
+  dashboardViewToggleButtons.forEach((button) => {
+    if (!(button instanceof HTMLElement) || !button.hasAttribute("data-dashboard-return-toggle")) {
+      return;
+    }
+    if (!button.dataset.dashboardForwardLabel) {
+      button.dataset.dashboardForwardLabel =
+        button.getAttribute("aria-label") || button.getAttribute("title") || "";
+    }
+  });
   const usersSidebar = document.querySelector(".users-sidebar");
   const workspaceSidebarHeader = document.querySelector(".workspace-sidebar-header");
   const dashboardMobileHeaderActions = document.querySelector("[data-dashboard-mobile-header-actions]");
@@ -7640,6 +7653,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const defaultDashboardView = dashboardViews.has("overview") ? "overview" : "tasks";
   let syncTaskDetailModalFromUrl = null;
+  const dashboardReturnStateStorageKey = "bexon.dashboard.returnState";
 
   const normalizeDashboardView = (value) => {
     const normalized = normalizeDashboardViewCandidate(value);
@@ -7680,6 +7694,90 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     return normalizeDashboardView(rawView);
+  };
+
+  const currentDashboardView = () => {
+    const bodyView =
+      document.body instanceof HTMLBodyElement ? document.body.dataset.dashboardView || "" : "";
+    return normalizeDashboardView(bodyView || dashboardViewFromUrl());
+  };
+
+  const readDashboardReturnState = (targetView = "") => {
+    try {
+      const rawState = window.sessionStorage?.getItem(dashboardReturnStateStorageKey) || "";
+      if (!rawState) return null;
+      const state = JSON.parse(rawState);
+      if (!state || typeof state !== "object") return null;
+
+      const stateTarget = normalizeDashboardViewCandidate(state.target || "");
+      if (targetView && stateTarget && stateTarget !== targetView) {
+        return null;
+      }
+
+      const stateView = normalizeDashboardViewCandidate(state.view || "");
+      if (!stateView || !dashboardViews.has(stateView) || stateView === targetView) {
+        return null;
+      }
+
+      const taskId =
+        stateView === "tasks"
+          ? Math.max(0, Number.parseInt(String(state.taskId || "0"), 10) || 0)
+          : 0;
+      return { view: stateView, taskId };
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const writeDashboardReturnState = (targetView, state) => {
+    if (!state || !state.view || state.view === targetView) return;
+    try {
+      window.sessionStorage?.setItem(
+        dashboardReturnStateStorageKey,
+        JSON.stringify({
+          target: targetView,
+          view: state.view,
+          taskId: state.view === "tasks" ? state.taskId || 0 : 0,
+        })
+      );
+    } catch (error) {
+      // Session storage can be unavailable in restricted browser modes.
+    }
+  };
+
+  const dashboardReturnFallbackView = (button, targetView) => {
+    const fallbackCandidate = normalizeDashboardViewCandidate(
+      button instanceof HTMLElement ? button.dataset.dashboardReturnFallback || "" : ""
+    );
+    if (fallbackCandidate && dashboardViews.has(fallbackCandidate) && fallbackCandidate !== targetView) {
+      return fallbackCandidate;
+    }
+    if (defaultDashboardView !== targetView) {
+      return defaultDashboardView;
+    }
+    return Array.from(dashboardViews).find((view) => view !== targetView) || defaultDashboardView;
+  };
+
+  const resolveDashboardToggleState = (button, targetView) => {
+    if (!(button instanceof HTMLElement) || !button.hasAttribute("data-dashboard-return-toggle")) {
+      return { view: targetView, taskId: 0 };
+    }
+
+    const activeView = currentDashboardView();
+    if (activeView !== targetView) {
+      writeDashboardReturnState(targetView, {
+        view: activeView,
+        taskId: activeView === "tasks" ? dashboardTaskIdFromUrl() : 0,
+      });
+      return { view: targetView, taskId: 0 };
+    }
+
+    const returnState = readDashboardReturnState(targetView);
+    if (returnState) {
+      return returnState;
+    }
+
+    return { view: dashboardReturnFallbackView(button, targetView), taskId: 0 };
   };
 
   const buildDashboardStateUrl = (nextView, { taskId = 0 } = {}) => {
@@ -7747,6 +7845,19 @@ window.addEventListener("DOMContentLoaded", () => {
       const isActive = buttonView === view;
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      if (button.hasAttribute("data-dashboard-return-toggle")) {
+        const forwardLabel =
+          button.dataset.dashboardForwardLabel ||
+          button.getAttribute("aria-label") ||
+          button.getAttribute("title") ||
+          "";
+        const backLabel = button.dataset.dashboardBackLabel || "Voltar";
+        const nextLabel = isActive ? backLabel : forwardLabel;
+        if (nextLabel) {
+          button.setAttribute("aria-label", nextLabel);
+          button.setAttribute("title", nextLabel);
+        }
+      }
       if (isActive) {
         button.setAttribute("aria-current", "page");
       } else {
@@ -15426,7 +15537,8 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const targetView = normalizeDashboardView(targetViewCandidate);
-      setDashboardView(targetView, { updateUrl: true });
+      const nextState = resolveDashboardToggleState(dashboardViewToggle, targetView);
+      setDashboardView(nextState.view, { updateUrl: true, taskId: nextState.taskId });
       if (isMobileSidebarOpen()) {
         setMobileSidebarOpen(false);
       }
@@ -15686,6 +15798,10 @@ window.addEventListener("DOMContentLoaded", () => {
       "[data-open-group-permissions-modal]"
     );
     if (openGroupPermissionsTrigger instanceof HTMLElement) {
+      const actionsMenu = openGroupPermissionsTrigger.closest("[data-task-group-actions-menu]");
+      if (actionsMenu instanceof HTMLDetailsElement) {
+        actionsMenu.open = false;
+      }
       openGroupPermissionsModal(
         openGroupPermissionsTrigger.dataset.openGroupPermissionsModal || ""
       );

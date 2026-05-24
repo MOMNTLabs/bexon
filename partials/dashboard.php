@@ -78,6 +78,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     type="button"
                     class="sidebar-view-toggle workspace-mobile-overview-button is-active"
                     data-dashboard-view-toggle
+                    data-dashboard-return-toggle
+                    data-dashboard-back-label="Voltar"
                     data-view="overview"
                     aria-pressed="true"
                     aria-label="Dashboard geral"
@@ -99,6 +101,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         type="button"
                         class="sidebar-view-toggle workspace-sidebar-overview-toggle is-active"
                         data-dashboard-view-toggle
+                        data-dashboard-return-toggle
+                        data-dashboard-back-label="Voltar"
                         data-view="overview"
                         aria-pressed="true"
                         aria-label="Dashboard geral"
@@ -180,6 +184,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     type="button"
                                     class="sidebar-view-toggle workspace-users-settings-button"
                                     data-dashboard-view-toggle
+                                    data-dashboard-return-toggle
+                                    data-dashboard-back-label="Voltar"
                                     data-view="users"
                                     aria-pressed="false"
                                     aria-label="Configurações do workspace"
@@ -833,29 +839,10 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         <section class="tasklist-wrap panel" id="tasks" data-dashboard-view-panel="tasks"<?= $serverSelectedDashboardView !== 'tasks' ? ' hidden' : '' ?>>
             <?php
             $storedTaskGroupDoneHiddenMap = storedTaskGroupDoneHiddenMap($currentWorkspaceId ?? null);
-            $initialVisibleTaskCount = 0;
-            foreach ($tasksGroupedByGroup as $initialGroupName => $initialGroupTasks) {
-                $initialGroupDoneHidden = !empty(
-                    $storedTaskGroupDoneHiddenMap[normalizeStoredTaskGroupStateName((string) $initialGroupName)]
-                );
-                foreach ($initialGroupTasks as $initialTask) {
-                    $initialStatusKey = normalizeTaskStatus((string) ($initialTask['status'] ?? ''));
-                    $initialStatusMeta = $statusMetaByKey[$initialStatusKey] ?? taskStatusMeta($initialStatusKey);
-                    $initialStatusKind = (string) ($initialTask['status_kind'] ?? $initialStatusMeta['kind'] ?? 'todo');
-                    if ($initialGroupDoneHidden && $initialStatusKind === 'done') {
-                        continue;
-                    }
-                    $initialVisibleTaskCount++;
-                }
-            }
             ?>
             <div class="panel-header board-header">
                 <div>
                     <h2>Lista de tarefas</h2>
-                </div>
-                <div class="board-summary">
-                    <span data-board-visible-count><?= e((string) $initialVisibleTaskCount) ?> visíveis</span>
-                    <span data-board-total-count><?= e((string) $stats['total']) ?> total</span>
                 </div>
             </div>
 
@@ -1165,25 +1152,38 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                 </div>
                                 <div class="task-group-head-actions">
                                     <span class="task-group-collapse" data-group-toggle-indicator aria-hidden="true"><span>&#9662;</span></span>
-                                    <button
-                                        type="button"
-                                        class="group-done-toggle-button"
-                                        data-toggle-group-done
-                                        data-label-hide="Ocultar concluídas"
-                                        data-label-show="Exibir concluídas"
-                                        aria-pressed="<?= $taskGroupDoneHidden ? 'true' : 'false' ?>"
-                                        aria-label="<?= e($taskGroupDoneToggleLabel) ?> do grupo <?= e((string) $groupName) ?>"
-                                    ><?= e($taskGroupDoneToggleLabel) ?></button>
-                                    <?php if (!empty($canManageWorkspace) && empty($isPersonalWorkspace)): ?>
-                                        <button
-                                            type="button"
-                                            class="group-permissions-button"
-                                            data-open-group-permissions-modal="<?= e($taskGroupPermissionsModalKey) ?>"
-                                            aria-label="Gerenciar acesso do grupo <?= e((string) $groupName) ?>"
+                                    <details class="task-group-actions-menu" data-inline-select-picker data-task-group-actions-menu>
+                                        <summary
+                                            class="task-group-actions-trigger"
+                                            aria-label="Ações do grupo <?= e((string) $groupName) ?>"
+                                            title="Ações"
                                         >
-                                            Acesso
-                                        </button>
-                                    <?php endif; ?>
+                                            <span aria-hidden="true">&#8942;</span>
+                                        </summary>
+                                        <div class="task-group-actions-menu-list" role="menu" aria-label="Ações do grupo <?= e((string) $groupName) ?>">
+                                            <button
+                                                type="button"
+                                                class="task-group-actions-menu-item"
+                                                data-toggle-group-done
+                                                data-label-hide="Ocultar concluídas"
+                                                data-label-show="Exibir concluídas"
+                                                role="menuitem"
+                                                aria-pressed="<?= $taskGroupDoneHidden ? 'true' : 'false' ?>"
+                                                aria-label="<?= e($taskGroupDoneToggleLabel) ?> do grupo <?= e((string) $groupName) ?>"
+                                            ><?= e($taskGroupDoneToggleLabel) ?></button>
+                                            <?php if (!empty($canManageWorkspace) && empty($isPersonalWorkspace)): ?>
+                                                <button
+                                                    type="button"
+                                                    class="task-group-actions-menu-item"
+                                                    data-open-group-permissions-modal="<?= e($taskGroupPermissionsModalKey) ?>"
+                                                    role="menuitem"
+                                                    aria-label="Gerenciar acesso do grupo <?= e((string) $groupName) ?>"
+                                                >
+                                                    Acesso
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
+                                    </details>
                                     <?php if ($taskGroupCanAccess): ?>
                                         <button
                                             type="button"
