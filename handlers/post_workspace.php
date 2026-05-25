@@ -67,6 +67,22 @@ function handleWorkspacePostAction(PDO $pdo, string $action): bool
                     if ($requestedAccountingPeriod !== '') {
                         $redirectParams['accounting_period'] = $requestedAccountingPeriod;
                     }
+                } elseif ($resolvedView === 'tasks') {
+                    $requestedTaskScope = normalizeTaskPageMode((string) ($requestedQueryParams['task_scope'] ?? ''));
+                    $requestedTaskGroup = normalizeTaskGroupName((string) ($requestedQueryParams['group'] ?? ''));
+                    $canUseRequestedTaskGroup = $requestedTaskGroup !== ''
+                        && findTaskGroupByName($requestedTaskGroup, $workspaceId) !== null
+                        && userCanViewTaskGroup((int) $authUser['id'], $workspaceId, $requestedTaskGroup);
+
+                    if ($requestedTaskScope === 'all') {
+                        $redirectParams['task_scope'] = 'all';
+                        if ($canUseRequestedTaskGroup) {
+                            $redirectParams['group'] = $requestedTaskGroup;
+                        }
+                    } elseif ($requestedTaskScope === 'project' && $canUseRequestedTaskGroup) {
+                        $redirectParams['task_scope'] = 'project';
+                        $redirectParams['group'] = $requestedTaskGroup;
+                    }
                 }
 
                 $redirectPath = dashboardPath($resolvedView, $redirectParams);
@@ -90,7 +106,7 @@ function handleWorkspacePostAction(PDO $pdo, string $action): bool
 
                 setActiveWorkspaceId($workspaceId);
                 flash('success', 'Workspace criado.');
-                redirectTo('index.php#tasks');
+                redirectTo(dashboardPath('tasks'));
 
             case 'workspace_update_profile':
             case 'workspace_update_name':

@@ -3673,9 +3673,13 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const createEmptyGroupRow = (groupName) => {
+  const createEmptyGroupRow = (groupName, options = {}) => {
     const row = document.createElement("div");
     row.className = "task-group-empty-row";
+
+    if (options.includeButton === false) {
+      return row;
+    }
 
     const button = document.createElement("button");
     button.type = "button";
@@ -3697,21 +3701,67 @@ window.addEventListener("DOMContentLoaded", () => {
     return row;
   };
 
+  const normalizeTaskGroupDoneToggleName = (value) =>
+    String(value || "").trim().toLocaleLowerCase("pt-BR");
+
+  const getTaskGroupSectionForDoneToggle = (toggleButton) => {
+    if (!(toggleButton instanceof HTMLElement)) return null;
+
+    const ownedGroupSection = toggleButton.closest("[data-task-group]");
+    if (ownedGroupSection instanceof HTMLElement) {
+      return ownedGroupSection;
+    }
+
+    const targetGroupKey = normalizeTaskGroupDoneToggleName(
+      toggleButton.dataset.taskGroupToggleName || ""
+    );
+    if (!targetGroupKey || !(taskGroupsListElement instanceof HTMLElement)) {
+      return null;
+    }
+
+    return getTaskGroupSections().find((section) => {
+      const sectionGroupKey = normalizeTaskGroupDoneToggleName(section.dataset.groupName || "");
+      return sectionGroupKey === targetGroupKey;
+    }) || null;
+  };
+
+  const getTaskGroupDoneToggleButtons = (groupSection) => {
+    if (!(groupSection instanceof HTMLElement)) return [];
+
+    const groupKey = normalizeTaskGroupDoneToggleName(groupSection.dataset.groupName || "");
+    return Array.from(document.querySelectorAll("[data-toggle-group-done]")).filter((button) => {
+      if (!(button instanceof HTMLButtonElement)) return false;
+
+      const ownedGroupSection = button.closest("[data-task-group]");
+      if (ownedGroupSection instanceof HTMLElement) {
+        return ownedGroupSection === groupSection;
+      }
+
+      const targetGroupKey = normalizeTaskGroupDoneToggleName(
+        button.dataset.taskGroupToggleName || ""
+      );
+      return groupKey !== "" && targetGroupKey === groupKey;
+    });
+  };
+
   const syncTaskGroupDoneToggleButton = (groupSection) => {
     if (!(groupSection instanceof HTMLElement)) return;
-    const toggleButton = groupSection.querySelector("[data-toggle-group-done]");
-    if (!(toggleButton instanceof HTMLButtonElement)) return;
+    const toggleButtons = getTaskGroupDoneToggleButtons(groupSection);
+    if (!toggleButtons.length) return;
 
-    const hideLabel = (toggleButton.dataset.labelHide || "").trim() || "Ocultar concluídas";
-    const showLabel = (toggleButton.dataset.labelShow || "").trim() || "Exibir concluídas";
     const isDoneHidden = groupSection.classList.contains("is-done-hidden");
-    const nextLabel = isDoneHidden ? showLabel : hideLabel;
     const groupName = (groupSection.dataset.groupName || "Geral").trim() || "Geral";
 
-    toggleButton.textContent = nextLabel;
-    toggleButton.classList.toggle("is-active", isDoneHidden);
-    toggleButton.setAttribute("aria-pressed", isDoneHidden ? "true" : "false");
-    toggleButton.setAttribute("aria-label", `${nextLabel} do grupo ${groupName}`);
+    toggleButtons.forEach((toggleButton) => {
+      const hideLabel = (toggleButton.dataset.labelHide || "").trim() || "Ocultar concluídas";
+      const showLabel = (toggleButton.dataset.labelShow || "").trim() || "Exibir concluídas";
+      const nextLabel = isDoneHidden ? showLabel : hideLabel;
+
+      toggleButton.textContent = nextLabel;
+      toggleButton.classList.toggle("is-active", isDoneHidden);
+      toggleButton.setAttribute("aria-pressed", isDoneHidden ? "true" : "false");
+      toggleButton.setAttribute("aria-label", `${nextLabel} do grupo ${groupName}`);
+    });
   };
 
   const syncTaskGroupDoneVisibility = (groupSection) => {
@@ -3764,7 +3814,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const groupName = (groupSection.dataset.groupName || "Geral").trim() || "Geral";
 
     if (totalTaskCount === 0) {
-      if (!emptyRow) dropzone.append(createEmptyGroupRow(groupName));
+      if (!emptyRow) {
+        dropzone.append(createEmptyGroupRow(groupName, {
+          includeButton: !groupSection.classList.contains("task-group-project-view"),
+        }));
+      }
     } else if (emptyRow) {
       emptyRow.remove();
     }
@@ -4159,6 +4213,28 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(renameForm instanceof HTMLFormElement)) return;
     const { nameInput, oldNameField, editButton } = getGroupRenameFields(renameForm);
     if (!(nameInput instanceof HTMLInputElement)) return;
+    const focusRenameInput = () => {
+      try {
+        nameInput.focus({ preventScroll: true });
+      } catch (_error) {
+        nameInput.focus();
+      }
+      if (options.select === false) {
+        const caretPosition = nameInput.value.length;
+        try {
+          nameInput.setSelectionRange(caretPosition, caretPosition);
+        } catch (_error) {}
+        return;
+      }
+      try {
+        nameInput.select();
+      } catch (_error) {
+        const caretPosition = nameInput.value.length;
+        try {
+          nameInput.setSelectionRange(0, caretPosition);
+        } catch (_selectionError) {}
+      }
+    };
 
     const canEdit = !nameInput.readOnly;
     const nextEditing = Boolean(editing) && canEdit;
@@ -4180,15 +4256,9 @@ window.addEventListener("DOMContentLoaded", () => {
     syncGroupRenamePresentation(renameForm);
 
     if (nextEditing) {
+      focusRenameInput();
       window.requestAnimationFrame(() => {
-        try {
-          nameInput.focus({ preventScroll: true });
-        } catch (_error) {
-          nameInput.focus();
-        }
-        if (options.select !== false) {
-          nameInput.select();
-        }
+        focusRenameInput();
       });
       return;
     }
@@ -4392,7 +4462,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     if (!response.ok || !data || data.ok !== true) {
       const requestMessage =
-        (data && (data.error || data.message)) || "NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o.";
+        (data && (data.error || data.message)) || "Não foi possível concluir a operação.";
       const requestError = createRequestError(requestMessage, response, data);
       if (handleStaleAppReloadRecovery(requestError)) {
         return new Promise(() => {});
@@ -4941,10 +5011,21 @@ window.addEventListener("DOMContentLoaded", () => {
         setHeaderNotificationDropdownOpen(false);
         const taskAnchorId = `task-${taskId}`;
         const taskRow = document.getElementById(taskAnchorId);
-        setDashboardView("tasks", { updateUrl: true, taskId });
-        if (taskRow instanceof HTMLElement) {
-          openTaskDetailModal(taskRow, { updateUrl: true, scrollIntoView: true });
+        if (!(taskRow instanceof HTMLElement)) {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("view", "tasks");
+          nextUrl.searchParams.set("task_scope", "all");
+          nextUrl.searchParams.set("task", String(taskId));
+          nextUrl.searchParams.delete("group");
+          nextUrl.searchParams.delete("created_by");
+          nextUrl.searchParams.delete("assignee");
+          nextUrl.hash = "";
+          window.location.assign(`${nextUrl.pathname}${nextUrl.search}`);
+          return;
         }
+
+        setDashboardView("tasks", { updateUrl: true, taskId });
+        openTaskDetailModal(taskRow, { updateUrl: true, scrollIntoView: true });
       });
     }
 
@@ -5130,6 +5211,15 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (_snapshotError) {
       snapshotData = null;
       nextDoc = await fetchDashboardDocumentLegacy("Não foi possível atualizar tarefas.");
+    }
+
+    const currentProjectChooser = document.querySelector("[data-task-project-chooser]");
+    const nextProjectChooser = nextDoc.querySelector("[data-task-project-chooser]");
+    if (
+      currentProjectChooser instanceof HTMLElement &&
+      nextProjectChooser instanceof HTMLElement
+    ) {
+      currentProjectChooser.innerHTML = nextProjectChooser.innerHTML;
     }
 
     const currentGroupsList =
@@ -7461,7 +7551,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const groupSection = groupDoneToggleButton.closest("[data-task-group]");
+      const groupSection = getTaskGroupSectionForDoneToggle(groupDoneToggleButton);
       if (groupSection instanceof HTMLElement) {
         const shouldHideDone = !groupSection.classList.contains("is-done-hidden");
         setTaskGroupDoneHidden(groupSection, shouldHideDone);
@@ -16499,12 +16589,28 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(form instanceof HTMLFormElement)) return;
     const currentUrl = new URL(window.location.href);
     const params = new URLSearchParams();
-    const groupField = form.querySelector('select[name="group"]');
+    const groupField = form.querySelector('[name="group"]');
+    const taskScopeField = form.querySelector('[name="task_scope"]');
     const creatorField = form.querySelector('select[name="created_by"]');
     const assigneeField = form.querySelector('select[name="assignee"]');
+    const groupValue =
+      groupField instanceof HTMLSelectElement || groupField instanceof HTMLInputElement
+        ? (groupField.value || "").trim()
+        : "";
+    let taskScopeValue =
+      taskScopeField instanceof HTMLSelectElement || taskScopeField instanceof HTMLInputElement
+        ? (taskScopeField.value || "").trim().toLowerCase()
+        : "";
 
-    if (groupField instanceof HTMLSelectElement && (groupField.value || "").trim() !== "") {
-      params.set("group", groupField.value.trim());
+    if (taskScopeValue !== "project") {
+      taskScopeValue = "all";
+    }
+    if (taskScopeValue === "project" && groupValue === "") {
+      taskScopeValue = "all";
+    }
+
+    if (groupValue !== "") {
+      params.set("group", groupValue);
     }
     if (creatorField instanceof HTMLSelectElement && (creatorField.value || "").trim() !== "") {
       params.set("created_by", creatorField.value.trim());
@@ -16514,7 +16620,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     params.set("view", "tasks");
-    params.delete("task");
+    params.set("task_scope", taskScopeValue);
     currentUrl.search = params.toString();
     currentUrl.hash = "";
     window.location.assign(`${currentUrl.pathname}${currentUrl.search}`);
@@ -16529,7 +16635,7 @@ window.addEventListener("DOMContentLoaded", () => {
     taskFilterForm.addEventListener("change", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const select = target.closest('select[name="group"], select[name="created_by"], select[name="assignee"]');
+      const select = target.closest('[name="group"], select[name="created_by"], select[name="assignee"]');
       if (!(select instanceof HTMLSelectElement)) return;
       applyTaskFilterForm(taskFilterForm);
     });

@@ -23,7 +23,7 @@ function legalConfig(): array
 function legalContactEmail(?string $value, string $fallback = 'suporte@bexon.com.br'): string
 {
     $email = trim((string) $value);
-    if ($email === '' || stripos($email, 'workform') !== false) {
+    if ($email === '') {
         return $fallback;
     }
 

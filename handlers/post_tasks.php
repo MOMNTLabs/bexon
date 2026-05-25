@@ -635,7 +635,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 if (!$isAutosave) {
                     flash('success', 'Tarefa atualizada.');
                 }
-                redirectTo('index.php#task-' . $taskId);
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
             case 'add_task_title_tag_option':
                 $authUser = requireAuth();
@@ -667,7 +667,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Tag adicionada.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
 
             case 'remove_task_title_tag_option':
                 $authUser = requireAuth();
@@ -702,7 +702,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Tag removida.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
             case 'set_task_title_tag_color':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -733,7 +733,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Cor da tag atualizada.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
 
             case 'request_task_revision':
                 $authUser = requireAuth();
@@ -832,7 +832,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Ajuste solicitado na tarefa.');
-                redirectTo('index.php#task-' . $taskId);
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
             case 'remove_task_revision':
                 $authUser = requireAuth();
@@ -955,7 +955,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Solicitação de ajuste removida.');
-                redirectTo('index.php#task-' . $taskId);
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
             case 'move_task':
                 $authUser = requireAuth();
@@ -1063,7 +1063,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     ]);
                 }
                 flash('success', 'Status atualizado.');
-                redirectTo('index.php#task-' . $taskId);
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
             case 'load_task_detail':
                 $authUser = requireAuth();
@@ -1134,7 +1134,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         ],
                     ]);
                 }
-                redirectTo('index.php#task-' . $taskId);
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
             case 'delete_task':
                 $authUser = requireAuth();
@@ -1187,7 +1187,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     ]);
                 }
                 flash('success', 'Tarefa removida.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
 
     }
 

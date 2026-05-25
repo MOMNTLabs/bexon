@@ -715,6 +715,11 @@ $creatorFilterId = $creatorFilterId && $creatorFilterId > 0 ? $creatorFilterId :
 $assigneeFilterRaw = $_GET['assignee'] ?? null;
 $assigneeFilterId = isset($assigneeFilterRaw) ? (int) $assigneeFilterRaw : null;
 $assigneeFilterId = $assigneeFilterId && $assigneeFilterId > 0 ? $assigneeFilterId : null;
+$taskQueryId = max(0, (int) ($_GET['task'] ?? 0));
+$taskPageMode = normalizeTaskPageMode((string) ($_GET['task_scope'] ?? ''));
+if ($taskPageMode === '') {
+    $taskPageMode = $taskQueryId > 0 ? 'all' : 'select';
+}
 $workspaceUserIds = array_map(
     static fn (array $user): int => (int) ($user['id'] ?? 0),
     is_array($users) ? $users : []
@@ -725,6 +730,14 @@ if ($creatorFilterId !== null && !in_array($creatorFilterId, $workspaceUserIds, 
 if ($assigneeFilterId !== null && !in_array($assigneeFilterId, $workspaceUserIds, true)) {
     $assigneeFilterId = null;
 }
+if ($taskPageMode === 'project' && $groupFilter === null) {
+    $taskPageMode = 'select';
+}
+if ($taskPageMode === 'select') {
+    $groupFilter = null;
+    $creatorFilterId = null;
+    $assigneeFilterId = null;
+}
 
 $taskVisibleKeys = [];
 foreach ($taskGroups as $taskGroupName) {
@@ -733,6 +746,7 @@ foreach ($taskGroups as $taskGroupName) {
 $allTasks = [];
 $tasks = [];
 $showEmptyGroups = $currentUser
+    && $taskPageMode !== 'select'
     && $groupFilter === null
     && $creatorFilterId === null
     && $assigneeFilterId === null;
@@ -756,8 +770,10 @@ if ($currentUser && $currentWorkspaceId !== null) {
                 return isset($taskVisibleKeys[$groupKey]);
             }
         ));
-        $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
-        $tasksGroupedByGroup = tasksByGroup($tasks, $groupingSource);
+        if ($taskPageMode !== 'select') {
+            $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
+            $tasksGroupedByGroup = tasksByGroup($tasks, $groupingSource);
+        }
         $stats = dashboardStats($allTasks);
         $myOpenTasks = countMyAssignedTasks($allTasks, (int) $currentUser['id']);
         $completionRate = $stats['total'] > 0 ? (int) round(($stats['done'] / $stats['total']) * 100) : 0;

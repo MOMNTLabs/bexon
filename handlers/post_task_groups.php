@@ -44,7 +44,7 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                     throw $e;
                 }
                 flash('success', 'Grupo criado.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
 
             case 'rename_group':
                 $authUser = requireAuth();
@@ -167,7 +167,15 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Grupo renomeado.');
-                redirectTo('index.php#tasks');
+                $redirectParams = taskRedirectParamsFromRequest();
+                $redirectGroup = normalizeTaskGroupName((string) ($redirectParams['group'] ?? ''));
+                if (
+                    $redirectGroup !== ''
+                    && mb_strtolower($redirectGroup) === mb_strtolower($existingOldGroupName)
+                ) {
+                    $redirectParams['group'] = $newGroupName;
+                }
+                redirectTo(dashboardPath('tasks', $redirectParams));
 
             case 'delete_group':
                 $authUser = requireAuth();
@@ -280,7 +288,18 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                         ? sprintf('Grupo removido. %d tarefa(s) excluida(s).', $taskCount)
                         : 'Grupo removido.'
                 );
-                redirectTo('index.php#tasks');
+                $redirectParams = taskRedirectParamsFromRequest();
+                $redirectGroup = normalizeTaskGroupName((string) ($redirectParams['group'] ?? ''));
+                if (
+                    $redirectGroup !== ''
+                    && mb_strtolower($redirectGroup) === mb_strtolower($existingGroupName)
+                ) {
+                    unset($redirectParams['group']);
+                    if (($redirectParams['task_scope'] ?? '') === 'project') {
+                        unset($redirectParams['task_scope']);
+                    }
+                }
+                redirectTo(dashboardPath('tasks', $redirectParams));
 
             case 'restore_deleted_group':
                 $authUser = requireAuth();
@@ -329,7 +348,7 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Grupo restaurado.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
 
             case 'update_task_group_permissions':
                 $authUser = requireAuth();
@@ -364,7 +383,7 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Permissoes do grupo atualizadas.');
-                redirectTo('index.php#tasks');
+                redirectTo(tasksRedirectPathFromRequest());
     }
 
     return in_array($action, [

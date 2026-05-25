@@ -3,251 +3,7 @@
 $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfig['meta_by_key'] : [];
 $storedTaskGroupDoneHiddenMap = storedTaskGroupDoneHiddenMap($currentWorkspaceId ?? null);
 ?>
-            <div class="panel-header board-header">
-                <div>
-                    <h2>Lista de tarefas</h2>
-                </div>
-            </div>
-
-            <form method="get" class="task-filters" id="task-filters" data-task-filter-form>
-                <label>
-                    <?php $groupFilterValue = (string) ($groupFilter ?? ''); ?>
-                    <div class="tag-field row-inline-picker-wrap" data-inline-select-wrap>
-                        <details class="row-inline-picker filter-inline-picker" data-inline-select-picker>
-                            <summary aria-label="Filtrar por projeto">
-                                <span class="row-inline-picker-summary-text" data-inline-select-text>
-                                    <?php if ($groupFilterValue === ''): ?>
-                                        Todos Projetos
-                                    <?php else: ?>
-                                        <?= e($groupFilterValue) ?>
-                                    <?php endif; ?>
-                                </span>
-                            </summary>
-                            <div class="assignee-picker-menu row-inline-picker-menu" role="listbox" aria-label="Filtro de projeto">
-                                <button
-                                    type="button"
-                                    class="row-inline-picker-option<?= $groupFilterValue === '' ? ' is-active' : '' ?>"
-                                    data-inline-select-option
-                                    data-value=""
-                                    data-label="Todos Projetos"
-                                    role="option"
-                                    aria-selected="<?= $groupFilterValue === '' ? 'true' : 'false' ?>"
-                                >Todos Projetos</button>
-                                <?php foreach ($taskGroups as $groupOption): ?>
-                                    <button
-                                        type="button"
-                                        class="row-inline-picker-option<?= $groupFilterValue === (string) $groupOption ? ' is-active' : '' ?>"
-                                        data-inline-select-option
-                                        data-value="<?= e((string) $groupOption) ?>"
-                                        data-label="<?= e((string) $groupOption) ?>"
-                                        role="option"
-                                        aria-selected="<?= $groupFilterValue === (string) $groupOption ? 'true' : 'false' ?>"
-                                    ><?= e((string) $groupOption) ?></button>
-                                <?php endforeach; ?>
-                            </div>
-                        </details>
-                        <select
-                            name="group"
-                            class="tag-select row-inline-picker-native"
-                            data-inline-select-source
-                            hidden
-                        >
-                            <option value="">Todos Projetos</option>
-                            <?php foreach ($taskGroups as $groupOption): ?>
-                                <option value="<?= e((string) $groupOption) ?>"<?= $groupFilterValue === (string) $groupOption ? ' selected' : '' ?>>
-                                    <?= e((string) $groupOption) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </label>
-
-                <label>
-                    <?php $creatorFilterValue = $creatorFilterId !== null ? (string) $creatorFilterId : ''; ?>
-                    <div class="tag-field row-inline-picker-wrap" data-inline-select-wrap>
-                        <details class="row-inline-picker filter-inline-picker" data-inline-select-picker>
-                            <summary aria-label="Filtrar por criador">
-                                <span class="row-inline-picker-summary-text" data-inline-select-text>
-                                    <?php if ($creatorFilterValue === ''): ?>
-                                        Criado por
-                                    <?php else: ?>
-<?php
-$statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfig['meta_by_key'] : [];
-                                        $creatorLabel = 'Criado por';
-                                        foreach ($users as $user) {
-                                            if ((string) ((int) $user['id']) === $creatorFilterValue) {
-                                                $creatorLabel = (string) $user['name'];
-                                                break;
-                                            }
-                                        }
-                                        ?>
-                                        <?= e($creatorLabel) ?>
-                                    <?php endif; ?>
-                                </span>
-                            </summary>
-                            <div class="assignee-picker-menu row-inline-picker-menu" role="listbox" aria-label="Filtro de criador">
-                                <button
-                                    type="button"
-                                    class="row-inline-picker-option<?= $creatorFilterValue === '' ? ' is-active' : '' ?>"
-                                    data-inline-select-option
-                                    data-value=""
-                                    data-label="Criado por"
-                                    role="option"
-                                    aria-selected="<?= $creatorFilterValue === '' ? 'true' : 'false' ?>"
-                                >Criado por</button>
-                                <?php foreach ($users as $user): ?>
-                                    <?php $optionValue = (string) ((int) $user['id']); ?>
-                                    <button
-                                        type="button"
-                                        class="row-inline-picker-option<?= $creatorFilterValue === $optionValue ? ' is-active' : '' ?>"
-                                        data-inline-select-option
-                                        data-value="<?= e($optionValue) ?>"
-                                        data-label="<?= e((string) $user['name']) ?>"
-                                        role="option"
-                                        aria-selected="<?= $creatorFilterValue === $optionValue ? 'true' : 'false' ?>"
-                                    ><?= e((string) $user['name']) ?></button>
-                                <?php endforeach; ?>
-                            </div>
-                        </details>
-                        <select name="created_by" class="tag-select row-inline-picker-native" data-inline-select-source hidden>
-                            <option value="">Criado por</option>
-                            <?php foreach ($users as $user): ?>
-                                <option value="<?= e((string) $user['id']) ?>"<?= $creatorFilterId === (int) $user['id'] ? ' selected' : '' ?>>
-                                    <?= e((string) $user['name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </label>
-
-                <label>
-                    <?php $assigneeFilterValue = $assigneeFilterId !== null ? (string) $assigneeFilterId : ''; ?>
-                    <div class="tag-field row-inline-picker-wrap" data-inline-select-wrap>
-                        <details class="row-inline-picker filter-inline-picker" data-inline-select-picker>
-                            <summary aria-label="Filtrar por responsavel">
-                                <span class="row-inline-picker-summary-text" data-inline-select-text>
-                                    <?php if ($assigneeFilterValue === ''): ?>
-                                        Responsavel
-                                    <?php else: ?>
-                                        <?php
-                                        $assigneeLabel = 'Responsavel';
-                                        foreach ($users as $user) {
-                                            if ((string) ((int) $user['id']) === $assigneeFilterValue) {
-                                                $assigneeLabel = (string) $user['name'];
-                                                break;
-                                            }
-                                        }
-                                        ?>
-                                        <?= e($assigneeLabel) ?>
-                                    <?php endif; ?>
-                                </span>
-                            </summary>
-                            <div class="assignee-picker-menu row-inline-picker-menu" role="listbox" aria-label="Filtro de responsavel">
-                                <button
-                                    type="button"
-                                    class="row-inline-picker-option<?= $assigneeFilterValue === '' ? ' is-active' : '' ?>"
-                                    data-inline-select-option
-                                    data-value=""
-                                    data-label="Responsavel"
-                                    role="option"
-                                    aria-selected="<?= $assigneeFilterValue === '' ? 'true' : 'false' ?>"
-                                >Responsavel</button>
-                                <?php foreach ($users as $user): ?>
-                                    <?php $optionValue = (string) ((int) $user['id']); ?>
-                                    <button
-                                        type="button"
-                                        class="row-inline-picker-option<?= $assigneeFilterValue === $optionValue ? ' is-active' : '' ?>"
-                                        data-inline-select-option
-                                        data-value="<?= e($optionValue) ?>"
-                                        data-label="<?= e((string) $user['name']) ?>"
-                                        role="option"
-                                        aria-selected="<?= $assigneeFilterValue === $optionValue ? 'true' : 'false' ?>"
-                                    ><?= e((string) $user['name']) ?></button>
-                                <?php endforeach; ?>
-                            </div>
-                        </details>
-                        <select name="assignee" class="tag-select row-inline-picker-native" data-inline-select-source hidden>
-                            <option value="">Responsavel</option>
-                            <?php foreach ($users as $user): ?>
-                                <option value="<?= e((string) $user['id']) ?>"<?= $assigneeFilterId === (int) $user['id'] ? ' selected' : '' ?>>
-                                    <?= e((string) $user['name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </label>
-
-                <?php
-                $taskUndoState = isset($currentWorkspaceId) && (int) $currentWorkspaceId > 0
-                    ? taskUndoState((int) $currentWorkspaceId)
-                    : ['can_undo' => false, 'can_redo' => false, 'undo_label' => '', 'redo_label' => ''];
-                $canUndoTaskAction = !empty($taskUndoState['can_undo']);
-                $canRedoTaskAction = !empty($taskUndoState['can_redo']);
-                $undoTaskLabel = trim((string) ($taskUndoState['undo_label'] ?? ''));
-                $redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
-                ?>
-                <div class="task-filters-create">
-                    <div class="task-history-controls" data-task-history-controls>
-                        <button
-                            type="submit"
-                            form="task-history-undo-form"
-                            class="icon-gear-button task-history-button"
-                            data-task-history-button="undo"
-                            aria-label="<?= e($undoTaskLabel !== '' ? 'Desfazer: ' . $undoTaskLabel : 'Desfazer') ?>"
-                            title="<?= e($undoTaskLabel !== '' ? 'Desfazer: ' . $undoTaskLabel : 'Nada para desfazer') ?>"
-                            <?= $canUndoTaskAction ? '' : 'disabled' ?>
-                        >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M9 7 4 12l5 5"></path>
-                                <path d="M5 12h8a6 6 0 0 1 6 6v1"></path>
-                            </svg>
-                            <span>Desfazer</span>
-                        </button>
-                        <button
-                            type="submit"
-                            form="task-history-redo-form"
-                            class="icon-gear-button task-history-button"
-                            data-task-history-button="redo"
-                            aria-label="<?= e($redoTaskLabel !== '' ? 'Refazer: ' . $redoTaskLabel : 'Refazer') ?>"
-                            title="<?= e($redoTaskLabel !== '' ? 'Refazer: ' . $redoTaskLabel : 'Nada para refazer') ?>"
-                            <?= $canRedoTaskAction ? '' : 'disabled' ?>
-                        >
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="m15 7 5 5-5 5"></path>
-                                <path d="M19 12h-8a6 6 0 0 0-6 6v1"></path>
-                            </svg>
-                            <span>Refazer</span>
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        class="icon-gear-button task-filters-reorder-groups"
-                        data-toggle-task-group-reorder
-                        aria-label="Ativar organizacao de grupos"
-                        aria-pressed="false"
-                    >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M8 7h10"></path>
-                            <path d="M8 12h10"></path>
-                            <path d="M8 17h10"></path>
-                            <path d="M5 7h.01"></path>
-                            <path d="M5 12h.01"></path>
-                            <path d="M5 17h.01"></path>
-                        </svg>
-                    </button>
-                    <?php if (!empty($canManageWorkspace)): ?>
-                        <button
-                            type="button"
-                            class="icon-gear-button task-filters-create-group"
-                            data-open-create-group-modal
-                            aria-label="Criar projeto"
-                        >
-                            <span class="task-filters-create-group-plus" aria-hidden="true">+</span>
-                            <span>Projeto</span>
-                        </button>
-                    <?php endif; ?>
-                </div>
-            </form>
+            <?php require __DIR__ . '/tasks_page_intro.php'; ?>
 
             <form method="post" id="task-history-undo-form" class="task-history-form" data-task-history-form data-task-history-action="undo" data-loading-label="Desfazendo...">
                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -264,6 +20,7 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                 <?php endforeach; ?>
             </datalist>
 
+            <?php if ($taskPageMode !== 'select'): ?>
             <div class="task-groups-list" data-task-groups-list>
                 <?php if (empty($tasksGroupedByGroup)): ?>
                     <div class="empty-card task-list-empty">
@@ -287,14 +44,16 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                         $taskGroupDoneToggleLabel = $taskGroupDoneHidden ? 'Exibir concluídas' : 'Ocultar concluídas';
                         $groupVisibleTaskCount = 0;
                         $groupHiddenDoneCount = 0;
+                        $taskGroupIsProjectView = !empty($taskPageIsProject);
                         ?>
                         <section
-                            class="task-group<?= $taskGroupCanAccess ? '' : ' task-group-readonly' ?><?= $taskGroupDoneHidden ? ' is-done-hidden' : '' ?>"
-                            aria-labelledby="group-<?= e(md5((string) $groupName)) ?>"
+                            class="task-group<?= $taskGroupCanAccess ? '' : ' task-group-readonly' ?><?= $taskGroupDoneHidden ? ' is-done-hidden' : '' ?><?= $taskGroupIsProjectView ? ' task-group-project-view' : '' ?>"
+                            <?= $taskGroupIsProjectView ? 'aria-label="' . e((string) $groupName) . '"' : 'aria-labelledby="group-' . e(md5((string) $groupName)) . '"' ?>
                             data-task-group
                             data-group-name="<?= e((string) $groupName) ?>"
                             data-group-can-access="<?= $taskGroupCanAccess ? '1' : '0' ?>"
                         >
+                            <?php if (!$taskGroupIsProjectView): ?>
                             <header class="task-group-head" data-task-group-head-toggle>
                                 <div class="task-group-head-main">
                                     <form method="post" class="task-group-rename-form" data-group-rename-form>
@@ -336,38 +95,6 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                                 </div>
                                 <div class="task-group-head-actions">
                                     <span class="task-group-collapse" data-group-toggle-indicator aria-hidden="true"><span>&#9662;</span></span>
-                                    <details class="task-group-actions-menu" data-inline-select-picker data-task-group-actions-menu>
-                                        <summary
-                                            class="task-group-actions-trigger"
-                                            aria-label="Ações do grupo <?= e((string) $groupName) ?>"
-                                            title="Ações"
-                                        >
-                                            <span aria-hidden="true">&#8942;</span>
-                                        </summary>
-                                        <div class="task-group-actions-menu-list" role="menu" aria-label="Ações do grupo <?= e((string) $groupName) ?>">
-                                            <button
-                                                type="button"
-                                                class="task-group-actions-menu-item"
-                                                data-toggle-group-done
-                                                data-label-hide="Ocultar concluídas"
-                                                data-label-show="Exibir concluídas"
-                                                role="menuitem"
-                                                aria-pressed="<?= $taskGroupDoneHidden ? 'true' : 'false' ?>"
-                                                aria-label="<?= e($taskGroupDoneToggleLabel) ?> do grupo <?= e((string) $groupName) ?>"
-                                            ><?= e($taskGroupDoneToggleLabel) ?></button>
-                                            <?php if (!empty($canManageWorkspace) && empty($isPersonalWorkspace)): ?>
-                                                <button
-                                                    type="button"
-                                                    class="task-group-actions-menu-item"
-                                                    data-open-group-permissions-modal="<?= e($taskGroupPermissionsModalKey) ?>"
-                                                    role="menuitem"
-                                                    aria-label="Gerenciar acesso do grupo <?= e((string) $groupName) ?>"
-                                                >
-                                                    Acesso
-                                                </button>
-                                            <?php endif; ?>
-                                        </div>
-                                    </details>
                                     <?php if ($taskGroupCanAccess): ?>
                                         <button
                                             type="button"
@@ -376,6 +103,38 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                                             data-create-group="<?= e((string) $groupName) ?>"
                                             aria-label="Criar tarefa no grupo <?= e((string) $groupName) ?>"
                                         >+</button>
+                                        <details class="task-group-actions-menu" data-inline-select-picker data-task-group-actions-menu>
+                                            <summary
+                                                class="task-group-actions-trigger"
+                                                aria-label="Ações do grupo <?= e((string) $groupName) ?>"
+                                                title="Ações"
+                                            >
+                                                <span aria-hidden="true">&#8942;</span>
+                                            </summary>
+                                            <div class="task-group-actions-menu-list" role="menu" aria-label="Ações do grupo <?= e((string) $groupName) ?>">
+                                                <button
+                                                    type="button"
+                                                    class="task-group-actions-menu-item"
+                                                    data-toggle-group-done
+                                                    data-label-hide="Ocultar concluídas"
+                                                    data-label-show="Exibir concluídas"
+                                                    role="menuitem"
+                                                    aria-pressed="<?= $taskGroupDoneHidden ? 'true' : 'false' ?>"
+                                                    aria-label="<?= e($taskGroupDoneToggleLabel) ?> do grupo <?= e((string) $groupName) ?>"
+                                                ><?= e($taskGroupDoneToggleLabel) ?></button>
+                                                <?php if (!empty($canManageWorkspace) && empty($isPersonalWorkspace)): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="task-group-actions-menu-item"
+                                                        data-open-group-permissions-modal="<?= e($taskGroupPermissionsModalKey) ?>"
+                                                        role="menuitem"
+                                                        aria-label="Gerenciar acesso do grupo <?= e((string) $groupName) ?>"
+                                                    >
+                                                        Acesso
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </details>
                                         <form method="post" class="task-group-delete-form" data-group-delete-form>
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="delete_group">
@@ -394,11 +153,12 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                                     <span class="task-group-count task-group-count-subtle"><?= e((string) count($groupTasks)) ?></span>
                                 </div>
                             </header>
+                            <?php endif; ?>
 
                             <div class="task-list-rows" data-task-dropzone data-group-name="<?= e((string) $groupName) ?>">
                                 <?php if (!$groupTasks): ?>
                                     <div class="task-group-empty-row">
-                                        <?php if ($taskGroupCanAccess): ?>
+                                        <?php if ($taskGroupCanAccess && !$taskGroupIsProjectView): ?>
                                             <button
                                                 type="button"
                                                 class="task-group-empty-add"
@@ -774,8 +534,23 @@ $statusMetaByKey = is_array($statusConfig['meta_by_key'] ?? null) ? $statusConfi
                                     </div>
                                 <?php endif; ?>
                             </div>
+                            <?php if ($taskGroupIsProjectView && $taskGroupCanAccess): ?>
+                                <div class="task-project-add-task-row">
+                                    <button
+                                        type="button"
+                                        class="task-project-add-task-button"
+                                        data-open-create-task-modal
+                                        data-create-group="<?= e((string) $groupName) ?>"
+                                        aria-label="Adicionar tarefa ao projeto <?= e((string) $groupName) ?>"
+                                    >
+                                        <span aria-hidden="true">+</span>
+                                        <span>Adicionar tarefa</span>
+                                    </button>
+                                </div>
+                            <?php endif; ?>
                         </section>
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </section>

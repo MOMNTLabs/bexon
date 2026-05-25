@@ -57,7 +57,7 @@ function dashboardSummaryPayloadForUser(int $userId, ?int $workspaceId = null): 
     ];
 }
 
-function tasksRedirectPathFromRequest(?array $get = null, ?array $post = null): string
+function taskRedirectParamsFromRequest(?array $get = null, ?array $post = null): array
 {
     $get ??= $_GET;
     $post ??= $_POST;
@@ -77,11 +77,27 @@ function tasksRedirectPathFromRequest(?array $get = null, ?array $post = null): 
     if (($assigneeRaw === null || trim((string) $assigneeRaw) === '') && isset($post['redirect_assignee'])) {
         $assigneeRaw = $post['redirect_assignee'];
     }
+    $taskScopeRaw = $get['task_scope'] ?? null;
+    if (($taskScopeRaw === null || trim((string) $taskScopeRaw) === '') && isset($post['redirect_task_scope'])) {
+        $taskScopeRaw = $post['redirect_task_scope'];
+    }
+
+    $taskScope = normalizeTaskPageMode((string) ($taskScopeRaw ?? ''));
+    if ($taskScope !== 'project') {
+        $taskScope = 'all';
+    }
 
     $params = [];
     if ($groupRaw !== null) {
-        $params['group'] = normalizeTaskGroupName($groupRaw);
+        $normalizedGroup = normalizeTaskGroupName($groupRaw);
+        if ($normalizedGroup !== '') {
+            $params['group'] = $normalizedGroup;
+        }
     }
+    if ($taskScope === 'project' && !isset($params['group'])) {
+        $taskScope = 'all';
+    }
+    $params['task_scope'] = $taskScope;
 
     $creatorId = isset($creatorRaw) ? (int) $creatorRaw : 0;
     if ($creatorId > 0) {
@@ -92,8 +108,20 @@ function tasksRedirectPathFromRequest(?array $get = null, ?array $post = null): 
         $params['assignee'] = (string) $assigneeId;
     }
 
-    $query = http_build_query($params);
-    return $query !== '' ? appPath('?' . $query . '#tasks') : appPath('#tasks');
+    return $params;
+}
+
+function tasksRedirectPathFromRequest(?array $get = null, ?array $post = null): string
+{
+    $params = taskRedirectParamsFromRequest($get, $post);
+    return dashboardPath('tasks', $params);
+}
+
+function taskDetailRedirectPathFromRequest(int $taskId, ?array $get = null, ?array $post = null): string
+{
+    $params = taskRedirectParamsFromRequest($get, $post);
+    $params['task'] = (string) $taskId;
+    return dashboardPath('tasks', $params);
 }
 
 function accountingRedirectPathFromRequest(?array $get = null, ?array $post = null): string

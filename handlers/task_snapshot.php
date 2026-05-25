@@ -85,6 +85,11 @@ function respondTaskPanelSnapshot(): void
     $assigneeFilterRaw = $_GET['assignee'] ?? null;
     $assigneeFilterId = isset($assigneeFilterRaw) ? (int) $assigneeFilterRaw : null;
     $assigneeFilterId = $assigneeFilterId && $assigneeFilterId > 0 ? $assigneeFilterId : null;
+    $taskQueryId = max(0, (int) ($_GET['task'] ?? 0));
+    $taskPageMode = normalizeTaskPageMode((string) ($_GET['task_scope'] ?? ''));
+    if ($taskPageMode === '') {
+        $taskPageMode = $taskQueryId > 0 ? 'all' : 'select';
+    }
     $workspaceUserIds = array_map(
         static fn (array $user): int => (int) ($user['id'] ?? 0),
         is_array($users) ? $users : []
@@ -93,6 +98,14 @@ function respondTaskPanelSnapshot(): void
         $creatorFilterId = null;
     }
     if ($assigneeFilterId !== null && !in_array($assigneeFilterId, $workspaceUserIds, true)) {
+        $assigneeFilterId = null;
+    }
+    if ($taskPageMode === 'project' && $groupFilter === null) {
+        $taskPageMode = 'select';
+    }
+    if ($taskPageMode === 'select') {
+        $groupFilter = null;
+        $creatorFilterId = null;
         $assigneeFilterId = null;
     }
 
@@ -109,8 +122,13 @@ function respondTaskPanelSnapshot(): void
             return isset($taskVisibleKeys[$groupKey]);
         }
     ));
-    $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
-    $showEmptyGroups = $groupFilter === null && $creatorFilterId === null && $assigneeFilterId === null;
+    $tasks = $taskPageMode === 'select'
+        ? []
+        : filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
+    $showEmptyGroups = $taskPageMode !== 'select'
+        && $groupFilter === null
+        && $creatorFilterId === null
+        && $assigneeFilterId === null;
     $groupingSource = null;
     if ($showEmptyGroups) {
         $groupingSource = $taskGroups;
