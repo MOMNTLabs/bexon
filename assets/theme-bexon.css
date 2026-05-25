@@ -3450,6 +3450,10 @@ body.is-dashboard .task-project-choice {
         box-shadow 160ms ease;
 }
 
+body.is-dashboard .task-project-choice-entry {
+    padding: 0 12px 0 14px;
+}
+
 body.is-dashboard .task-project-choice:hover,
 body.is-dashboard .task-project-choice:focus-visible {
     border-color: rgba(var(--color-accent-500-rgb), 0.34);
@@ -3467,11 +3471,80 @@ body.is-dashboard .task-project-choice-all {
         var(--bexon-control-bg-soft);
 }
 
+body.is-dashboard .task-project-choice-main {
+    min-width: 0;
+    min-height: 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+body.is-dashboard .task-project-choice-main:focus-visible {
+    outline: none;
+}
+
+body.is-dashboard .task-project-choice-label-shell {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 body.is-dashboard .task-project-choice-label {
     color: var(--bexon-text-strong);
     font-size: 0.9rem;
     font-weight: 700;
     line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.is-dashboard .task-project-choice-main .task-group-name-edit-button {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: rgba(74, 92, 118, 0.7);
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease;
+}
+
+body.is-dashboard .task-project-choice-main .task-group-name-edit-button svg {
+    width: 14px;
+    height: 14px;
+}
+
+body.is-dashboard .task-project-choice-main .task-group-name-edit-button:hover,
+body.is-dashboard .task-project-choice-main .task-group-name-edit-button:focus-visible {
+    color: #315f91;
+    background: transparent;
+    outline: none;
+}
+
+body.is-dashboard .task-project-choice-readonly {
+    flex: 0 0 auto;
+    padding: 4px 8px;
+    border: 1px solid rgba(32, 36, 43, 0.12);
+    border-radius: 999px;
+    color: var(--bexon-text-soft);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
 }
 
 body.is-dashboard .task-project-choice-count {
@@ -3486,6 +3559,95 @@ body.is-dashboard .task-project-choice-count {
 
 body.is-dashboard .task-project-choice-all .task-project-choice-count {
     color: #6f3f06;
+}
+
+body.is-dashboard .task-project-choice-name-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 6px 10px;
+    border: 1px solid rgba(var(--color-accent-500-rgb), 0.24);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--bexon-text-strong);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    grid-column: 1;
+}
+
+body.is-dashboard .task-project-choice-main.is-editing .task-project-choice-label-shell {
+    display: none;
+}
+
+body.is-dashboard .task-project-choice-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+body.is-dashboard .task-project-choice-delete-form {
+    margin: 0;
+}
+
+body.is-dashboard .task-project-choice-action {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 1px solid rgba(32, 36, 43, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--bexon-text-soft);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        border-color 160ms ease,
+        background 160ms ease,
+        color 160ms ease;
+}
+
+body.is-dashboard .task-project-choice-action:hover,
+body.is-dashboard .task-project-choice-action:focus-visible {
+    border-color: rgba(var(--color-accent-500-rgb), 0.34);
+    background: rgba(var(--color-accent-500-rgb), 0.1);
+    color: var(--bexon-text-strong);
+    outline: none;
+}
+
+body.is-dashboard .task-project-choice-action-icon {
+    width: 30px;
+    min-width: 30px;
+    padding: 0;
+}
+
+body.is-dashboard .task-project-choice-action-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+body.is-dashboard .task-project-choice-delete {
+    width: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--bexon-text-soft);
+}
+
+body.is-dashboard .task-project-choice-delete:hover,
+body.is-dashboard .task-project-choice-delete:focus-visible {
+    background: transparent;
+    border-color: transparent;
+    color: var(--state-priority-urgent);
 }
 
 @media (min-width: 721px) {
@@ -7431,8 +7593,22 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         gap: 10px;
     }
 
+    body.is-dashboard .task-page-board-header.is-chooser {
+        align-items: center;
+    }
+
+    body.is-dashboard .task-page-board-header.is-chooser .task-page-heading {
+        width: 100%;
+        justify-content: center;
+    }
+
     body.is-dashboard .task-page-heading-copy {
         gap: 2px;
+    }
+
+    body.is-dashboard .task-page-board-header.is-chooser .task-page-heading-copy {
+        justify-items: center;
+        text-align: center;
     }
 
     body.is-dashboard .task-page-heading-copy p {
@@ -7471,6 +7647,10 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         background: rgba(255, 255, 255, 0.04);
     }
 
+    body.is-dashboard .task-project-choice-entry {
+        padding: 0 10px 0 14px;
+    }
+
     body.is-dashboard .task-project-choice:hover,
     body.is-dashboard .task-project-choice:focus-visible {
         background: rgba(var(--color-accent-500-rgb), 0.08);
@@ -7487,9 +7667,68 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         font-size: 0.86rem;
     }
 
+    body.is-dashboard .task-project-choice-main .task-group-name-edit-button {
+        color: var(--mobile-text-muted);
+    }
+
+    body.is-dashboard .task-project-choice-main .task-group-name-edit-button:hover,
+    body.is-dashboard .task-project-choice-main .task-group-name-edit-button:focus-visible {
+        color: var(--mobile-text);
+    }
+
+    body.is-dashboard .task-project-choice-readonly {
+        border-color: var(--mobile-border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--mobile-text-muted);
+    }
+
     body.is-dashboard .task-project-choice-count {
         color: var(--bexon-gold-strong);
         font-size: 0.96rem;
+    }
+
+    body.is-dashboard .task-project-choice-main {
+        min-height: 46px;
+        gap: 10px;
+    }
+
+    body.is-dashboard .task-project-choice-actions {
+        gap: 5px;
+    }
+
+    body.is-dashboard .task-project-choice-action {
+        min-height: 30px;
+        border-color: var(--mobile-border);
+        background: rgba(255, 255, 255, 0.045);
+        color: var(--mobile-text-soft);
+    }
+
+    body.is-dashboard .task-project-choice-action:hover,
+    body.is-dashboard .task-project-choice-action:focus-visible {
+        border-color: rgba(var(--color-accent-500-rgb), 0.34);
+        background: rgba(var(--color-accent-500-rgb), 0.1);
+        color: var(--mobile-text);
+    }
+
+    body.is-dashboard .task-project-choice-access {
+        padding-inline: 9px;
+    }
+
+    body.is-dashboard .task-project-choice-delete {
+        background: transparent;
+        color: var(--mobile-text-muted);
+    }
+
+    body.is-dashboard .task-project-choice-delete:hover,
+    body.is-dashboard .task-project-choice-delete:focus-visible {
+        background: transparent;
+    }
+
+    body.is-dashboard .task-project-choice-name-input {
+        min-height: 32px;
+        border-color: rgba(var(--color-accent-500-rgb), 0.28);
+        background: rgba(17, 20, 25, 0.86);
+        color: var(--mobile-text);
     }
 
     body.is-dashboard .task-project-done-toggle {

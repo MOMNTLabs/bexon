@@ -7011,6 +7011,38 @@ window.addEventListener("DOMContentLoaded", () => {
     }, 0);
   });
 
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const taskProjectChoiceMain = target.closest("[data-task-project-open-path]");
+    if (!(taskProjectChoiceMain instanceof HTMLElement)) {
+      return;
+    }
+
+    if (taskProjectChoiceMain.classList.contains("is-editing")) {
+      return;
+    }
+
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    if (target.closest("button, input, select, textarea, a")) {
+      return;
+    }
+
+    const openPath = String(taskProjectChoiceMain.dataset.taskProjectOpenPath || "").trim();
+    if (openPath === "") {
+      return;
+    }
+
+    event.preventDefault();
+    window.location.assign(openPath);
+  });
+
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.matches("[data-task-autosave-form]")) {
@@ -7570,6 +7602,19 @@ window.addEventListener("DOMContentLoaded", () => {
         setGroupRenameEditing(renameForm, true);
       }
       return;
+    }
+
+    const taskProjectChoiceMain = target.closest("[data-task-project-open-path]");
+    if (taskProjectChoiceMain instanceof HTMLElement) {
+      const openPath = String(taskProjectChoiceMain.dataset.taskProjectOpenPath || "").trim();
+      if (
+        openPath !== "" &&
+        !taskProjectChoiceMain.classList.contains("is-editing") &&
+        !target.closest("button, input, select, textarea, a")
+      ) {
+        window.location.assign(openPath);
+        return;
+      }
     }
 
     const taskGroupHeadToggle = target.closest("[data-task-group-head-toggle]");
@@ -14428,6 +14473,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const data = await postFormJson(deleteForm);
 
       const groupSection = deleteForm.closest("[data-task-group]");
+      const projectChoiceRow = deleteForm.closest("[data-task-project-choice]");
       const groupName =
         groupSection?.dataset.groupName?.trim() ||
         deleteForm.querySelector('[name="group_name"]')?.value?.trim() ||
@@ -14459,6 +14505,10 @@ window.addEventListener("DOMContentLoaded", () => {
       renderDashboardSummary(data.dashboard);
       if (typeof syncTaskGroupInputs === "function") {
         syncTaskGroupInputs();
+      }
+      if (!(groupSection instanceof HTMLElement) && projectChoiceRow instanceof HTMLElement) {
+        window.location.reload();
+        return;
       }
       const restoreToken = String(data?.restore_token || "").trim();
       showClientFlash(
@@ -14526,6 +14576,7 @@ window.addEventListener("DOMContentLoaded", () => {
       replaceStoredTaskGroupDoneHiddenStateName(oldGroupName, nextGroupName);
 
       const groupSection = renameForm.closest("[data-task-group]");
+      const projectChoiceRow = renameForm.closest("[data-task-project-choice]");
       const dropzone = groupSection?.querySelector("[data-task-dropzone]");
 
       if (groupSection instanceof HTMLElement) {
@@ -14597,6 +14648,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
       if (typeof syncTaskGroupInputs === "function") {
         syncTaskGroupInputs();
+      }
+      if (!(groupSection instanceof HTMLElement) && projectChoiceRow instanceof HTMLElement) {
+        window.location.reload();
+        return;
       }
 
       showClientFlash("success", `Grupo renomeado para ${nextGroupName}.`);

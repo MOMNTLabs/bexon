@@ -62,13 +62,94 @@ $redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
             <strong class="task-project-choice-count"><?= e((string) count($allTasks ?? [])) ?></strong>
         </a>
         <?php foreach (($taskGroups ?? []) as $taskProjectOption): ?>
-            <a
-                href="<?= e(dashboardPath('tasks', ['task_scope' => 'project', 'group' => (string) $taskProjectOption])) ?>"
-                class="task-project-choice"
+            <?php
+            $taskProjectName = (string) $taskProjectOption;
+            $taskProjectPath = dashboardPath('tasks', ['task_scope' => 'project', 'group' => $taskProjectName]);
+            $taskProjectPermission = $taskGroupPermissions[$taskProjectName] ?? ['can_view' => true, 'can_access' => true];
+            $taskProjectCanAccess = !empty($taskProjectPermission['can_access']);
+            $taskProjectPermissionsModalKey = 'task-group-perm-' . md5($taskProjectName);
+            ?>
+            <div
+                class="task-project-choice task-project-choice-entry<?= $taskProjectCanAccess ? '' : ' is-readonly' ?>"
+                data-task-project-choice
             >
-                <span class="task-project-choice-label"><?= e((string) $taskProjectOption) ?></span>
-                <strong class="task-project-choice-count"><?= e((string) ($taskProjectTaskCounts[(string) $taskProjectOption] ?? 0)) ?></strong>
-            </a>
+                <form
+                    method="post"
+                    class="task-group-rename-form task-project-choice-main"
+                    data-group-rename-form
+                    data-task-project-open-path="<?= e($taskProjectPath) ?>"
+                    role="link"
+                    tabindex="0"
+                    aria-label="Abrir projeto <?= e($taskProjectName) ?>"
+                >
+                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                    <input type="hidden" name="action" value="rename_group">
+                    <input type="hidden" name="old_group_name" value="<?= e($taskProjectName) ?>">
+                    <span class="task-project-choice-label-shell">
+                        <span class="task-project-choice-label" data-group-name-display><?= e($taskProjectName) ?></span>
+                        <?php if ($taskProjectCanAccess): ?>
+                            <button
+                                type="button"
+                                class="task-group-name-edit-button task-project-choice-edit-button"
+                                data-enable-group-rename
+                                aria-label="Editar nome do projeto <?= e($taskProjectName) ?>"
+                                title="Editar nome do projeto"
+                            >
+                                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <path d="M11.8 1.8a1.75 1.75 0 0 1 2.47 2.47L6.09 12.45 3 13l.55-3.09L11.8 1.8Zm1.41.71a.75.75 0 0 0-1.06 0l-.77.77 1.06 1.06.77-.77a.75.75 0 0 0 0-1.06ZM11.73 5l-1.06-1.06-6.16 6.16-.24 1.37 1.37-.24L11.73 5Z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        <?php endif; ?>
+                        <?php if (!$taskProjectCanAccess): ?>
+                            <span class="task-project-choice-readonly">Somente leitura</span>
+                        <?php endif; ?>
+                    </span>
+                    <input
+                        type="text"
+                        name="new_group_name"
+                        value="<?= e($taskProjectName) ?>"
+                        maxlength="60"
+                        class="task-group-name-input task-project-choice-name-input"
+                        data-group-name-input
+                        aria-label="Nome do projeto"
+                        spellcheck="false"
+                        hidden
+                        <?= $taskProjectCanAccess ? 'disabled' : 'readonly disabled' ?>
+                    >
+                    <strong class="task-project-choice-count"><?= e((string) ($taskProjectTaskCounts[$taskProjectName] ?? 0)) ?></strong>
+                    <button type="submit" class="sr-only">Salvar projeto</button>
+                </form>
+
+                <?php if ($taskProjectCanAccess): ?>
+                    <div class="task-project-choice-actions">
+                        <?php if (!empty($canManageWorkspace)): ?>
+                            <button
+                                type="button"
+                                class="task-project-choice-action task-project-choice-access"
+                                data-open-group-permissions-modal="<?= e($taskProjectPermissionsModalKey) ?>"
+                                aria-label="Gerenciar acesso do projeto <?= e($taskProjectName) ?>"
+                            >
+                                Acesso
+                            </button>
+                        <?php endif; ?>
+
+                        <form method="post" class="task-group-delete-form task-project-choice-delete-form" data-group-delete-form>
+                            <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                            <input type="hidden" name="action" value="delete_group">
+                            <input type="hidden" name="group_name" value="<?= e($taskProjectName) ?>">
+                            <button
+                                type="button"
+                                class="task-project-choice-action task-project-choice-action-icon task-project-choice-delete"
+                                data-group-delete
+                                aria-label="Excluir projeto <?= e($taskProjectName) ?>"
+                                title="Excluir projeto"
+                            >
+                                <span aria-hidden="true">&#10005;</span>
+                            </button>
+                        </form>
+                    </div>
+                <?php endif; ?>
+            </div>
         <?php endforeach; ?>
     </div>
 <?php else: ?>
