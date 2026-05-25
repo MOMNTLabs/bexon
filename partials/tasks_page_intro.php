@@ -9,6 +9,10 @@ $taskPageShowsProjectFilter = $taskPageMode === 'all';
 $taskPageBackPath = dashboardPath('tasks');
 $taskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
 $taskCurrentProjectName = $taskPageIsProject ? normalizeTaskGroupName((string) ($groupFilter ?? '')) : '';
+$taskCurrentProjectPermission = $taskPageIsProject
+    ? ($taskGroupPermissions[$taskCurrentProjectName] ?? ['can_view' => true, 'can_access' => true])
+    : ['can_view' => false, 'can_access' => false];
+$taskCurrentProjectCanAccess = !empty($taskCurrentProjectPermission['can_access']);
 $taskActiveFilterCount = 0;
 if ($taskPageShowsProjectFilter && trim((string) ($groupFilter ?? '')) !== '') {
     $taskActiveFilterCount++;
@@ -22,13 +26,6 @@ foreach (($allTasks ?? []) as $taskProjectCountItem) {
         $taskProjectTaskCounts[$taskProjectCountGroup]++;
     }
 }
-$taskUndoState = isset($currentWorkspaceId) && (int) $currentWorkspaceId > 0
-    ? taskUndoState((int) $currentWorkspaceId)
-    : ['can_undo' => false, 'can_redo' => false, 'undo_label' => '', 'redo_label' => ''];
-$canUndoTaskAction = !empty($taskUndoState['can_undo']);
-$canRedoTaskAction = !empty($taskUndoState['can_redo']);
-$undoTaskLabel = trim((string) ($taskUndoState['undo_label'] ?? ''));
-$redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
 ?>
 <div class="panel-header board-header task-page-board-header<?= $taskPageIsChooser ? ' is-chooser' : '' ?>">
     <div class="task-page-heading">
@@ -59,7 +56,7 @@ $redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
     <div class="task-project-chooser" aria-label="Selecionar projeto" data-task-project-chooser>
         <a href="<?= e($taskAllProjectsPath) ?>" class="task-project-choice task-project-choice-all">
             <span class="task-project-choice-label">Todos projetos</span>
-            <strong class="task-project-choice-count"><?= e((string) count($allTasks ?? [])) ?></strong>
+            <strong class="task-project-choice-count"><?= e((string) count($taskGroups ?? [])) ?></strong>
         </a>
         <?php foreach (($taskGroups ?? []) as $taskProjectOption): ?>
             <?php
@@ -152,6 +149,22 @@ $redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
             </div>
         <?php endforeach; ?>
     </div>
+    <?php if (!empty($canManageWorkspace)): ?>
+        <div class="task-project-chooser-create">
+            <button
+                type="button"
+                class="icon-gear-button task-project-chooser-create-button"
+                data-open-create-group-modal
+                aria-label="Criar projeto"
+                title="Criar projeto"
+            >
+                <svg class="task-project-chooser-create-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 6v12"></path>
+                    <path d="M6 12h12"></path>
+                </svg>
+            </button>
+        </div>
+    <?php endif; ?>
 <?php else: ?>
     <form method="get" class="task-filters" id="task-filters" data-task-filter-form>
         <input type="hidden" name="task_scope" value="<?= e($taskPageIsProject ? 'project' : 'all') ?>">
@@ -349,89 +362,80 @@ $redoTaskLabel = trim((string) ($taskUndoState['redo_label'] ?? ''));
                     </select>
                 </div>
             </label>
-
-            <?php if ($taskPageIsProject && $taskCurrentProjectName !== ''): ?>
-                <?php
-                $taskProjectDoneHidden = !empty(
-                    ($storedTaskGroupDoneHiddenMap ?? [])[normalizeStoredTaskGroupStateName($taskCurrentProjectName)]
-                );
-                $taskProjectDoneToggleLabel = $taskProjectDoneHidden ? 'Exibir concluídas' : 'Ocultar concluídas';
-                ?>
-                <button
-                    type="button"
-                    class="task-project-done-toggle<?= $taskProjectDoneHidden ? ' is-active' : '' ?>"
-                    data-toggle-group-done
-                    data-task-group-toggle-name="<?= e($taskCurrentProjectName) ?>"
-                    data-label-hide="Ocultar concluídas"
-                    data-label-show="Exibir concluídas"
-                    aria-pressed="<?= $taskProjectDoneHidden ? 'true' : 'false' ?>"
-                    aria-label="<?= e($taskProjectDoneToggleLabel . ' do projeto ' . $taskCurrentProjectName) ?>"
-                ><?= e($taskProjectDoneToggleLabel) ?></button>
-            <?php endif; ?>
         </div>
 
-        <div class="task-filters-create">
-            <div class="task-history-controls" data-task-history-controls>
-                <button
-                    type="submit"
-                    form="task-history-undo-form"
-                    class="icon-gear-button task-history-button"
-                    data-task-history-button="undo"
-                    aria-label="<?= e($undoTaskLabel !== '' ? 'Desfazer: ' . $undoTaskLabel : 'Desfazer') ?>"
-                    title="<?= e($undoTaskLabel !== '' ? 'Desfazer: ' . $undoTaskLabel : 'Nada para desfazer') ?>"
-                    <?= $canUndoTaskAction ? '' : 'disabled' ?>
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M9 7 4 12l5 5"></path>
-                        <path d="M5 12h8a6 6 0 0 1 6 6v1"></path>
-                    </svg>
-                    <span>Desfazer</span>
-                </button>
-                <button
-                    type="submit"
-                    form="task-history-redo-form"
-                    class="icon-gear-button task-history-button"
-                    data-task-history-button="redo"
-                    aria-label="<?= e($redoTaskLabel !== '' ? 'Refazer: ' . $redoTaskLabel : 'Refazer') ?>"
-                    title="<?= e($redoTaskLabel !== '' ? 'Refazer: ' . $redoTaskLabel : 'Nada para refazer') ?>"
-                    <?= $canRedoTaskAction ? '' : 'disabled' ?>
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m15 7 5 5-5 5"></path>
-                        <path d="M19 12h-8a6 6 0 0 0-6 6v1"></path>
-                    </svg>
-                    <span>Refazer</span>
-                </button>
+        <?php if ($taskPageShowsProjectFilter || $taskPageIsProject): ?>
+            <div class="task-filters-create<?= $taskPageIsProject ? ' task-filters-create-project' : '' ?>">
+                <?php if ($taskPageShowsProjectFilter): ?>
+                    <button
+                        type="button"
+                        class="icon-gear-button task-filters-reorder-groups"
+                        data-toggle-task-group-reorder
+                        aria-label="Ativar organizacao de grupos"
+                        aria-pressed="false"
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M8 7h10"></path>
+                            <path d="M8 12h10"></path>
+                            <path d="M8 17h10"></path>
+                            <path d="M5 7h.01"></path>
+                            <path d="M5 12h.01"></path>
+                            <path d="M5 17h.01"></path>
+                        </svg>
+                    </button>
+                <?php endif; ?>
+                <?php if ($taskPageShowsProjectFilter && !empty($canManageWorkspace)): ?>
+                    <button
+                        type="button"
+                        class="icon-gear-button task-filters-create-group"
+                        data-open-create-group-modal
+                        aria-label="Criar projeto"
+                    >
+                        <span class="task-filters-create-group-plus" aria-hidden="true">+</span>
+                        <span>Projeto</span>
+                    </button>
+                <?php endif; ?>
+                <?php if ($taskPageIsProject && $taskCurrentProjectName !== ''): ?>
+                    <?php
+                    $taskProjectDoneHidden = !empty(
+                        ($storedTaskGroupDoneHiddenMap ?? [])[normalizeStoredTaskGroupStateName($taskCurrentProjectName)]
+                    );
+                    $taskProjectDoneToggleLabel = $taskProjectDoneHidden ? 'Exibir concluídas' : 'Ocultar concluídas';
+                    $taskProjectDoneToggleShortLabel = 'Concluídas';
+                    ?>
+                    <button
+                        type="button"
+                        class="task-project-done-toggle<?= $taskProjectDoneHidden ? ' is-active' : '' ?>"
+                        data-toggle-group-done
+                        data-task-group-toggle-name="<?= e($taskCurrentProjectName) ?>"
+                        data-label-hide="Ocultar concluídas"
+                        data-label-show="Exibir concluídas"
+                        data-label-short="Concluídas"
+                        aria-pressed="<?= $taskProjectDoneHidden ? 'true' : 'false' ?>"
+                        aria-label="<?= e($taskProjectDoneToggleLabel . ' do projeto ' . $taskCurrentProjectName) ?>"
+                    >
+                        <svg class="task-project-done-toggle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                            <path d="M3.5 10c1.9-3 4.1-4.5 6.5-4.5s4.6 1.5 6.5 4.5c-1.9 3-4.1 4.5-6.5 4.5S5.4 13 3.5 10Z"></path>
+                            <circle cx="10" cy="10" r="1.9"></circle>
+                        </svg>
+                        <span class="task-project-done-toggle-label"><?= e($taskProjectDoneToggleShortLabel) ?></span>
+                    </button>
+                <?php endif; ?>
+                <?php if ($taskPageIsProject && $taskCurrentProjectCanAccess): ?>
+                    <button
+                        type="button"
+                        class="icon-gear-button task-filters-create-group task-filters-create-task"
+                        data-open-create-task-modal
+                        data-create-group="<?= e($taskCurrentProjectName) ?>"
+                        aria-label="Adicionar tarefa ao projeto <?= e($taskCurrentProjectName) ?>"
+                    >
+                        <svg class="task-filters-create-task-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M12 6v12"></path>
+                            <path d="M6 12h12"></path>
+                        </svg>
+                    </button>
+                <?php endif; ?>
             </div>
-            <?php if ($taskPageShowsProjectFilter): ?>
-                <button
-                    type="button"
-                    class="icon-gear-button task-filters-reorder-groups"
-                    data-toggle-task-group-reorder
-                    aria-label="Ativar organizacao de grupos"
-                    aria-pressed="false"
-                >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 7h10"></path>
-                        <path d="M8 12h10"></path>
-                        <path d="M8 17h10"></path>
-                        <path d="M5 7h.01"></path>
-                        <path d="M5 12h.01"></path>
-                        <path d="M5 17h.01"></path>
-                    </svg>
-                </button>
-            <?php endif; ?>
-            <?php if ($taskPageShowsProjectFilter && !empty($canManageWorkspace)): ?>
-                <button
-                    type="button"
-                    class="icon-gear-button task-filters-create-group"
-                    data-open-create-group-modal
-                    aria-label="Criar projeto"
-                >
-                    <span class="task-filters-create-group-plus" aria-hidden="true">+</span>
-                    <span>Projeto</span>
-                </button>
-            <?php endif; ?>
-        </div>
+        <?php endif; ?>
     </form>
 <?php endif; ?>

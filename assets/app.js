@@ -3755,9 +3755,15 @@ window.addEventListener("DOMContentLoaded", () => {
     toggleButtons.forEach((toggleButton) => {
       const hideLabel = (toggleButton.dataset.labelHide || "").trim() || "Ocultar concluídas";
       const showLabel = (toggleButton.dataset.labelShow || "").trim() || "Exibir concluídas";
+      const shortLabel = (toggleButton.dataset.labelShort || "").trim();
       const nextLabel = isDoneHidden ? showLabel : hideLabel;
+      const labelNode = toggleButton.querySelector(".task-project-done-toggle-label");
 
-      toggleButton.textContent = nextLabel;
+      if (labelNode instanceof HTMLElement) {
+        labelNode.textContent = shortLabel || nextLabel;
+      } else {
+        toggleButton.textContent = nextLabel;
+      }
       toggleButton.classList.toggle("is-active", isDoneHidden);
       toggleButton.setAttribute("aria-pressed", isDoneHidden ? "true" : "false");
       toggleButton.setAttribute("aria-label", `${nextLabel} do grupo ${groupName}`);

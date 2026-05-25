@@ -375,6 +375,55 @@ $storedTaskGroupDoneHiddenMap = storedTaskGroupDoneHiddenMap($currentWorkspaceId
                                                     </button>
                                                 </div>
 
+                                                <div class="tag-field due-tag-field">
+                                                    <span class="sr-only">Prazo</span>
+                                                    <?php if ($isOverdueMarked): ?>
+                                                        <button
+                                                            type="button"
+                                                            class="task-overdue-badge"
+                                                            data-task-overdue-badge
+                                                            title="Tarefa em atraso. Clique para remover o aviso."
+                                                            aria-label="Remover aviso de atraso"
+                                                        >Atraso</button>
+                                                    <?php endif; ?>
+                                                    <button
+                                                        type="button"
+                                                        class="due-date-display<?= !empty($dueDateUi['is_relative']) ? ' is-relative' : '' ?>"
+                                                        data-due-date-display
+                                                        aria-label="Prazo: <?= e((string) $dueDateUi['title']) ?>"
+                                                    ><?= e((string) $dueDateUi['display']) ?></button>
+                                                    <input
+                                                        type="date"
+                                                        name="due_date"
+                                                        value="<?= e($dueDateValue) ?>"
+                                                        class="due-date-input due-date-input-overlay"
+                                                        data-due-date-input
+                                                    >
+                                                </div>
+
+                                                <div class="tag-field assignee-tag-field">
+                                                    <details class="assignee-picker row-assignee-picker">
+                                                        <summary><?= e($assigneeSummary) ?></summary>
+                                                        <div class="assignee-picker-menu" aria-label="Selecionar responsáveis" data-sheet-title="Responsáveis">
+                                                            <?php foreach ($users as $user): ?>
+                                                            <label class="assignee-option">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    name="assigned_to[]"
+                                                                    value="<?= e((string) $user['id']) ?>"
+                                                                    data-assignee-name="<?= e((string) $user['name']) ?>"
+                                                                    data-assignee-avatar="<?= e(userAvatarImageSrc($user)) ?>"
+                                                                    data-assignee-initial="<?= e(userDisplayInitial((string) $user['name'])) ?>"
+                                                                    <?= in_array((int) $user['id'], $task['assignee_ids'] ?? [], true) ? 'checked' : '' ?>
+                                                                >
+                                                                <?= renderUserAvatar($user, 'avatar small assignee-option-avatar', true, 'span') ?>
+                                                                <span class="assignee-option-text"><?= e((string) $user['name']) ?></span>
+                                                            </label>
+                                                            <?php endforeach; ?>
+                                                        </div>
+                                                    </details>
+                                                </div>
+
                                                 <div class="tag-field tag-field-priority row-inline-picker-wrap" data-inline-select-wrap data-inline-picker-kind="priority">
                                                     <details class="row-inline-picker priority-inline-picker priority-<?= e($priorityKey) ?>" data-inline-select-picker>
                                                         <summary aria-label="Prioridade da tarefa">
@@ -405,55 +454,6 @@ $storedTaskGroupDoneHiddenMap = storedTaskGroupDoneHiddenMap($currentWorkspaceId
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
-                                                </div>
-
-                                                <div class="tag-field assignee-tag-field">
-                                                    <details class="assignee-picker row-assignee-picker">
-                                                        <summary><?= e($assigneeSummary) ?></summary>
-                                                        <div class="assignee-picker-menu" aria-label="Selecionar responsáveis" data-sheet-title="Responsáveis">
-                                                            <?php foreach ($users as $user): ?>
-                                                            <label class="assignee-option">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    name="assigned_to[]"
-                                                                    value="<?= e((string) $user['id']) ?>"
-                                                                    data-assignee-name="<?= e((string) $user['name']) ?>"
-                                                                    data-assignee-avatar="<?= e(userAvatarImageSrc($user)) ?>"
-                                                                    data-assignee-initial="<?= e(userDisplayInitial((string) $user['name'])) ?>"
-                                                                    <?= in_array((int) $user['id'], $task['assignee_ids'] ?? [], true) ? 'checked' : '' ?>
-                                                                >
-                                                                <?= renderUserAvatar($user, 'avatar small assignee-option-avatar', true, 'span') ?>
-                                                                <span class="assignee-option-text"><?= e((string) $user['name']) ?></span>
-                                                            </label>
-                                                            <?php endforeach; ?>
-                                                        </div>
-                                                    </details>
-                                                </div>
-
-                                                <div class="tag-field due-tag-field">
-                                                    <span class="sr-only">Prazo</span>
-                                                    <?php if ($isOverdueMarked): ?>
-                                                        <button
-                                                            type="button"
-                                                            class="task-overdue-badge"
-                                                            data-task-overdue-badge
-                                                            title="Tarefa em atraso. Clique para remover o aviso."
-                                                            aria-label="Remover aviso de atraso"
-                                                        >Atraso</button>
-                                                    <?php endif; ?>
-                                                    <button
-                                                        type="button"
-                                                        class="due-date-display<?= !empty($dueDateUi['is_relative']) ? ' is-relative' : '' ?>"
-                                                        data-due-date-display
-                                                        aria-label="Prazo: <?= e((string) $dueDateUi['title']) ?>"
-                                                    ><?= e((string) $dueDateUi['display']) ?></button>
-                                                    <input
-                                                        type="date"
-                                                        name="due_date"
-                                                        value="<?= e($dueDateValue) ?>"
-                                                        class="due-date-input due-date-input-overlay"
-                                                        data-due-date-input
-                                                    >
                                                 </div>
 
                                                 <button
@@ -534,20 +534,6 @@ $storedTaskGroupDoneHiddenMap = storedTaskGroupDoneHiddenMap($currentWorkspaceId
                                     </div>
                                 <?php endif; ?>
                             </div>
-                            <?php if ($taskGroupIsProjectView && $taskGroupCanAccess): ?>
-                                <div class="task-project-add-task-row">
-                                    <button
-                                        type="button"
-                                        class="task-project-add-task-button"
-                                        data-open-create-task-modal
-                                        data-create-group="<?= e((string) $groupName) ?>"
-                                        aria-label="Adicionar tarefa ao projeto <?= e((string) $groupName) ?>"
-                                    >
-                                        <span aria-hidden="true">+</span>
-                                        <span>Adicionar tarefa</span>
-                                    </button>
-                                </div>
-                            <?php endif; ?>
                         </section>
                     <?php endforeach; ?>
                 <?php endif; ?>
