@@ -8086,6 +8086,10 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         box-shadow: none;
     }
 
+    body.is-dashboard .task-filters.task-filters-has-inline-mobile-actions > .task-filters-mobile-toggle:not(.task-filters-mobile-toggle-inline) {
+        display: none;
+    }
+
     body.is-dashboard .task-filters-active-count {
         display: inline-flex;
         align-items: center;
@@ -8223,8 +8227,13 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         margin-top: 0;
     }
 
+    body.is-dashboard .task-filters-create-project .task-filters-mobile-toggle-inline {
+        min-width: 0;
+    }
+
     body.is-dashboard .task-filters-create-project .task-project-done-toggle {
         margin-right: 0;
+        width: 100%;
     }
 
     body.is-dashboard .task-filters-create-task {

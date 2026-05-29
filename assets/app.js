@@ -8191,10 +8191,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(taskFilterForm instanceof HTMLElement)) return;
     const shouldOpen = Boolean(open);
     taskFilterForm.classList.toggle("is-mobile-open", shouldOpen);
-    const toggle = taskFilterForm.querySelector("[data-task-filters-toggle]");
-    if (toggle instanceof HTMLElement) {
+    taskFilterForm.querySelectorAll("[data-task-filters-toggle]").forEach((toggle) => {
+      if (!(toggle instanceof HTMLElement)) return;
       toggle.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-    }
+    });
   };
 
   const normalizeDashboardViewCandidate = (value) => {

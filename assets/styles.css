@@ -7213,6 +7213,19 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
         grid-column: 1 / -1;
     }
 
+    .task-filters-create-project {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    }
+
+    .task-filters-create-project .task-view-toggle-group {
+        grid-column: 1 / -1;
+    }
+
+    .task-filters-create-project .task-filters-mobile-toggle-inline,
+    .task-filters-create-project .task-project-done-toggle {
+        width: 100%;
+    }
+
     .task-view-toggle {
         flex: 1 1 0;
     }
@@ -7312,13 +7325,8 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 @media (max-width: 420px) {
-    .task-filters-create,
-    .task-filters-create-project {
+    .task-filters-create:not(.task-filters-create-project) {
         grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    .task-project-done-toggle {
-        grid-column: 1 / -1;
     }
 }
 

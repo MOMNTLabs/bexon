@@ -197,7 +197,12 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
         </div>
     <?php endif; ?>
 <?php else: ?>
-    <form method="get" class="task-filters" id="task-filters" data-task-filter-form>
+    <form
+        method="get"
+        class="task-filters<?= $taskPageIsProject && $taskCurrentProjectName !== '' ? ' task-filters-has-inline-mobile-actions' : '' ?>"
+        id="task-filters"
+        data-task-filter-form
+    >
         <input type="hidden" name="task_scope" value="<?= e($taskPageIsProject ? 'project' : 'all') ?>">
         <input type="hidden" name="task_layout" value="<?= e($taskLayout) ?>">
         <input type="hidden" name="calendar_month" value="<?= e($taskCalendarMonth) ?>">
@@ -452,6 +457,21 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                     $taskProjectDoneToggleLabel = $taskProjectDoneHidden ? 'Exibir concluídas' : 'Ocultar concluídas';
                     $taskProjectDoneToggleShortLabel = 'Concluídas';
                     ?>
+                    <button
+                        type="button"
+                        class="task-filters-mobile-toggle task-filters-mobile-toggle-inline<?= $taskActiveFilterCount > 0 ? ' is-active' : '' ?>"
+                        data-task-filters-toggle
+                        aria-expanded="false"
+                        aria-controls="task-filters-panel"
+                    >
+                        <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                            <path d="M3 5h14M6 10h8M8 15h4"></path>
+                        </svg>
+                        <span>Filtros</span>
+                        <?php if ($taskActiveFilterCount > 0): ?>
+                            <span class="task-filters-active-count"><?= e((string) $taskActiveFilterCount) ?></span>
+                        <?php endif; ?>
+                    </button>
                     <button
                         type="button"
                         class="task-project-done-toggle<?= $taskProjectDoneHidden ? ' is-active' : '' ?>"
