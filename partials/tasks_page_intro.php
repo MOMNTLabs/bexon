@@ -6,6 +6,14 @@ if ($taskPageMode === '') {
 $taskPageIsChooser = $taskPageMode === 'select';
 $taskPageIsProject = $taskPageMode === 'project' && trim((string) ($groupFilter ?? '')) !== '';
 $taskPageShowsProjectFilter = $taskPageMode === 'all';
+$taskLayout = normalizeTaskLayoutKey((string) ($taskLayout ?? ''));
+if ($taskLayout === '') {
+    $taskLayout = 'list';
+}
+$taskCalendarMonth = normalizeTaskCalendarMonth((string) ($taskCalendarMonth ?? ''));
+if ($taskCalendarMonth === '') {
+    $taskCalendarMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
+}
 $taskPageBackPath = dashboardPath('tasks');
 $taskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
 $taskCurrentProjectName = $taskPageIsProject ? normalizeTaskGroupName((string) ($groupFilter ?? '')) : '';
@@ -26,6 +34,29 @@ foreach (($allTasks ?? []) as $taskProjectCountItem) {
         $taskProjectTaskCounts[$taskProjectCountGroup]++;
     }
 }
+
+$taskViewBaseParams = [
+    'task_scope' => $taskPageIsProject ? 'project' : 'all',
+];
+if ($taskPageIsProject && $taskCurrentProjectName !== '') {
+    $taskViewBaseParams['group'] = $taskCurrentProjectName;
+} elseif ($taskPageShowsProjectFilter && trim((string) ($groupFilter ?? '')) !== '') {
+    $taskViewBaseParams['group'] = normalizeTaskGroupName((string) $groupFilter);
+}
+if ($creatorFilterId !== null) {
+    $taskViewBaseParams['created_by'] = (string) $creatorFilterId;
+}
+if ($assigneeFilterId !== null) {
+    $taskViewBaseParams['assignee'] = (string) $assigneeFilterId;
+}
+$taskListViewPath = dashboardPath('tasks', $taskViewBaseParams);
+$taskCalendarViewPath = dashboardPath('tasks', array_merge(
+    $taskViewBaseParams,
+    [
+        'task_layout' => 'calendar',
+        'calendar_month' => $taskCalendarMonth,
+    ]
+));
 ?>
 <div class="panel-header board-header task-page-board-header<?= $taskPageIsChooser ? ' is-chooser' : '' ?>">
     <div class="task-page-heading">
@@ -168,6 +199,8 @@ foreach (($allTasks ?? []) as $taskProjectCountItem) {
 <?php else: ?>
     <form method="get" class="task-filters" id="task-filters" data-task-filter-form>
         <input type="hidden" name="task_scope" value="<?= e($taskPageIsProject ? 'project' : 'all') ?>">
+        <input type="hidden" name="task_layout" value="<?= e($taskLayout) ?>">
+        <input type="hidden" name="calendar_month" value="<?= e($taskCalendarMonth) ?>">
         <?php if ($taskPageIsProject && $taskCurrentProjectName !== ''): ?>
             <input type="hidden" name="group" value="<?= e($taskCurrentProjectName) ?>">
         <?php endif; ?>
@@ -366,6 +399,22 @@ foreach (($allTasks ?? []) as $taskProjectCountItem) {
 
         <?php if ($taskPageShowsProjectFilter || $taskPageIsProject): ?>
             <div class="task-filters-create<?= $taskPageIsProject ? ' task-filters-create-project' : '' ?>">
+                <div class="task-view-toggle-group" role="tablist" aria-label="Visualização das tarefas">
+                    <a
+                        href="<?= e($taskListViewPath) ?>"
+                        class="task-view-toggle<?= $taskLayout === 'list' ? ' is-active' : '' ?>"
+                        data-task-view-toggle
+                        data-task-view="list"
+                        aria-pressed="<?= $taskLayout === 'list' ? 'true' : 'false' ?>"
+                    >Lista</a>
+                    <a
+                        href="<?= e($taskCalendarViewPath) ?>"
+                        class="task-view-toggle<?= $taskLayout === 'calendar' ? ' is-active' : '' ?>"
+                        data-task-view-toggle
+                        data-task-view="calendar"
+                        aria-pressed="<?= $taskLayout === 'calendar' ? 'true' : 'false' ?>"
+                    >Calendário</a>
+                </div>
                 <?php if ($taskPageShowsProjectFilter): ?>
                     <button
                         type="button"

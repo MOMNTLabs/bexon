@@ -174,6 +174,31 @@ function normalizeTaskPageMode(string $mode): string
         : '';
 }
 
+function normalizeTaskLayoutKey(string $layout): string
+{
+    $normalized = strtolower(trim($layout));
+    return in_array($normalized, ['list', 'calendar'], true)
+        ? $normalized
+        : '';
+}
+
+function normalizeTaskCalendarMonth(string $month): string
+{
+    $normalized = trim($month);
+    if ($normalized === '') {
+        return '';
+    }
+
+    $date = DateTimeImmutable::createFromFormat('!Y-m', $normalized);
+    if (!$date instanceof DateTimeImmutable) {
+        return '';
+    }
+
+    return $date->format('Y-m') === $normalized
+        ? $normalized
+        : '';
+}
+
 function dashboardStateQueryParamsFromFragment(string $fragment): ?array
 {
     $normalizedFragment = trim($fragment);

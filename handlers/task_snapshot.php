@@ -87,6 +87,14 @@ function respondTaskPanelSnapshot(): void
     $assigneeFilterId = $assigneeFilterId && $assigneeFilterId > 0 ? $assigneeFilterId : null;
     $taskQueryId = max(0, (int) ($_GET['task'] ?? 0));
     $taskPageMode = normalizeTaskPageMode((string) ($_GET['task_scope'] ?? ''));
+    $taskLayout = normalizeTaskLayoutKey((string) ($_GET['task_layout'] ?? ''));
+    if ($taskLayout === '') {
+        $taskLayout = 'list';
+    }
+    $taskCalendarMonth = normalizeTaskCalendarMonth((string) ($_GET['calendar_month'] ?? ''));
+    if ($taskCalendarMonth === '') {
+        $taskCalendarMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
+    }
     if ($taskPageMode === '') {
         $taskPageMode = $taskQueryId > 0 ? 'all' : 'select';
     }

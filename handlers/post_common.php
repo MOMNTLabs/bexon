@@ -81,11 +81,27 @@ function taskRedirectParamsFromRequest(?array $get = null, ?array $post = null):
     if (($taskScopeRaw === null || trim((string) $taskScopeRaw) === '') && isset($post['redirect_task_scope'])) {
         $taskScopeRaw = $post['redirect_task_scope'];
     }
+    $taskLayoutRaw = $get['task_layout'] ?? null;
+    if (($taskLayoutRaw === null || trim((string) $taskLayoutRaw) === '') && isset($post['redirect_task_layout'])) {
+        $taskLayoutRaw = $post['redirect_task_layout'];
+    }
+    $calendarMonthRaw = $get['calendar_month'] ?? null;
+    if (
+        ($calendarMonthRaw === null || trim((string) $calendarMonthRaw) === '')
+        && isset($post['redirect_calendar_month'])
+    ) {
+        $calendarMonthRaw = $post['redirect_calendar_month'];
+    }
 
     $taskScope = normalizeTaskPageMode((string) ($taskScopeRaw ?? ''));
     if ($taskScope !== 'project') {
         $taskScope = 'all';
     }
+    $taskLayout = normalizeTaskLayoutKey((string) ($taskLayoutRaw ?? ''));
+    if ($taskLayout === '') {
+        $taskLayout = 'list';
+    }
+    $calendarMonth = normalizeTaskCalendarMonth((string) ($calendarMonthRaw ?? ''));
 
     $params = [];
     if ($groupRaw !== null) {
@@ -98,6 +114,12 @@ function taskRedirectParamsFromRequest(?array $get = null, ?array $post = null):
         $taskScope = 'all';
     }
     $params['task_scope'] = $taskScope;
+    if ($taskLayout === 'calendar') {
+        $params['task_layout'] = 'calendar';
+        if ($calendarMonth !== '') {
+            $params['calendar_month'] = $calendarMonth;
+        }
+    }
 
     $creatorId = isset($creatorRaw) ? (int) $creatorRaw : 0;
     if ($creatorId > 0) {

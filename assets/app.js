@@ -7883,6 +7883,18 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const calendarTaskTrigger = target.closest("[data-task-calendar-open-task]");
+    if (calendarTaskTrigger instanceof HTMLElement) {
+      event.preventDefault();
+      const taskId =
+        Number.parseInt(String(calendarTaskTrigger.dataset.taskCalendarOpenTask || "0"), 10) || 0;
+      const calendarTaskItem = taskId > 0 ? document.getElementById(`task-${taskId}`) : null;
+      if (calendarTaskItem instanceof HTMLElement) {
+        openTaskDetailModal(calendarTaskItem);
+      }
+      return;
+    }
+
     const taskItem = target.closest("[data-task-item]");
     if (!(taskItem instanceof HTMLElement)) return;
 
@@ -7958,6 +7970,10 @@ window.addEventListener("DOMContentLoaded", () => {
     typeof window.matchMedia === "function"
       ? window.matchMedia("(max-width: 768px)")
       : null;
+
+  const isTaskCalendarLayoutActive = () =>
+    taskGroupsListElement instanceof HTMLElement &&
+    String(taskGroupsListElement.dataset.taskLayout || "").trim() === "calendar";
 
   const setFabMenuOpen = (open) => {
     if (!fabWrap || !fabToggleButton || !fabMenu) return;
@@ -14303,6 +14319,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const saveTaskDetailModal = async () => {
     if (!taskDetailContext) return;
     if (taskDetailSaveInFlight) return;
+    const currentTaskId = currentTaskDetailTaskId();
     const editedDescription =
       taskDetailEditDescription instanceof HTMLTextAreaElement
         ? taskDetailDescriptionTextFromEditor()
@@ -14340,6 +14357,17 @@ window.addEventListener("DOMContentLoaded", () => {
       const ok = await submitTaskAutosave(taskDetailContext.form);
       if (!ok) {
         return;
+      }
+
+      if (isTaskCalendarLayoutActive()) {
+        await refreshTasksSectionFromServer();
+        if (currentTaskId > 0) {
+          const refreshedTaskItem = document.getElementById(`task-${currentTaskId}`);
+          const refreshedBindings = getTaskDetailBindings(refreshedTaskItem);
+          if (refreshedBindings) {
+            taskDetailContext = refreshedBindings;
+          }
+        }
       }
 
       populateTaskDetailModalFromRow(taskDetailContext);
@@ -16901,6 +16929,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const params = new URLSearchParams();
     const groupField = form.querySelector('[name="group"]');
     const taskScopeField = form.querySelector('[name="task_scope"]');
+    const taskLayoutField = form.querySelector('[name="task_layout"]');
+    const calendarMonthField = form.querySelector('[name="calendar_month"]');
     const creatorField = form.querySelector('select[name="created_by"]');
     const assigneeField = form.querySelector('select[name="assignee"]');
     const groupValue =
@@ -16911,9 +16941,20 @@ window.addEventListener("DOMContentLoaded", () => {
       taskScopeField instanceof HTMLSelectElement || taskScopeField instanceof HTMLInputElement
         ? (taskScopeField.value || "").trim().toLowerCase()
         : "";
+    let taskLayoutValue =
+      taskLayoutField instanceof HTMLSelectElement || taskLayoutField instanceof HTMLInputElement
+        ? (taskLayoutField.value || "").trim().toLowerCase()
+        : "";
+    const calendarMonthValue =
+      calendarMonthField instanceof HTMLSelectElement || calendarMonthField instanceof HTMLInputElement
+        ? (calendarMonthField.value || "").trim()
+        : "";
 
     if (taskScopeValue !== "project") {
       taskScopeValue = "all";
+    }
+    if (taskLayoutValue !== "calendar") {
+      taskLayoutValue = "list";
     }
     if (taskScopeValue === "project" && groupValue === "") {
       taskScopeValue = "all";
@@ -16931,6 +16972,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
     params.set("view", "tasks");
     params.set("task_scope", taskScopeValue);
+    if (taskLayoutValue === "calendar") {
+      params.set("task_layout", "calendar");
+      if (/^\d{4}-\d{2}$/.test(calendarMonthValue)) {
+        params.set("calendar_month", calendarMonthValue);
+      }
+    }
     currentUrl.search = params.toString();
     currentUrl.hash = "";
     window.location.assign(`${currentUrl.pathname}${currentUrl.search}`);
