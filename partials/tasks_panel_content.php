@@ -35,6 +35,8 @@ require __DIR__ . '/tasks_page_intro.php';
             $calendarMonthEnd = $calendarMonthDate->modify('last day of this month');
             $calendarGridStart = $calendarMonthStart->modify('-' . (((int) $calendarMonthStart->format('N')) - 1) . ' days');
             $calendarGridEnd = $calendarMonthEnd->modify('+' . (7 - (int) $calendarMonthEnd->format('N')) . ' days');
+            $calendarGridDaySpan = ((int) $calendarGridStart->diff($calendarGridEnd)->format('%a')) + 1;
+            $calendarWeekRows = max(1, (int) ceil($calendarGridDaySpan / 7));
             $calendarToday = (new DateTimeImmutable('today'))->format('Y-m-d');
             $calendarTodayMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
             $calendarMonthNames = [
@@ -149,11 +151,37 @@ require __DIR__ . '/tasks_page_intro.php';
             foreach ($calendarTasksByDate as $calendarDateItems) {
                 $calendarVisibleTaskCount += count($calendarDateItems);
             }
+            $calendarAgendaDates = [];
+            foreach ($calendarTasksByDate as $calendarDateKey => $calendarDateItems) {
+                if (
+                    !empty($calendarDateItems)
+                    && str_starts_with((string) $calendarDateKey, $calendarCurrentMonthKey . '-')
+                ) {
+                    $calendarAgendaDates[(string) $calendarDateKey] = $calendarDateItems;
+                }
+            }
+            if (!empty($calendarAgendaDates)) {
+                ksort($calendarAgendaDates);
+            }
+            $calendarAgendaWeekdayShort = [
+                1 => 'Seg',
+                2 => 'Ter',
+                3 => 'Qua',
+                4 => 'Qui',
+                5 => 'Sex',
+                6 => 'Sab',
+                7 => 'Dom',
+            ];
             $calendarMonthLabel = ($calendarMonthNames[(int) $calendarMonthStart->format('n')] ?? $calendarMonthStart->format('F'))
                 . ' '
                 . $calendarMonthStart->format('Y');
             ?>
-            <div class="task-calendar-layout" data-task-calendar-layout>
+            <div
+                class="task-calendar-layout"
+                data-task-calendar-layout
+                data-task-calendar-weeks="<?= e((string) $calendarWeekRows) ?>"
+                style="--task-calendar-week-rows: <?= e((string) $calendarWeekRows) ?>;"
+            >
                 <?php if ($calendarVisibleTaskCount === 0): ?>
                     <div class="empty-card task-list-empty task-calendar-empty">
                         <p>
@@ -272,6 +300,100 @@ require __DIR__ . '/tasks_page_intro.php';
                                 <?php endwhile; ?>
                             </div>
                         </div>
+
+                        <?php if (!empty($calendarAgendaDates)): ?>
+                            <div class="task-calendar-mobile-agenda" data-task-calendar-mobile-agenda>
+                                <div class="task-calendar-mobile-agenda-head">
+                                    <strong>Agenda do mes</strong>
+                                    <span>
+                                        <?= e((string) $calendarCurrentMonthTaskCount) ?>
+                                        <?= $calendarCurrentMonthTaskCount === 1 ? ' tarefa' : ' tarefas' ?>
+                                    </span>
+                                </div>
+
+                                <div class="task-calendar-mobile-agenda-list">
+                                    <?php foreach ($calendarAgendaDates as $calendarAgendaDate => $calendarAgendaTasks): ?>
+                                        <?php
+                                        $calendarAgendaDateObject = DateTimeImmutable::createFromFormat('!Y-m-d', (string) $calendarAgendaDate);
+                                        if (!$calendarAgendaDateObject instanceof DateTimeImmutable) {
+                                            $calendarAgendaDateObject = new DateTimeImmutable((string) $calendarAgendaDate);
+                                        }
+                                        $calendarAgendaWeekdayKey = (int) $calendarAgendaDateObject->format('N');
+                                        $calendarAgendaWeekdayLabel = $calendarAgendaWeekdayShort[$calendarAgendaWeekdayKey]
+                                            ?? $calendarAgendaDateObject->format('D');
+                                        $calendarAgendaTaskCount = count($calendarAgendaTasks);
+                                        ?>
+                                        <section class="task-calendar-mobile-day">
+                                            <header class="task-calendar-mobile-day-head">
+                                                <strong class="task-calendar-mobile-day-date">
+                                                    <?= e($calendarAgendaWeekdayLabel . ' • ' . $calendarAgendaDateObject->format('d/m')) ?>
+                                                </strong>
+                                                <span class="task-calendar-mobile-day-count">
+                                                    <?= e((string) $calendarAgendaTaskCount) ?>
+                                                </span>
+                                            </header>
+
+                                            <div class="task-calendar-mobile-day-items">
+                                                <?php foreach ($calendarAgendaTasks as $calendarTask): ?>
+                                                    <?php
+                                                    $calendarGroupMeta = !$taskPageIsProject ? (string) $calendarTask['group_name'] : '';
+                                                    $calendarAssigneeSummary = (string) ($calendarTask['assignee_summary'] ?? '');
+                                                    $calendarAssignees = is_array($calendarTask['assignees'] ?? null)
+                                                        ? array_values($calendarTask['assignees'])
+                                                        : [];
+                                                    $calendarHasAssigneeVisual = $calendarAssigneeSummary !== ''
+                                                        && $calendarAssigneeSummary !== 'Sem responsavel'
+                                                        && !empty($calendarAssignees);
+                                                    $calendarPrimaryAssignee = $calendarHasAssigneeVisual ? $calendarAssignees[0] : null;
+                                                    ?>
+                                                    <button
+                                                        type="button"
+                                                        class="task-calendar-card task-calendar-mobile-task task-status-<?= e((string) $calendarTask['status_kind']) ?>"
+                                                        data-task-calendar-open-task="<?= e((string) $calendarTask['id']) ?>"
+                                                        data-task-calendar-task-id="<?= e((string) $calendarTask['id']) ?>"
+                                                        data-task-calendar-date="<?= e((string) $calendarAgendaDate) ?>"
+                                                        style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>;"
+                                                        aria-label="Abrir tarefa <?= e((string) $calendarTask['title']) ?>"
+                                                        draggable="<?= !empty($calendarTask['can_drag']) ? 'true' : 'false' ?>"
+                                                    >
+                                                        <span class="task-calendar-card-title-row">
+                                                            <?php if ((string) ($calendarTask['title_tag'] ?? '') !== ''): ?>
+                                                                <span
+                                                                    class="task-calendar-card-tag"
+                                                                    style="--wf-tag-color: <?= e((string) $calendarTask['title_tag_color']) ?>;"
+                                                                ><?= e((string) $calendarTask['title_tag']) ?></span>
+                                                            <?php endif; ?>
+                                                            <span class="task-calendar-card-title"><?= e((string) $calendarTask['title']) ?></span>
+                                                        </span>
+                                                        <?php if ($calendarGroupMeta !== '' || $calendarHasAssigneeVisual): ?>
+                                                            <span class="task-calendar-card-meta-row">
+                                                                <?php if ($calendarGroupMeta !== ''): ?>
+                                                                    <span class="task-calendar-card-meta"><?= e($calendarGroupMeta) ?></span>
+                                                                <?php endif; ?>
+                                                                <?php if ($calendarHasAssigneeVisual && is_array($calendarPrimaryAssignee)): ?>
+                                                                    <span
+                                                                        class="task-calendar-card-assignees"
+                                                                        title="<?= e($calendarAssigneeSummary) ?>"
+                                                                        aria-label="Responsaveis: <?= e($calendarAssigneeSummary) ?>"
+                                                                    >
+                                                                        <span class="assignee-summary-avatars<?= count($calendarAssignees) > 1 ? ' has-multiple' : '' ?>" aria-hidden="true">
+                                                                            <?php if (count($calendarAssignees) > 1): ?>
+                                                                                <span class="assignee-summary-avatar-back"></span>
+                                                                            <?php endif; ?>
+                                                                            <?= renderUserAvatar($calendarPrimaryAssignee, 'avatar assignee-summary-avatar', true, 'span') ?>
+                                                                        </span>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </button>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </section>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
 
                     </div>
                 <?php endif; ?>

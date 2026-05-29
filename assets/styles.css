@@ -6820,24 +6820,37 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 .task-calendar-layout {
+    --task-calendar-week-rows: 5;
+    --task-calendar-grid-gap: 6px;
+    --task-calendar-day-min-height: 118px;
+    --task-calendar-toolbar-gap: 8px;
     display: grid;
-    gap: 12px;
+    gap: var(--task-calendar-toolbar-gap);
+}
+
+.task-calendar-layout[data-task-calendar-weeks="4"] {
+    --task-calendar-day-min-height: 126px;
+}
+
+.task-calendar-layout[data-task-calendar-weeks="6"] {
+    --task-calendar-grid-gap: 5px;
+    --task-calendar-day-min-height: 96px;
 }
 
 .task-calendar-toolbar {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
 }
 
 .task-calendar-toolbar-copy {
     display: grid;
-    gap: 4px;
+    gap: 2px;
 }
 
 .task-calendar-kicker {
-    font-size: 0.72rem;
+    font-size: 0.69rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -6845,8 +6858,8 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 
 .task-calendar-toolbar-copy h3 {
     margin: 0;
-    font-size: 1.35rem;
-    line-height: 1.08;
+    font-size: 1.28rem;
+    line-height: 1.04;
 }
 
 .task-calendar-toolbar-copy p {
@@ -6857,20 +6870,20 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 .task-calendar-toolbar-actions {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-end;
 }
 
 .task-calendar-nav-link {
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 32px;
+    padding: 0 11px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 700;
     text-decoration: none;
     transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
@@ -6886,37 +6899,37 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 .task-calendar-grid-shell {
     min-width: 0;
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding-bottom: 0;
 }
 
 .task-calendar-grid {
     min-width: 720px;
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--task-calendar-grid-gap);
 }
 
 .task-calendar-weekday {
-    min-height: 28px;
+    min-height: 24px;
     padding: 0 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
-    font-size: 0.72rem;
+    border-radius: 9px;
+    font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
 .task-calendar-day {
-    min-height: 132px;
-    padding: 8px;
-    border-radius: 14px;
+    min-height: var(--task-calendar-day-min-height);
+    padding: 7px;
+    border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .task-calendar-day.is-outside-month {
@@ -6935,23 +6948,23 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
 }
 
 .task-calendar-day-number {
-    font-size: 0.86rem;
+    font-size: 0.82rem;
     font-weight: 800;
 }
 
 .task-calendar-day-count {
-    min-width: 22px;
-    height: 22px;
-    padding: 0 6px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 700;
 }
 
@@ -6959,19 +6972,19 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     min-height: 0;
     display: grid;
     align-content: start;
-    gap: 6px;
+    gap: 5px;
     overflow: auto;
-    padding-right: 2px;
+    padding-right: 1px;
 }
 
 .task-calendar-card,
 .task-calendar-sidebar-item {
     width: 100%;
-    padding: 8px 9px;
-    border-radius: 12px;
+    padding: 6px 7px;
+    border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     display: grid;
-    gap: 5px;
+    gap: 4px;
     text-align: left;
     cursor: pointer;
     appearance: none;
@@ -7000,7 +7013,7 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 .task-calendar-card-title,
@@ -7009,17 +7022,17 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 700;
 }
 
 .task-calendar-card-tag {
-    max-width: 82px;
-    padding: 2px 6px;
+    max-width: 74px;
+    padding: 2px 5px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
-    font-size: 0.64rem;
+    font-size: 0.61rem;
     font-weight: 700;
     line-height: 1;
     white-space: nowrap;
@@ -7030,8 +7043,8 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 .task-calendar-card-meta,
 .task-calendar-sidebar-meta {
     display: block;
-    font-size: 0.68rem;
-    line-height: 1.3;
+    font-size: 0.65rem;
+    line-height: 1.2;
 }
 
 .task-calendar-card-meta-row {
@@ -7039,7 +7052,7 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
 }
 
 .task-calendar-card-assignees {
@@ -7049,12 +7062,12 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 .task-calendar-card .assignee-summary-avatars {
-    --assignee-avatar-size: 22px;
-    --assignee-avatar-offset: 8px;
+    --assignee-avatar-size: 20px;
+    --assignee-avatar-offset: 7px;
 }
 
 .task-calendar-card .assignee-summary-avatar {
-    font-size: 0.62rem;
+    font-size: 0.58rem;
 }
 
 .task-calendar-sidebar {
@@ -7107,6 +7120,66 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     min-height: 180px;
 }
 
+.task-calendar-mobile-agenda {
+    display: none;
+}
+
+.task-calendar-mobile-agenda-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.task-calendar-mobile-agenda-head strong {
+    font-size: 0.92rem;
+    font-weight: 800;
+}
+
+.task-calendar-mobile-agenda-head span {
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.task-calendar-mobile-agenda-list {
+    display: grid;
+    gap: 10px;
+}
+
+.task-calendar-mobile-day {
+    display: grid;
+    gap: 8px;
+}
+
+.task-calendar-mobile-day-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.task-calendar-mobile-day-date {
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.task-calendar-mobile-day-count {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.task-calendar-mobile-day-items {
+    display: grid;
+    gap: 8px;
+}
+
 .task-calendar-source[hidden] {
     display: none !important;
 }
@@ -7126,11 +7199,18 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
         justify-self: stretch;
         grid-column: 1 / -1;
         justify-content: space-between;
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
     }
 
     .task-view-toggle-group {
         width: 100%;
         justify-content: space-between;
+        min-width: 0;
+        grid-column: 1 / -1;
     }
 
     .task-view-toggle {
@@ -7148,6 +7228,97 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 
     .task-calendar-grid {
         min-width: 700px;
+    }
+}
+
+@media (max-width: 640px) {
+    .task-calendar-layout {
+        --task-calendar-grid-gap: 4px;
+        --task-calendar-day-min-height: 72px;
+        --task-calendar-toolbar-gap: 10px;
+    }
+
+    .task-calendar-layout[data-task-calendar-weeks="4"] {
+        --task-calendar-day-min-height: 82px;
+    }
+
+    .task-calendar-layout[data-task-calendar-weeks="6"] {
+        --task-calendar-grid-gap: 3px;
+        --task-calendar-day-min-height: 64px;
+    }
+
+    .task-calendar-mobile-agenda {
+        display: grid;
+        gap: 10px;
+    }
+
+    .task-calendar-grid-shell {
+        overflow-x: visible;
+    }
+
+    .task-calendar-grid {
+        min-width: 0;
+    }
+
+    .task-calendar-weekday {
+        min-height: 18px;
+        padding: 0 2px;
+        border-radius: 7px;
+        font-size: 0.56rem;
+    }
+
+    .task-calendar-day {
+        padding: 5px 4px;
+        border-radius: 10px;
+        gap: 4px;
+    }
+
+    .task-calendar-day-head {
+        gap: 4px;
+    }
+
+    .task-calendar-day-number {
+        font-size: 0.76rem;
+    }
+
+    .task-calendar-day-count {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        font-size: 0.58rem;
+    }
+
+    .task-calendar-day-list {
+        gap: 3px;
+        overflow: hidden;
+        padding-right: 0;
+    }
+
+    .task-calendar-day .task-calendar-card {
+        min-height: 7px;
+        padding: 0;
+        border-radius: 999px;
+        gap: 0;
+    }
+
+    .task-calendar-day .task-calendar-card:nth-child(n + 4) {
+        display: none;
+    }
+
+    .task-calendar-day .task-calendar-card .task-calendar-card-title-row,
+    .task-calendar-day .task-calendar-card .task-calendar-card-meta-row {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    .task-filters-create,
+    .task-filters-create-project {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .task-project-done-toggle {
+        grid-column: 1 / -1;
     }
 }
 

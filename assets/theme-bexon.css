@@ -7822,10 +7822,10 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
     }
 
     body.is-dashboard .task-filters {
-        grid-template-columns: auto auto;
-        justify-content: space-between;
+        grid-template-columns: 1fr;
+        justify-content: stretch;
         align-items: start;
-        gap: 8px;
+        gap: 10px;
         margin: 0 0 16px;
         padding: 0 10px;
         border: 0;
@@ -8052,8 +8052,8 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         align-items: center;
         justify-content: center;
         gap: 8px;
-        width: auto;
-        min-width: 126px;
+        width: 100%;
+        min-width: 0;
         min-height: 40px;
         padding: 0 16px;
         border: 1px solid var(--mobile-border);
@@ -8210,13 +8210,14 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
     }
 
     body.is-dashboard .task-filters-create {
-        grid-column: 2;
-        justify-content: flex-end;
+        grid-column: 1;
+        justify-content: stretch;
+        align-self: start;
     }
 
     body.is-dashboard .task-filters-create-project {
-        grid-column: 2;
-        justify-content: flex-end;
+        grid-column: 1;
+        justify-content: stretch;
         align-self: start;
         gap: 8px;
         margin-top: 0;
@@ -8233,6 +8234,15 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
         min-height: 40px;
         display: inline-grid !important;
         place-items: center !important;
+    }
+
+    body.is-dashboard .task-view-toggle-group {
+        width: 100%;
+        min-width: 0;
+    }
+
+    body.is-dashboard .task-project-done-toggle {
+        justify-content: center;
     }
 
     body.is-dashboard .task-groups-list {
@@ -9175,6 +9185,131 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
     }
 }
 
+@media (max-width: 640px) {
+    body.is-dashboard .task-page-board-header:not(.is-chooser) {
+        padding-inline: 8px;
+    }
+
+    body.is-dashboard .task-page-board-header:not(.is-chooser) .task-page-heading {
+        min-height: 36px;
+        padding-inline: 44px;
+    }
+
+    body.is-dashboard .task-page-back-button {
+        width: 34px;
+        height: 34px;
+        flex-basis: 34px;
+    }
+
+    body.is-dashboard .task-page-heading-copy {
+        gap: 1px;
+    }
+
+    body.is-dashboard .task-calendar-kicker {
+        display: none;
+    }
+
+    body.is-dashboard .task-calendar-toolbar-copy h3 {
+        font-size: clamp(1.18rem, 6.2vw, 1.42rem);
+        line-height: 1.02;
+    }
+
+    body.is-dashboard .task-calendar-toolbar-actions {
+        gap: 5px;
+    }
+
+    body.is-dashboard .task-calendar-nav-link {
+        min-height: 30px;
+        padding: 0 10px;
+        font-size: 0.72rem;
+        box-shadow: none;
+    }
+
+    body.is-dashboard .task-calendar-grid-shell {
+        overflow-x: visible;
+    }
+
+    body.is-dashboard .task-calendar-grid {
+        min-width: 0;
+    }
+
+    body.is-dashboard .task-calendar-weekday {
+        background: transparent;
+        color: var(--mobile-text-muted);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+    }
+
+    body.is-dashboard .task-calendar-day,
+    body.is-dashboard .task-calendar-sidebar-card {
+        border-color: var(--mobile-border);
+        background: rgba(255, 255, 255, 0.03);
+        box-shadow: none;
+    }
+
+    body.is-dashboard .task-calendar-day.is-outside-month {
+        background: rgba(255, 255, 255, 0.015);
+        opacity: 0.42;
+    }
+
+    body.is-dashboard .task-calendar-day.is-today {
+        border-color: rgba(var(--color-accent-500-rgb), 0.32);
+        box-shadow: inset 0 0 0 1px rgba(var(--color-accent-500-rgb), 0.14);
+    }
+
+    body.is-dashboard .task-calendar-day.is-drop-target {
+        border-color: rgba(var(--color-accent-500-rgb), 0.34);
+        background: rgba(var(--color-accent-500-rgb), 0.08);
+        box-shadow: inset 0 0 0 1px rgba(var(--color-accent-500-rgb), 0.12);
+    }
+
+    body.is-dashboard .task-calendar-day-count,
+    body.is-dashboard .task-calendar-mobile-day-count {
+        background: rgba(var(--color-accent-500-rgb), 0.16);
+        color: #ffe3aa;
+    }
+
+    body.is-dashboard .task-calendar-day .task-calendar-card {
+        border-color: transparent;
+        background: color-mix(in srgb, var(--task-calendar-accent, #F3AE39) 18%, rgba(255, 255, 255, 0.1));
+        box-shadow: none;
+    }
+
+    body.is-dashboard .task-calendar-mobile-agenda {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 4px;
+    }
+
+    body.is-dashboard .task-calendar-mobile-agenda-head strong,
+    body.is-dashboard .task-calendar-mobile-day-date {
+        color: var(--mobile-text);
+    }
+
+    body.is-dashboard .task-calendar-mobile-agenda-head span {
+        color: var(--mobile-text-muted);
+    }
+
+    body.is-dashboard .task-calendar-mobile-day {
+        padding: 10px 11px;
+        border: 1px solid var(--mobile-border);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    body.is-dashboard .task-calendar-mobile-task {
+        border-color: var(--mobile-border);
+        background: rgba(255, 255, 255, 0.045);
+        box-shadow: none;
+    }
+
+    body.is-dashboard .task-calendar-mobile-task:hover,
+    body.is-dashboard .task-calendar-mobile-task:focus-visible {
+        border-color: rgba(var(--color-accent-500-rgb), 0.34);
+        background: rgba(var(--color-accent-500-rgb), 0.1);
+        transform: none;
+    }
+}
+
 @media (max-width: 420px) {
     body.is-dashboard .tasklist-layout > .tasklist-wrap,
     body.is-dashboard .tasklist-layout > .overview-wrap,
@@ -9198,6 +9333,14 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
     body.is-dashboard .status-stepper .row-inline-picker > summary,
     body.is-dashboard .due-date-display {
         font-size: 0.71rem;
+    }
+
+    body.is-dashboard .task-calendar-toolbar-actions {
+        width: 100%;
+    }
+
+    body.is-dashboard .task-calendar-nav-link {
+        flex: 1 1 0;
     }
 }
 
