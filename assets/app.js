@@ -1374,7 +1374,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ) {
         convertDashLineToListInTaskDetailEditor();
       }
-      normalizeTaskDetailDescriptionEditorLists();
+      normalizeDescriptionEditorMarkup(taskDetailEditDescriptionEditor);
       syncTaskDetailDescriptionTextareaFromEditor();
       syncTaskDetailDescriptionToolbar();
       return;
@@ -1392,7 +1392,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ) {
         convertDashLineToListInCreateTaskEditor();
       }
-      normalizeDescriptionEditorLists(createTaskDescriptionEditor);
+      normalizeDescriptionEditorMarkup(createTaskDescriptionEditor);
       syncCreateTaskDescriptionTextareaFromEditor();
       return;
     }
@@ -1410,6 +1410,52 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (target.matches("[data-create-task-links]")) {
       syncReferenceTextareaLayout(target);
+    }
+  });
+
+  document.addEventListener("focusin", (event) => {
+    const target = event.target;
+    const taskDetailDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-task-detail-edit-description-editor]"
+    );
+    if (taskDetailDescriptionEditorTarget instanceof HTMLElement) {
+      seedDescriptionEditorParagraph(taskDetailDescriptionEditorTarget);
+      return;
+    }
+
+    const createTaskDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-create-task-description-editor]"
+    );
+    if (createTaskDescriptionEditorTarget instanceof HTMLElement) {
+      seedDescriptionEditorParagraph(createTaskDescriptionEditorTarget);
+    }
+  });
+
+  document.addEventListener("focusout", (event) => {
+    const target = event.target;
+    const taskDetailDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-task-detail-edit-description-editor]"
+    );
+    if (taskDetailDescriptionEditorTarget instanceof HTMLElement) {
+      window.setTimeout(() => {
+        if (taskDetailDescriptionEditorTarget.contains(document.activeElement)) return;
+        clearDescriptionEditorIfEmpty(taskDetailDescriptionEditorTarget);
+      }, 0);
+      return;
+    }
+
+    const createTaskDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-create-task-description-editor]"
+    );
+    if (createTaskDescriptionEditorTarget instanceof HTMLElement) {
+      window.setTimeout(() => {
+        if (createTaskDescriptionEditorTarget.contains(document.activeElement)) return;
+        clearDescriptionEditorIfEmpty(createTaskDescriptionEditorTarget);
+      }, 0);
     }
   });
 
@@ -1676,6 +1722,15 @@ window.addEventListener("DOMContentLoaded", () => {
     return withBold.replace(/_([^_\n]+)_/g, "<em>$1</em>");
   };
 
+  const formatTaskDescriptionLineHtml = (value) => {
+    const line = String(value || "");
+    if (line.trim() === "") {
+      return '<span class="task-description-line is-empty" aria-hidden="true">&nbsp;</span>';
+    }
+
+    return `<span class="task-description-line">${formatTaskDescriptionInlineHtml(line)}</span>`;
+  };
+
   const isTaskDescriptionSeparatorLine = (value) => /^-{3,}$/.test(String(value || "").trim());
   const taskDescriptionListLinePattern = /^(?:-\s+|\u2022\s*)(.+)$/;
 
@@ -1698,6 +1753,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const lines = String(value || "").replace(/\r/g, "").split("\n");
     const parts = [];
     const listItems = [];
+    const paragraphLines = [];
 
     const flushList = () => {
       if (!listItems.length) return;
@@ -1709,30 +1765,44 @@ window.addEventListener("DOMContentLoaded", () => {
       listItems.length = 0;
     };
 
+    const flushParagraph = () => {
+      if (!paragraphLines.length) return;
+      parts.push(
+        `<p>${paragraphLines
+          .map((line) => formatTaskDescriptionLineHtml(line))
+          .join("")}</p>`
+      );
+      paragraphLines.length = 0;
+    };
+
     lines.forEach((rawLine) => {
       const line = rawLine.trim();
       if (!line) {
         flushList();
+        paragraphLines.push("");
         return;
       }
 
       if (isTaskDescriptionSeparatorLine(line)) {
         flushList();
+        flushParagraph();
         parts.push('<hr class="task-description-divider">');
         return;
       }
 
       const listItemText = getTaskDescriptionListItemText(line);
       if (listItemText) {
+        flushParagraph();
         listItems.push(listItemText);
         return;
       }
 
       flushList();
-      parts.push(`<p>${formatTaskDescriptionInlineHtml(line)}</p>`);
+      paragraphLines.push(line);
     });
 
     flushList();
+    flushParagraph();
     return parts.join("");
   };
 
@@ -1969,6 +2039,108 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     editor.innerHTML = formatTaskDescriptionHtml(text);
+    normalizeDescriptionEditorMarkup(editor);
+  };
+
+  const isDescriptionEditorEffectivelyEmpty = (editor) => {
+    if (!(editor instanceof HTMLElement)) return true;
+    return descriptionTextFromEditor(editor).trim() === "";
+  };
+
+  const seedDescriptionEditorParagraph = (editor) => {
+    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
+    editor.innerHTML = "<p><br></p>";
+    const paragraph = editor.querySelector("p");
+    if (paragraph instanceof HTMLElement) {
+      setSelectionAtElementStart(paragraph);
+    }
+  };
+
+  const clearDescriptionEditorIfEmpty = (editor) => {
+    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
+    editor.innerHTML = "";
+  };
+
+  const replaceDescriptionEditorNode = (node, nextTagName) => {
+    if (!(node instanceof HTMLElement)) return null;
+    const replacement = document.createElement(nextTagName);
+    while (node.firstChild) {
+      replacement.append(node.firstChild);
+    }
+    node.replaceWith(replacement);
+    return replacement;
+  };
+
+  const normalizeDescriptionEditorMarkup = (editor) => {
+    if (!(editor instanceof HTMLElement)) return;
+
+    editor.querySelectorAll("*").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+
+      let currentNode = node;
+      if (currentNode.tagName === "SPAN") {
+        const fontWeight = String(currentNode.style.fontWeight || "").trim().toLowerCase();
+        const fontStyle = String(currentNode.style.fontStyle || "").trim().toLowerCase();
+        const fontWeightValue = Number.parseInt(fontWeight, 10);
+        const isBold =
+          fontWeight === "bold" || fontWeight === "bolder" || Number.isFinite(fontWeightValue) && fontWeightValue >= 600;
+        const isItalic = fontStyle === "italic" || fontStyle === "oblique";
+
+        if (isBold && isItalic) {
+          const strong = document.createElement("strong");
+          const em = document.createElement("em");
+          while (currentNode.firstChild) {
+            em.append(currentNode.firstChild);
+          }
+          strong.append(em);
+          currentNode.replaceWith(strong);
+          currentNode = strong;
+        } else if (isBold) {
+          currentNode = replaceDescriptionEditorNode(currentNode, "strong") || currentNode;
+        } else if (isItalic) {
+          currentNode = replaceDescriptionEditorNode(currentNode, "em") || currentNode;
+        }
+      }
+
+      if (currentNode.tagName === "B") {
+        currentNode = replaceDescriptionEditorNode(currentNode, "strong") || currentNode;
+      } else if (currentNode.tagName === "I") {
+        currentNode = replaceDescriptionEditorNode(currentNode, "em") || currentNode;
+      }
+
+      currentNode.removeAttribute("style");
+      if (currentNode.tagName === "HR") {
+        currentNode.className = "task-description-divider";
+        return;
+      }
+
+      if (currentNode.tagName === "UL" || currentNode.tagName === "OL") {
+        currentNode.className = "task-detail-description-list";
+        return;
+      }
+
+      if (currentNode.tagName === "LI") {
+        currentNode.removeAttribute("class");
+        return;
+      }
+
+      if (currentNode.tagName === "SPAN" && currentNode.classList.contains("task-description-line")) {
+        currentNode.className = currentNode.classList.contains("is-empty")
+          ? "task-description-line is-empty"
+          : "task-description-line";
+        return;
+      }
+
+      if (currentNode.tagName === "SPAN" && currentNode.attributes.length === 0) {
+        currentNode.replaceWith(...Array.from(currentNode.childNodes));
+        return;
+      }
+
+      if (currentNode !== editor) {
+        currentNode.removeAttribute("class");
+      }
+    });
+
     normalizeDescriptionEditorLists(editor);
   };
 
@@ -2001,6 +2173,25 @@ window.addEventListener("DOMContentLoaded", () => {
       return `_${inner}_`;
     }
 
+    if (node.tagName === "SPAN") {
+      const fontWeight = String(node.style.fontWeight || "").trim().toLowerCase();
+      const fontStyle = String(node.style.fontStyle || "").trim().toLowerCase();
+      const fontWeightValue = Number.parseInt(fontWeight, 10);
+      const isBold =
+        fontWeight === "bold" || fontWeight === "bolder" || Number.isFinite(fontWeightValue) && fontWeightValue >= 600;
+      const isItalic = fontStyle === "italic" || fontStyle === "oblique";
+
+      if (isBold && isItalic) {
+        return `_**${inner}**_`;
+      }
+      if (isBold) {
+        return `**${inner}**`;
+      }
+      if (isItalic) {
+        return `_${inner}_`;
+      }
+    }
+
     return inner;
   };
 
@@ -2017,6 +2208,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const isDescriptionStructuredBlockNode = (node) =>
     node instanceof HTMLElement && descriptionStructuredBlockTags.has(node.tagName);
+
+  const isDescriptionLineNode = (node) =>
+    node instanceof HTMLElement &&
+    node.tagName === "SPAN" &&
+    node.classList.contains("task-description-line");
 
   const descriptionDirectInlineText = (element) =>
     Array.from(element.childNodes)
@@ -2059,6 +2255,24 @@ window.addEventListener("DOMContentLoaded", () => {
       return [];
     }
 
+    if (isDescriptionLineNode(node)) {
+      return [descriptionInlineNodeToText(node).trimEnd()];
+    }
+
+    const childNodes = Array.from(node.childNodes);
+    const isEmptyLineBlock =
+      childNodes.length > 0 &&
+      childNodes.every((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          return String(child.textContent || "").trim() === "";
+        }
+
+        return child instanceof HTMLElement && child.tagName === "BR";
+      });
+    if (isEmptyLineBlock) {
+      return [""];
+    }
+
     if (node.tagName === "UL" || node.tagName === "OL") {
       const lines = [];
       Array.from(node.children)
@@ -2073,7 +2287,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     const hasStructuredChildren = Array.from(node.childNodes).some((child) =>
-      isDescriptionStructuredBlockNode(child)
+      isDescriptionStructuredBlockNode(child) || isDescriptionLineNode(child)
     );
 
     if (hasStructuredChildren) {
@@ -2089,6 +2303,12 @@ window.addEventListener("DOMContentLoaded", () => {
       };
 
       Array.from(node.childNodes).forEach((child) => {
+        if (isDescriptionLineNode(child)) {
+          flushInlinePieces();
+          lines.push(descriptionInlineNodeToText(child).trimEnd());
+          return;
+        }
+
         if (isDescriptionStructuredBlockNode(child)) {
           flushInlinePieces();
           lines.push(...descriptionBlockToLines(child));
@@ -2109,26 +2329,19 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const descriptionTextFromEditor = (editor) => {
     if (!(editor instanceof HTMLElement)) return "";
-    normalizeDescriptionEditorLists(editor);
+    normalizeDescriptionEditorMarkup(editor);
 
     const rawLines = [];
     Array.from(editor.childNodes).forEach((node) => {
-      rawLines.push(...descriptionBlockToLines(node).map((line) => line.replace(/\u00a0/g, " ")));
+      rawLines.push(
+        ...descriptionBlockToLines(node).map((line) => {
+          const normalizedLine = line.replace(/\u00a0/g, " ");
+          return normalizedLine.trim() === "" ? "" : normalizedLine;
+        })
+      );
     });
 
-    const lines = [];
-    let previousBlank = false;
-    rawLines.forEach((line) => {
-      const isBlank = line.trim() === "";
-      if (isBlank) {
-        if (!previousBlank) {
-          lines.push("");
-        }
-      } else {
-        lines.push(line);
-      }
-      previousBlank = isBlank;
-    });
+    const lines = rawLines.slice();
 
     while (lines.length && lines[0].trim() === "") {
       lines.shift();
@@ -2252,7 +2465,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const command = format === "italic" ? "italic" : "bold";
     editor.focus();
     document.execCommand(command, false);
-    normalizeDescriptionEditorLists(editor);
+    normalizeDescriptionEditorMarkup(editor);
     syncDescriptionTextareaFromEditor(textarea, editor);
   };
 
@@ -2289,7 +2502,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     editor.focus();
     document.execCommand("insertUnorderedList", false);
-    normalizeDescriptionEditorLists(editor);
+    normalizeDescriptionEditorMarkup(editor);
 
     const selection = window.getSelection();
     const node = selection?.anchorNode || null;
@@ -2350,7 +2563,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     setSelectionAtElementStart(paragraph);
-    normalizeDescriptionEditorLists(editor);
+    normalizeDescriptionEditorMarkup(editor);
     syncDescriptionTextareaFromEditor(textarea, editor);
   };
 
@@ -6613,6 +6826,20 @@ window.addEventListener("DOMContentLoaded", () => {
       const task = data.task || {};
       const taskItem = form.closest("[data-task-item]");
 
+      if (typeof task.description === "string") {
+        const descriptionField = form.querySelector('textarea[name="description"]');
+        if (descriptionField instanceof HTMLTextAreaElement) {
+          descriptionField.value = task.description;
+        }
+        if (
+          taskDetailContext &&
+          taskDetailContext.form === form &&
+          taskDetailContext.descriptionField instanceof HTMLTextAreaElement
+        ) {
+          taskDetailContext.descriptionField.value = task.description;
+        }
+      }
+
       if (typeof task.reference_links_json === "string") {
         const linksField = form.querySelector("[data-task-reference-links-json]");
         if (linksField instanceof HTMLInputElement) {
@@ -6774,7 +7001,13 @@ window.addEventListener("DOMContentLoaded", () => {
       refreshTaskUpdatedAtMeta(form, task.updated_at_label || "");
       renderDashboardSummary(data.dashboard);
       syncTaskHistoryControls(data.undo_state);
-      if (taskDetailContext && taskDetailContext.form === form && taskDetailModal && !taskDetailModal.hidden) {
+      if (
+        taskDetailContext &&
+        taskDetailContext.form === form &&
+        taskDetailModal &&
+        !taskDetailModal.hidden &&
+        !taskDetailModal.classList.contains("is-editing")
+      ) {
         populateTaskDetailModalFromRow(taskDetailContext);
         void hydrateTaskDetailPayloadFromServer(taskDetailContext, { force: true }).catch(() => {});
       }
@@ -13213,7 +13446,12 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       context.form.dataset.taskDetailHydrated = "1";
-      if (taskDetailContext === context && taskDetailModal instanceof HTMLElement && !taskDetailModal.hidden) {
+      if (
+        taskDetailContext === context &&
+        taskDetailModal instanceof HTMLElement &&
+        !taskDetailModal.hidden &&
+        !taskDetailModal.classList.contains("is-editing")
+      ) {
         populateTaskDetailModalFromRow(context);
       }
       return true;
@@ -14065,12 +14303,23 @@ window.addEventListener("DOMContentLoaded", () => {
   const saveTaskDetailModal = async () => {
     if (!taskDetailContext) return;
     if (taskDetailSaveInFlight) return;
+    const editedDescription =
+      taskDetailEditDescription instanceof HTMLTextAreaElement
+        ? taskDetailDescriptionTextFromEditor()
+        : null;
     if (taskDetailContext.form.dataset.taskDetailHydrated !== "1") {
       try {
         await hydrateTaskDetailPayloadFromServer(taskDetailContext);
       } catch (_error) {
         // continua com os dados locais já exibidos
       }
+    }
+    if (
+      editedDescription !== null &&
+      taskDetailEditDescription instanceof HTMLTextAreaElement
+    ) {
+      taskDetailEditDescription.value = editedDescription;
+      syncTaskDetailDescriptionEditorFromTextarea();
     }
     if (!copyTaskDetailModalToRow(taskDetailContext)) return;
     taskDetailSaveInFlight = true;

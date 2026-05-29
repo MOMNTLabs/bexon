@@ -600,6 +600,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     $taskPayload = [
                         'id' => $taskId,
                         'group_name' => $groupName,
+                        'description' => $description,
                         'title_tag' => $titleTag,
                         'title_tag_color' => $titleTagColor,
                         'due_date' => $dueDate,

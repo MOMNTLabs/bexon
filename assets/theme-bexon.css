@@ -7155,15 +7155,37 @@ body.is-dashboard .task-detail-view-label-row {
 body.is-dashboard .task-detail-view-description {
     min-height: 0;
     font-size: 1.02rem;
-    line-height: 1.72;
+    line-height: 1.48;
     color: rgba(244, 247, 255, 0.96);
 }
 
-body.is-dashboard .task-detail-view-description p {
-    margin-bottom: 14px;
+body.is-dashboard .task-detail-view-description p,
+body.is-dashboard .task-detail-description-version-body p,
+body.is-dashboard .task-detail-edit-description-editor :is(p, div) {
+    margin-bottom: 4px;
 }
 
-body.is-dashboard .task-detail-view-description :is(strong, b) {
+body.is-dashboard .task-detail-view-description .task-detail-description-list,
+body.is-dashboard .task-detail-description-version-body .task-detail-description-list,
+body.is-dashboard .task-detail-edit-description-editor .task-detail-description-list {
+    margin-bottom: 4px;
+    gap: 2px;
+}
+
+body.is-dashboard .task-detail-view-description .task-description-line,
+body.is-dashboard .task-detail-description-version-body .task-description-line,
+body.is-dashboard .task-detail-edit-description-editor .task-description-line {
+    display: block;
+}
+
+body.is-dashboard .task-detail-view-description .task-description-line.is-empty,
+body.is-dashboard .task-detail-description-version-body .task-description-line.is-empty,
+body.is-dashboard .task-detail-edit-description-editor .task-description-line.is-empty {
+    min-height: 1.48em;
+}
+
+body.is-dashboard .task-detail-view-description :is(strong, b),
+body.is-dashboard .task-detail-edit-description-editor :is(strong, b) {
     color: #fff7dc;
     font-weight: 800;
 }
@@ -7173,7 +7195,7 @@ body.is-dashboard .task-detail-view-description.is-empty {
 }
 
 body.is-dashboard .task-description-divider {
-    margin: 18px 0;
+    margin: 10px 0;
     background:
         linear-gradient(
             90deg,
