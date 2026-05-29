@@ -7302,16 +7302,26 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   let draggedTaskItem = null;
+  let draggedCalendarTaskCard = null;
   let activeDropzone = null;
+  let activeCalendarDropzone = null;
   let activeTaskGroupDropTarget = null;
   let draggedWorkspaceStatusRow = null;
   let draggedWorkspaceStatusList = null;
+  let suppressCalendarTaskOpenUntil = 0;
 
   const clearDropzoneHighlight = () => {
     document
       .querySelectorAll(".task-list-rows.is-drop-target")
       .forEach((zone) => zone.classList.remove("is-drop-target"));
     activeDropzone = null;
+  };
+
+  const clearCalendarDropzoneHighlight = () => {
+    document
+      .querySelectorAll(".task-calendar-day.is-drop-target")
+      .forEach((zone) => zone.classList.remove("is-drop-target"));
+    activeCalendarDropzone = null;
   };
 
   const clearTaskGroupDropTarget = () => {
@@ -7334,6 +7344,115 @@ window.addEventListener("DOMContentLoaded", () => {
       return { form, field };
     }
     return null;
+  };
+
+  const getCalendarTaskDueDateBinding = (calendarTaskCard) => {
+    if (!(calendarTaskCard instanceof HTMLElement)) return null;
+
+    const taskId =
+      Number.parseInt(String(calendarTaskCard.dataset.taskCalendarTaskId || "0"), 10) || 0;
+    if (taskId <= 0) return null;
+
+    const taskItem = document.getElementById(`task-${taskId}`);
+    if (!(taskItem instanceof HTMLElement)) return null;
+
+    const readOnly = (taskItem.dataset.taskReadonly || "0") === "1";
+    const form = taskItem.querySelector("[data-task-autosave-form]");
+    if (!(form instanceof HTMLFormElement)) {
+      return {
+        taskId,
+        taskItem,
+        form: null,
+        field: null,
+        readOnly,
+      };
+    }
+
+    const field = form.querySelector("[data-due-date-input]");
+    return {
+      taskId,
+      taskItem,
+      form,
+      field: field instanceof HTMLInputElement ? field : null,
+      readOnly,
+    };
+  };
+
+  const syncCalendarDayCardCount = (calendarDay) => {
+    if (!(calendarDay instanceof HTMLElement)) return;
+
+    const dayList = calendarDay.querySelector(".task-calendar-day-list");
+    const dayHead = calendarDay.querySelector(".task-calendar-day-head");
+    if (!(dayList instanceof HTMLElement) || !(dayHead instanceof HTMLElement)) return;
+
+    const nextCount = dayList.querySelectorAll(".task-calendar-card").length;
+    let countBadge = dayHead.querySelector(".task-calendar-day-count");
+
+    if (nextCount <= 0) {
+      countBadge?.remove();
+      return;
+    }
+
+    if (!(countBadge instanceof HTMLElement)) {
+      countBadge = document.createElement("span");
+      countBadge.className = "task-calendar-day-count";
+      dayHead.append(countBadge);
+    }
+
+    countBadge.textContent = String(nextCount);
+  };
+
+  const moveCalendarTaskCardToDayDom = (calendarTaskCard, calendarDay) => {
+    if (!(calendarTaskCard instanceof HTMLElement) || !(calendarDay instanceof HTMLElement)) return;
+
+    const targetList = calendarDay.querySelector(".task-calendar-day-list");
+    if (!(targetList instanceof HTMLElement)) return;
+
+    const previousDay = calendarTaskCard.closest("[data-task-calendar-date]");
+    targetList.append(calendarTaskCard);
+    calendarTaskCard.dataset.taskCalendarDate = String(
+      calendarDay.dataset.taskCalendarDate || ""
+    ).trim();
+
+    if (previousDay instanceof HTMLElement && previousDay !== calendarDay) {
+      syncCalendarDayCardCount(previousDay);
+    }
+    syncCalendarDayCardCount(calendarDay);
+  };
+
+  const persistCalendarTaskDrop = async (calendarTaskCard, calendarDay) => {
+    const binding = getCalendarTaskDueDateBinding(calendarTaskCard);
+    if (
+      !binding ||
+      binding.readOnly ||
+      !(binding.form instanceof HTMLFormElement) ||
+      !(binding.field instanceof HTMLInputElement)
+    ) {
+      return;
+    }
+
+    const nextDate = String(calendarDay.dataset.taskCalendarDate || "").trim();
+    const previousDate = String(binding.field.value || "").trim();
+    if (!nextDate || nextDate === previousDate) {
+      return;
+    }
+
+    moveCalendarTaskCardToDayDom(calendarTaskCard, calendarDay);
+    binding.field.value = nextDate;
+    syncDueDateDisplay(binding.field);
+    calendarTaskCard.classList.add("is-saving");
+
+    try {
+      await submitTaskAutosave(binding.form);
+    } finally {
+      suppressCalendarTaskOpenUntil = Date.now() + 250;
+      if (calendarTaskCard.isConnected) {
+        calendarTaskCard.classList.remove("is-saving");
+      }
+      if (isTaskCalendarLayoutActive()) {
+        await refreshTasksSectionFromServer();
+      }
+    }
   };
 
   document.addEventListener("dragstart", (event) => {
@@ -7362,6 +7481,37 @@ window.addEventListener("DOMContentLoaded", () => {
         event.dataTransfer.effectAllowed = "move";
         try {
           event.dataTransfer.setData("text/plain", workspaceStatusRow.dataset.statusKey || "status");
+        } catch (e) {
+          // noop
+        }
+      }
+      return;
+    }
+
+    const calendarTaskCard = target.closest("[data-task-calendar-task-id]");
+    if (calendarTaskCard instanceof HTMLElement) {
+      const binding = getCalendarTaskDueDateBinding(calendarTaskCard);
+      if (
+        !binding ||
+        binding.readOnly ||
+        !(binding.form instanceof HTMLFormElement) ||
+        !(binding.field instanceof HTMLInputElement)
+      ) {
+        event.preventDefault();
+        return;
+      }
+
+      draggedCalendarTaskCard = calendarTaskCard;
+      calendarTaskCard.classList.add("is-dragging");
+      clearCalendarDropzoneHighlight();
+
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        try {
+          event.dataTransfer.setData(
+            "text/plain",
+            calendarTaskCard.dataset.taskCalendarTaskId || "calendar-task"
+          );
         } catch (e) {
           // noop
         }
@@ -7468,6 +7618,13 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     draggedTaskItem = null;
     clearDropzoneHighlight();
+
+    if (draggedCalendarTaskCard) {
+      draggedCalendarTaskCard.classList.remove("is-dragging");
+      suppressCalendarTaskOpenUntil = Date.now() + 250;
+    }
+    draggedCalendarTaskCard = null;
+    clearCalendarDropzoneHighlight();
   });
 
   document.addEventListener("dragover", (event) => {
@@ -7517,6 +7674,24 @@ window.addEventListener("DOMContentLoaded", () => {
       if (referenceNode !== draggedTaskGroup) {
         taskGroupsListElement.insertBefore(draggedTaskGroup, referenceNode);
       }
+      return;
+    }
+
+    if (draggedCalendarTaskCard instanceof HTMLElement) {
+      const calendarDay = target.closest("[data-task-calendar-date]");
+      if (!(calendarDay instanceof HTMLElement)) return;
+
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+
+      if (activeCalendarDropzone && activeCalendarDropzone !== calendarDay) {
+        activeCalendarDropzone.classList.remove("is-drop-target");
+      }
+
+      activeCalendarDropzone = calendarDay;
+      calendarDay.classList.add("is-drop-target");
       return;
     }
 
@@ -7573,6 +7748,22 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    if (draggedCalendarTaskCard instanceof HTMLElement) {
+      const calendarDay = target.closest("[data-task-calendar-date]");
+      if (!(calendarDay instanceof HTMLElement)) return;
+
+      const related = event.relatedTarget;
+      if (related instanceof Node && calendarDay.contains(related)) {
+        return;
+      }
+
+      calendarDay.classList.remove("is-drop-target");
+      if (activeCalendarDropzone === calendarDay) {
+        activeCalendarDropzone = null;
+      }
+      return;
+    }
+
     const dropzone = target.closest("[data-task-dropzone]");
     if (!(dropzone instanceof HTMLElement)) return;
 
@@ -7606,6 +7797,16 @@ window.addEventListener("DOMContentLoaded", () => {
         event.preventDefault();
       }
       clearTaskGroupDropTarget();
+      return;
+    }
+
+    if (draggedCalendarTaskCard instanceof HTMLElement) {
+      const calendarDay = target.closest("[data-task-calendar-date]");
+      if (!(calendarDay instanceof HTMLElement)) return;
+
+      event.preventDefault();
+      clearCalendarDropzoneHighlight();
+      void persistCalendarTaskDrop(draggedCalendarTaskCard, calendarDay);
       return;
     }
 
@@ -7885,6 +8086,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const calendarTaskTrigger = target.closest("[data-task-calendar-open-task]");
     if (calendarTaskTrigger instanceof HTMLElement) {
+      if (Date.now() < suppressCalendarTaskOpenUntil) {
+        event.preventDefault();
+        return;
+      }
       event.preventDefault();
       const taskId =
         Number.parseInt(String(calendarTaskTrigger.dataset.taskCalendarOpenTask || "0"), 10) || 0;

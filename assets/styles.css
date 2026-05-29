@@ -6927,6 +6927,10 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     transform: translateY(-1px);
 }
 
+.task-calendar-day.is-drop-target {
+    transform: translateY(-1px);
+}
+
 .task-calendar-day-head {
     display: flex;
     align-items: center;
@@ -6976,6 +6980,20 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     color: inherit;
     position: relative;
     transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.task-calendar-card[draggable="true"] {
+    cursor: grab;
+}
+
+.task-calendar-card.is-dragging {
+    opacity: 0.6;
+    cursor: grabbing;
+}
+
+.task-calendar-card.is-saving {
+    pointer-events: none;
+    opacity: 0.72;
 }
 
 .task-calendar-card-title-row {

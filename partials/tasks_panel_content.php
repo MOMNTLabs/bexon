@@ -83,7 +83,8 @@ require __DIR__ . '/tasks_page_intro.php';
                 $statusMetaByKey,
                 $statusOptions,
                 $taskTitleTagColors,
-                $storedTaskGroupDoneHiddenMap
+                $storedTaskGroupDoneHiddenMap,
+                $taskGroupPermissions
             ): ?array {
                 $groupName = normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral'));
                 $statusKey = normalizeTaskStatus((string) ($task['status'] ?? ''));
@@ -116,6 +117,8 @@ require __DIR__ . '/tasks_page_intro.php';
                     'assignees' => is_array($task['assignees'] ?? null)
                         ? array_values(array_filter($task['assignees'], static fn ($assignee): bool => is_array($assignee)))
                         : [],
+                    'can_drag' => !array_key_exists($groupName, $taskGroupPermissions)
+                        || !empty($taskGroupPermissions[$groupName]['can_access']),
                     'title_tag' => $titleTag,
                     'title_tag_color' => $titleTagColor,
                 ];
@@ -199,6 +202,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                 ?>
                                     <section
                                         class="task-calendar-day<?= $calendarIsCurrentMonth ? '' : ' is-outside-month' ?><?= $calendarIsToday ? ' is-today' : '' ?>"
+                                        data-task-calendar-date="<?= e($calendarCellDate) ?>"
                                         aria-label="<?= e($calendarCursor->format('d/m/Y')) ?>"
                                     >
                                         <header class="task-calendar-day-head">
@@ -224,8 +228,11 @@ require __DIR__ . '/tasks_page_intro.php';
                                                     type="button"
                                                     class="task-calendar-card task-status-<?= e((string) $calendarTask['status_kind']) ?>"
                                                     data-task-calendar-open-task="<?= e((string) $calendarTask['id']) ?>"
+                                                    data-task-calendar-task-id="<?= e((string) $calendarTask['id']) ?>"
+                                                    data-task-calendar-date="<?= e($calendarCellDate) ?>"
                                                     style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>;"
                                                     aria-label="Abrir tarefa <?= e((string) $calendarTask['title']) ?>"
+                                                    draggable="<?= !empty($calendarTask['can_drag']) ? 'true' : 'false' ?>"
                                                 >
                                                     <span class="task-calendar-card-title-row">
                                                         <?php if ((string) ($calendarTask['title_tag'] ?? '') !== ''): ?>
