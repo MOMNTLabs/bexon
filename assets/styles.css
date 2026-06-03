@@ -14597,11 +14597,15 @@ select option:checked,
 }
 
 .accounting-card.is-empty .accounting-create-toggle:not([open]) {
-    width: min(100%, 220px);
+    width: fit-content;
 }
 
 .accounting-card.is-empty .accounting-create-trigger {
     width: 100%;
+}
+
+.accounting-card.is-empty .accounting-create-toggle:not([open]) > .accounting-create-trigger {
+    width: auto;
 }
 
 .accounting-create-trigger {
@@ -15592,6 +15596,63 @@ select option:checked,
     color: #a45a56;
 }
 
+.accounting-balance-cashflow {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 14px;
+    align-items: center;
+    padding: 9px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(133, 178, 225, 0.16);
+    background: rgba(255, 255, 255, 0.82);
+}
+
+.accounting-balance-cashflow-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.accounting-balance-cashflow-kicker {
+    color: #617893;
+    font-size: 0.76rem;
+    line-height: 1.15;
+}
+
+.accounting-balance-cashflow-copy strong {
+    color: #29486a;
+    font-size: 0.92rem;
+    line-height: 1.1;
+}
+
+.accounting-balance-cashflow-value {
+    margin: 0;
+    color: #29486a;
+    font-weight: 700;
+    font-size: 0.98rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.accounting-balance-cashflow.is-positive .accounting-balance-cashflow-copy strong,
+.accounting-balance-cashflow.is-positive .accounting-balance-cashflow-value {
+    color: #3e8061;
+}
+
+.accounting-balance-cashflow.is-negative .accounting-balance-cashflow-copy strong,
+.accounting-balance-cashflow.is-negative .accounting-balance-cashflow-value {
+    color: #a45a56;
+}
+
+.accounting-balance-cashflow-warning {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: #8f6251;
+    font-size: 0.76rem;
+    line-height: 1.25;
+}
+
 @media (max-width: 1180px) {
     .is-dashboard .tasklist-layout {
         grid-template-columns: 1fr;
@@ -16380,6 +16441,24 @@ select option:checked,
         font-size: 0.86rem;
     }
 
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: stretch;
+        gap: 6px;
+        padding: 8px 10px;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-value {
+        text-align: left;
+        font-size: 0.9rem;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-copy strong,
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-kicker,
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-warning {
+        font-size: 0.72rem;
+    }
+
     body.is-dashboard[data-dashboard-view="accounting"] .accounting-opening-balance-form {
         grid-template-columns: minmax(0, 1fr);
         justify-items: center;
@@ -16452,6 +16531,14 @@ select option:checked,
 
     body.is-dashboard[data-dashboard-view="accounting"] .accounting-card .accounting-create-toggle {
         justify-self: center;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-card.is-empty .accounting-create-toggle:not([open]) {
+        width: min(100%, 220px);
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-card.is-empty .accounting-create-toggle:not([open]) > .accounting-create-trigger {
+        width: 100%;
     }
 
     .is-dashboard .tasklist-layout > .tasklist-wrap,

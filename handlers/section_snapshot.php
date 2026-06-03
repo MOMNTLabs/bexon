@@ -191,6 +191,12 @@ function respondAccountingPanelSnapshot(): void
     $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];
     $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($workspaceId, $accountingPeriod);
     $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents);
+    $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(
+        db(),
+        $workspaceId,
+        $accountingPeriod,
+        $accountingOpeningBalanceCents
+    );
 
     ob_start();
     include __DIR__ . '/../partials/accounting_sheet.php';

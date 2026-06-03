@@ -683,6 +683,19 @@ if ($currentUser && $currentWorkspaceId !== null) {
     }
 }
 $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents);
+$accountingNextIncomeProjection = ['available' => false];
+if ($currentUser && $currentWorkspaceId !== null) {
+    try {
+        $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(
+            $pdo,
+            $currentWorkspaceId,
+            $accountingPeriod,
+            $accountingOpeningBalanceCents
+        );
+    } catch (Throwable $e) {
+        $appendDashboardLoadError('Nao foi possivel calcular a projecao de caixa da contabilidade.', $e);
+    }
+}
 $stylesAssetVersion = is_file(__DIR__ . '/assets/styles.css')
     ? (string) filemtime(__DIR__ . '/assets/styles.css')
     : '1';

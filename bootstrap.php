@@ -5504,6 +5504,24 @@ function accountingNextPeriodKey(?string $periodKey): string
     return $date->modify('+1 month')->format('Y-m');
 }
 
+function accountingPeriodStartDate(string $periodKey): string
+{
+    $normalized = normalizeAccountingPeriodKey($periodKey);
+    $date = DateTimeImmutable::createFromFormat('!Y-m', $normalized) ?: new DateTimeImmutable('first day of this month');
+    return $date->format('Y-m-01');
+}
+
+function accountingDateCompactLabel(?string $dateValue): string
+{
+    $normalized = dueDateForStorage((string) $dateValue);
+    if ($normalized === null) {
+        return '';
+    }
+
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $normalized);
+    return $date ? $date->format('d/m') : '';
+}
+
 function accountingMonthLabel(string $periodKey): string
 {
     $periodKey = normalizeAccountingPeriodKey($periodKey);
@@ -8650,6 +8668,182 @@ function accountingSummary(array $entries, int $openingBalanceCents): array
         'current_balance_display' => dueAmountLabelFromSignedCents($currentBalance),
         'opening_balance_display' => dueAmountLabelFromSignedCents($openingBalanceCents),
         'final_balance_display' => dueAmountLabelFromSignedCents($finalBalance),
+    ];
+}
+
+function workspaceAccountingNextIncomeProjectionSummary(
+    PDO $pdo,
+    int $workspaceId,
+    ?string $periodKey,
+    int $openingBalanceCents
+): array {
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    if ($workspaceId <= 0) {
+        return ['available' => false];
+    }
+
+    $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+    $currentPeriodKey = normalizeAccountingPeriodKey($today);
+    if (strcmp($periodKey, $currentPeriodKey) < 0) {
+        return ['available' => false];
+    }
+
+    $anchorDate = strcmp($periodKey, $currentPeriodKey) > 0
+        ? accountingPeriodStartDate($periodKey)
+        : $today;
+
+    $horizonPeriodKey = $periodKey;
+    for ($step = 0; $step < 2; $step++) {
+        $horizonPeriodKey = accountingNextPeriodKey($horizonPeriodKey);
+    }
+
+    workspaceAccountingEnsureCarryoverUpTo($pdo, $workspaceId, $horizonPeriodKey);
+
+    $currentPeriodEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $periodKey);
+    $currentSummary = accountingSummary($currentPeriodEntries, $openingBalanceCents);
+    $baseBalanceCents = (int) ($currentSummary['current_balance_cents'] ?? $openingBalanceCents);
+
+    $pendingEvents = [];
+    $cursor = $periodKey;
+    while (strcmp($cursor, $horizonPeriodKey) <= 0) {
+        $periodEntries = $cursor === $periodKey
+            ? $currentPeriodEntries
+            : workspaceAccountingEntriesListRaw($pdo, $workspaceId, $cursor);
+
+        foreach ($periodEntries as $entry) {
+            if (((int) ($entry['is_settled'] ?? 0)) === 1) {
+                continue;
+            }
+
+            if (((int) ($entry['is_monthly_goal'] ?? 0)) === 1) {
+                continue;
+            }
+
+            $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+            if ($entryType !== 'income' && $entryType !== 'expense') {
+                continue;
+            }
+
+            $dueDate = dueDateForStorage((string) ($entry['due_date'] ?? ''));
+            if ($dueDate === null) {
+                continue;
+            }
+
+            if ($cursor !== $periodKey && accountingPeriodKeyFromDate($dueDate) !== $cursor) {
+                continue;
+            }
+
+            $amountCents = normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0;
+            if ($amountCents <= 0) {
+                continue;
+            }
+
+            $effectiveDate = strcmp($dueDate, $anchorDate) < 0 ? $anchorDate : $dueDate;
+            $pendingEvents[] = [
+                'date' => $effectiveDate,
+                'raw_date' => $dueDate,
+                'period_key' => $cursor,
+                'entry_type' => $entryType,
+                'signed_amount_cents' => $entryType === 'income' ? $amountCents : (-1 * $amountCents),
+            ];
+        }
+
+        if ($cursor === $horizonPeriodKey) {
+            break;
+        }
+
+        $cursor = accountingNextPeriodKey($cursor);
+    }
+
+    if (!$pendingEvents) {
+        return ['available' => false];
+    }
+
+    usort(
+        $pendingEvents,
+        static function (array $left, array $right): int {
+            $dateCompare = strcmp((string) ($left['date'] ?? ''), (string) ($right['date'] ?? ''));
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            if (($left['entry_type'] ?? '') === ($right['entry_type'] ?? '')) {
+                return 0;
+            }
+
+            return ($left['entry_type'] ?? '') === 'expense' ? -1 : 1;
+        }
+    );
+
+    $nextIncomeDate = null;
+    foreach ($pendingEvents as $event) {
+        if (($event['entry_type'] ?? '') !== 'income') {
+            continue;
+        }
+
+        $nextIncomeDate = (string) ($event['date'] ?? '');
+        if ($nextIncomeDate !== '') {
+            break;
+        }
+    }
+
+    if ($nextIncomeDate === null || $nextIncomeDate === '') {
+        return ['available' => false];
+    }
+
+    $dailyDeltas = [];
+    $incomeUntilNextReceiptCents = 0;
+    $expenseUntilNextReceiptCents = 0;
+    foreach ($pendingEvents as $event) {
+        $eventDate = (string) ($event['date'] ?? '');
+        if ($eventDate === '' || strcmp($eventDate, $nextIncomeDate) > 0) {
+            continue;
+        }
+
+        $signedAmountCents = (int) ($event['signed_amount_cents'] ?? 0);
+        if (!isset($dailyDeltas[$eventDate])) {
+            $dailyDeltas[$eventDate] = 0;
+        }
+        $dailyDeltas[$eventDate] += $signedAmountCents;
+
+        if (($event['entry_type'] ?? '') === 'income') {
+            $incomeUntilNextReceiptCents += max(0, $signedAmountCents);
+        } else {
+            $expenseUntilNextReceiptCents += abs($signedAmountCents);
+        }
+    }
+
+    ksort($dailyDeltas);
+    $runningBalanceCents = $baseBalanceCents;
+    $minimumBalanceCents = $baseBalanceCents;
+    foreach ($dailyDeltas as $deltaCents) {
+        $runningBalanceCents += (int) $deltaCents;
+        if ($runningBalanceCents < $minimumBalanceCents) {
+            $minimumBalanceCents = $runningBalanceCents;
+        }
+    }
+
+    $shortfallCents = $minimumBalanceCents < 0 ? abs($minimumBalanceCents) : 0;
+    $balanceAfterNextIncomeCents = $runningBalanceCents;
+
+    return [
+        'available' => true,
+        'anchor_date' => $anchorDate,
+        'anchor_date_display' => accountingDateCompactLabel($anchorDate),
+        'next_income_date' => $nextIncomeDate,
+        'next_income_date_display' => accountingDateCompactLabel($nextIncomeDate),
+        'balance_after_next_income_cents' => $balanceAfterNextIncomeCents,
+        'balance_after_next_income_display' => dueAmountLabelFromSignedCents($balanceAfterNextIncomeCents),
+        'minimum_balance_cents' => $minimumBalanceCents,
+        'minimum_balance_display' => dueAmountLabelFromSignedCents($minimumBalanceCents),
+        'shortfall_cents' => $shortfallCents,
+        'shortfall_display' => dueAmountLabelFromCents($shortfallCents),
+        'income_until_next_income_cents' => $incomeUntilNextReceiptCents,
+        'income_until_next_income_display' => dueAmountLabelFromCents($incomeUntilNextReceiptCents),
+        'expense_until_next_income_cents' => $expenseUntilNextReceiptCents,
+        'expense_until_next_income_display' => dueAmountLabelFromCents($expenseUntilNextReceiptCents),
+        'base_balance_cents' => $baseBalanceCents,
+        'base_balance_display' => dueAmountLabelFromSignedCents($baseBalanceCents),
     ];
 }
 

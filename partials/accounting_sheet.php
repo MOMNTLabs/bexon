@@ -833,6 +833,16 @@
                     $accountingFinalBalanceClass = $accountingFinalBalanceCents < 0
                         ? ' is-negative'
                         : ($accountingFinalBalanceCents > 0 ? ' is-positive' : '');
+                    $accountingCashProjectionAvailable = !empty($accountingNextIncomeProjection['available']);
+                    $accountingCashProjectionBalanceCents = $accountingCashProjectionAvailable
+                        ? (int) ($accountingNextIncomeProjection['balance_after_next_income_cents'] ?? 0)
+                        : 0;
+                    $accountingCashProjectionClass = $accountingCashProjectionBalanceCents < 0
+                        ? ' is-negative'
+                        : ($accountingCashProjectionBalanceCents > 0 ? ' is-positive' : '');
+                    $accountingCashProjectionShortfallCents = $accountingCashProjectionAvailable
+                        ? max(0, (int) ($accountingNextIncomeProjection['shortfall_cents'] ?? 0))
+                        : 0;
                     ?>
                     <div class="accounting-opening-balance-editor">
                         <button
@@ -875,5 +885,21 @@
                             <dd><?= $renderAccountingMoney((string) ($accountingSummary['final_balance_display'] ?? 'R$ 0,00')) ?></dd>
                         </div>
                     </dl>
+                    <?php if ($accountingCashProjectionAvailable): ?>
+                        <div class="accounting-balance-cashflow<?= e($accountingCashProjectionClass) ?>">
+                            <div class="accounting-balance-cashflow-copy">
+                                <span class="accounting-balance-cashflow-kicker">Saldo ap&oacute;s pr&oacute;xima entrada</span>
+                                <strong><?= e((string) ($accountingNextIncomeProjection['next_income_date_display'] ?? '')) ?></strong>
+                            </div>
+                            <div class="accounting-balance-cashflow-value">
+                                <?= $renderAccountingMoney((string) ($accountingNextIncomeProjection['balance_after_next_income_display'] ?? 'R$ 0,00')) ?>
+                            </div>
+                            <?php if ($accountingCashProjectionShortfallCents > 0): ?>
+                                <p class="accounting-balance-cashflow-warning">
+                                    Antes dela, pode faltar <?= e((string) ($accountingNextIncomeProjection['shortfall_display'] ?? 'R$ 0,00')) ?>
+                                </p>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </section>
             </div>
