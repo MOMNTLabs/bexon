@@ -811,14 +811,14 @@ body.is-dashboard .account-privacy-links {
     --ui-task-status-progress-text: #ffd8bc;
     --ui-task-status-review-text: #e8d9ba;
     --ui-task-status-done-text: #d2ead5;
-    --ui-task-priority-low-text: #d9e2ed;
-    --ui-task-priority-medium-text: #ffd8bc;
-    --ui-task-priority-high-text: #ffc3a2;
-    --ui-task-priority-urgent-text: #f6b5b5;
-    --ui-task-priority-low-flag: #76a7ea;
-    --ui-task-priority-medium-flag: #d8894f;
-    --ui-task-priority-high-flag: #c66d46;
-    --ui-task-priority-urgent-flag: #bb6262;
+    --ui-task-priority-low-text: #d8ecff;
+    --ui-task-priority-medium-text: #ffe4a3;
+    --ui-task-priority-high-text: #ffc08f;
+    --ui-task-priority-urgent-text: #ffb1c2;
+    --ui-task-priority-low-flag: #70b6ff;
+    --ui-task-priority-medium-flag: #f0c24d;
+    --ui-task-priority-high-flag: #ff964d;
+    --ui-task-priority-urgent-flag: #ff5f87;
     --ui-modal-bg:
         radial-gradient(circle at 12% 0%, rgba(var(--color-accent-500-rgb), 0.12) 0%, rgba(var(--color-accent-500-rgb), 0.05) 18%, rgba(var(--color-accent-500-rgb), 0) 38%),
         radial-gradient(circle at 88% 0%, rgba(95, 105, 120, 0.18) 0%, rgba(95, 105, 120, 0.08) 22%, rgba(95, 105, 120, 0) 52%),
@@ -890,14 +890,14 @@ body.is-dashboard .account-privacy-links {
     --state-status-review-text: #5a4c36;
     --state-status-done-rgb: 108, 137, 113;
     --state-status-done-text: #445548;
-    --state-priority-low-rgb: 116, 125, 138;
-    --state-priority-low-text: #44505d;
-    --state-priority-medium-rgb: var(--color-accent-500-rgb);
-    --state-priority-medium-text: #7a4c36;
-    --state-priority-high-rgb: var(--color-accent-600-rgb);
-    --state-priority-high-text: #70432f;
-    --state-priority-urgent-rgb: 166, 92, 92;
-    --state-priority-urgent-text: #6d3737;
+    --state-priority-low-rgb: 86, 154, 224;
+    --state-priority-low-text: #2f6798;
+    --state-priority-medium-rgb: 224, 178, 58;
+    --state-priority-medium-text: #8a6215;
+    --state-priority-high-rgb: 240, 122, 54;
+    --state-priority-high-text: #ad4b1a;
+    --state-priority-urgent-rgb: 217, 80, 109;
+    --state-priority-urgent-text: #9b3552;
 
     /* Compatibility aliases used by the selectors below */
     --bexon-gradient-dark: var(--ui-button-bg);

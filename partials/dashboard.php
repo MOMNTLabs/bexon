@@ -1541,7 +1541,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             <div class="task-create-modal-body">
                 <div class="task-detail-title-group-row">
                 <label>
-                    <span>TÃ­tulo</span>
+                    <span>T&iacute;tulo</span>
                     <div class="create-task-title-composer" data-create-task-title-composer>
                         <div class="create-task-title-tag-picker" data-create-task-title-tag-picker>
                             <button
@@ -1632,12 +1632,12 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
             <div class="task-detail-inline-controls">
                 <div class="assignee-picker-wrap task-detail-inline-field task-detail-inline-assignees">
-                    <span class="assignee-picker-label">ResponsÃ¡veis</span>
+                    <span class="assignee-picker-label">Respons&aacute;veis</span>
                     <details class="assignee-picker task-detail-inline-assignee-picker">
                         <summary>Selecionar</summary>
                         <div class="assignee-picker-menu">
                             <?php if (!$users): ?>
-                                <p class="assignee-picker-empty">Nenhum usuÃ¡rio cadastrado.</p>
+                                <p class="assignee-picker-empty">Nenhum usu&aacute;rio cadastrado.</p>
                             <?php else: ?>
                                 <?php foreach ($users as $user): ?>
                                     <label class="assignee-option">
@@ -1747,7 +1747,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                             type="button"
                             class="status-stepper-btn"
                             data-status-step="1"
-                            aria-label="PrÃ³ximo status"
+                            aria-label="Pr&oacute;ximo status"
                         >
                             <span aria-hidden="true">&#8250;</span>
                         </button>
@@ -1812,7 +1812,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
             <div class="task-detail-edit-main-row">
                 <div class="task-detail-edit-description-field">
-                    <span>DescriÃ§Ã£o</span>
+                    <span>Descri&ccedil;&atilde;o</span>
                     <div class="task-detail-edit-description-wrap task-create-description-wrap" data-create-task-description-wrap>
                         <div class="task-detail-edit-description-toolbar task-create-description-toolbar" data-create-task-description-toolbar>
                             <button
@@ -1824,8 +1824,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                             <button
                                 type="button"
                                 data-create-task-description-format="italic"
-                                title="Italico"
-                                aria-label="Italico"
+                                title="It&aacute;lico"
+                                aria-label="It&aacute;lico"
                             ><em aria-hidden="true">I</em></button>
                             <button
                                 type="button"
@@ -1842,14 +1842,14 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                             contenteditable="true"
                             role="textbox"
                             aria-multiline="true"
-                            aria-label="DescriÃ§Ã£o da tarefa"
+                            aria-label="Descri&ccedil;&atilde;o da tarefa"
                         ></div>
                     </div>
                     <textarea name="description" rows="5" data-create-task-description hidden></textarea>
                 </div>
 
                 <div class="task-detail-edit-images-field">
-                    <span>MÃ­dias</span>
+                    <span>M&iacute;dias</span>
                     <div class="task-detail-edit-image-picker-actions">
                         <button type="button" class="btn btn-mini btn-ghost task-image-add-button" data-create-task-image-add>
                             <span class="task-image-add-button-icon" aria-hidden="true">
@@ -1859,7 +1859,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     <path d="M3.8 14.8 8.3 10.2l3 2.7 2.1-1.8 2.8 3.7"></path>
                                 </svg>
                             </span>
-                            <span class="task-image-add-button-label">Adicionar mÃ­dia</span>
+                            <span class="task-image-add-button-label">Adicionar m&iacute;dia</span>
                         </button>
                         <button type="button" class="btn btn-mini btn-ghost task-image-add-button" data-create-task-drive-add>
                             <span class="task-image-add-button-icon" aria-hidden="true">
@@ -1872,7 +1872,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                             <span class="task-image-add-button-label">Google Drive</span>
                         </button>
                     </div>
-                    <div class="task-detail-edit-image-picker" data-create-task-image-picker tabindex="0" aria-label="Adicionar mÃ­dias de referÃªncia">
+                    <div class="task-detail-edit-image-picker" data-create-task-image-picker tabindex="0" aria-label="Adicionar m&iacute;dias de refer&ecirc;ncia">
                         <input type="file" accept="image/*" multiple data-create-task-image-input hidden>
                         <div class="task-detail-edit-image-list" data-create-task-image-list></div>
                     </div>
@@ -1883,7 +1883,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             <div class="task-detail-links-steps-row">
             <section class="task-inline-list-editor task-inline-list-editor--links">
                 <div class="task-inline-list-head">
-                    <span>Links de referencia</span>
+                    <span>Links de refer&ecirc;ncia</span>
                     <button type="button" class="btn btn-mini btn-ghost task-inline-list-add-trigger" data-create-task-link-toggle-add>+&nbsp;Link</button>
                 </div>
                 <div class="task-inline-add-row" data-create-task-link-add-form hidden>
@@ -1893,7 +1893,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         placeholder="https://site.com"
                         data-create-task-link-input
                     >
-                    <button type="button" class="task-inline-action task-inline-action-confirm" data-create-task-link-confirm aria-label="Confirmar link">âœ“</button>
+                    <button type="button" class="task-inline-action task-inline-action-confirm" data-create-task-link-confirm aria-label="Confirmar link">&#10003;</button>
                     <button type="button" class="task-inline-action task-inline-action-cancel" data-create-task-link-cancel aria-label="Cancelar link">X</button>
                 </div>
                 <div class="task-reference-edit-list" data-create-task-links-list></div>
@@ -1910,10 +1910,10 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                 <div class="task-inline-list-head task-subtasks-editor-head">
                     <div class="task-subtasks-editor-title">
                         <span>Etapas</span>
-                        <label class="task-subtasks-dependency-toggle" title="Ativar sequÃªncia entre etapas">
+                        <label class="task-subtasks-dependency-toggle" title="Ativar sequ&ecirc;ncia entre etapas">
                             <input
                                 type="checkbox"
-                                aria-label="Ativar sequÃªncia entre etapas"
+                                aria-label="Ativar sequ&ecirc;ncia entre etapas"
                                 data-create-task-subtasks-dependency-toggle
                             >
                             <span class="task-subtasks-dependency-icon" aria-hidden="true">
@@ -1927,7 +1927,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     <path d="M8.9 12.8 10 14l1.1-1.2"></path>
                                 </svg>
                             </span>
-                            <span class="sr-only">Ativar sequÃªncia entre etapas</span>
+                            <span class="sr-only">Ativar sequ&ecirc;ncia entre etapas</span>
                         </label>
                     </div>
                     <button type="button" class="btn btn-mini btn-ghost task-inline-list-add-trigger" data-create-task-subtask-toggle-add>+&nbsp;Etapa</button>
@@ -1939,7 +1939,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         placeholder="Nova etapa"
                         data-create-task-subtask-input
                     >
-                    <button type="button" class="task-inline-action task-inline-action-confirm" data-create-task-subtask-add aria-label="Confirmar etapa">âœ“</button>
+                    <button type="button" class="task-inline-action task-inline-action-confirm" data-create-task-subtask-add aria-label="Confirmar etapa">&#10003;</button>
                     <button type="button" class="task-inline-action task-inline-action-cancel" data-create-task-subtask-cancel aria-label="Cancelar etapa">X</button>
                 </div>
                 <div class="task-subtasks-edit-list" data-create-task-subtasks-list></div>
@@ -1952,7 +1952,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
             <div class="modal-actions">
                 <div class="modal-actions-left">
-                    <button type="button" class="btn btn-mini btn-ghost" data-create-task-open-media>MÃ­dias</button>
+                    <button type="button" class="btn btn-mini btn-ghost" data-create-task-open-media>M&iacute;dias</button>
                     <button type="button" class="btn btn-mini btn-ghost" data-create-task-back-main hidden>Voltar</button>
                 </div>
                 <button type="submit" class="btn btn-pill" data-create-task-submit <?= empty($taskGroupsWithAccess) ? 'disabled' : '' ?>>Adicionar tarefa</button>
@@ -2593,14 +2593,14 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                         <div class="task-detail-view-block">
                             <div class="task-detail-view-label-row">
-                                <div class="task-detail-view-label">DescriÃ§Ã£o</div>
+                                <div class="task-detail-view-label">Descri&ccedil;&atilde;o</div>
                                 <button
                                     type="button"
                                     class="task-detail-description-remove"
                                     data-task-detail-remove-revision
                                     hidden
-                                    aria-label="Remover ultima solicitaÃ§Ã£o de ajuste"
-                                    title="Remover ultima solicitaÃ§Ã£o de ajuste"
+                                    aria-label="Remover &uacute;ltima solicita&ccedil;&atilde;o de ajuste"
+                                    title="Remover &uacute;ltima solicita&ccedil;&atilde;o de ajuste"
                                 >
                                     <span aria-hidden="true">&#10005;</span>
                                 </button>
@@ -2615,11 +2615,11 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         </div>
 
                         <div class="task-detail-view-block" data-task-detail-view-references hidden>
-                            <div class="task-detail-view-label">ReferÃªncias</div>
+                            <div class="task-detail-view-label">Refer&ecirc;ncias</div>
 
                             <div class="task-detail-ref-section" data-task-detail-view-images-wrap hidden>
                                 <div class="task-detail-ref-head">
-                                    <div class="task-detail-ref-title">MÃ­dias</div>
+                                    <div class="task-detail-ref-title">M&iacute;dias</div>
                                     <button
                                         type="button"
                                         class="btn btn-mini btn-ghost task-detail-ref-bulk-download"
@@ -2643,7 +2643,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     </div>
 
                     <details class="task-detail-history-column" data-task-detail-history-column>
-                        <summary class="task-detail-history-summary" aria-label="HistÃ³rico da tarefa" title="HistÃ³rico">
+                        <summary class="task-detail-history-summary" aria-label="Hist&oacute;rico da tarefa" title="Hist&oacute;rico">
                             <span class="task-detail-history-summary-glyph" aria-hidden="true">
                                 <svg viewBox="0 0 20 20" focusable="false">
                                     <path d="M3.5 5.5V2.9"></path>
@@ -2652,7 +2652,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     <path d="M10 6.4v3.9l2.7 1.7"></path>
                                 </svg>
                             </span>
-                            <span class="task-detail-history-summary-title" aria-hidden="true">HistÃ³rico</span>
+                            <span class="task-detail-history-summary-title" aria-hidden="true">Hist&oacute;rico</span>
                         </summary>
                         <div class="task-detail-history-list" data-task-detail-view-history></div>
                     </details>
@@ -2663,7 +2663,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                 <div class="form-stack modal-form">
                     <div class="task-detail-title-group-row">
                         <label>
-                            <span>TÃ­tulo</span>
+                            <span>T&iacute;tulo</span>
                             <div class="create-task-title-composer" data-task-detail-edit-title-composer>
                                 <div class="create-task-title-tag-picker" data-task-detail-edit-title-tag-picker>
                                     <button
@@ -2752,7 +2752,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <div class="task-detail-inline-controls">
                         <div class="assignee-picker-wrap task-detail-inline-field task-detail-inline-assignees">
-                            <span class="assignee-picker-label">ResponsÃ¡veis</span>
+                            <span class="assignee-picker-label">Respons&aacute;veis</span>
                             <details class="assignee-picker task-detail-inline-assignee-picker" data-task-detail-edit-assignees>
                                 <summary>Selecionar</summary>
                                 <div class="assignee-picker-menu" data-task-detail-edit-assignees-menu></div>
@@ -2847,7 +2847,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     type="button"
                                     class="status-stepper-btn"
                                     data-status-step="1"
-                                    aria-label="PrÃ³ximo status"
+                                    aria-label="Pr&oacute;ximo status"
                                 >
                                     <span aria-hidden="true">&#8250;</span>
                                 </button>
@@ -2912,7 +2912,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <div class="task-detail-edit-main-row">
                         <div class="task-detail-edit-description-field">
-                            <span>DescriÃ§Ã£o</span>
+                            <span>Descri&ccedil;&atilde;o</span>
                             <div class="task-detail-edit-description-wrap" data-task-detail-edit-description-wrap>
                                 <div class="task-detail-edit-description-toolbar" data-task-detail-edit-description-toolbar>
                                     <button
@@ -2924,8 +2924,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     <button
                                         type="button"
                                         data-task-detail-description-format="italic"
-                                        title="Italico"
-                                        aria-label="Italico"
+                                        title="It&aacute;lico"
+                                        aria-label="It&aacute;lico"
                                     ><em aria-hidden="true">I</em></button>
                                     <button
                                         type="button"
@@ -2942,14 +2942,14 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     contenteditable="true"
                                     role="textbox"
                                     aria-multiline="true"
-                                    aria-label="DescriÃ§Ã£o da tarefa"
+                                    aria-label="Descri&ccedil;&atilde;o da tarefa"
                                 ></div>
                             </div>
                             <textarea rows="5" data-task-detail-edit-description hidden></textarea>
                         </div>
 
                         <div class="task-detail-edit-images-field">
-                            <span>MÃ­dias</span>
+                            <span>M&iacute;dias</span>
                             <div class="task-detail-edit-image-picker-actions">
                                 <button type="button" class="btn btn-mini btn-ghost task-image-add-button" data-task-detail-image-add>
                                     <span class="task-image-add-button-icon" aria-hidden="true">
@@ -2959,7 +2959,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                             <path d="M3.8 14.8 8.3 10.2l3 2.7 2.1-1.8 2.8 3.7"></path>
                                         </svg>
                                     </span>
-                                    <span class="task-image-add-button-label">Adicionar mÃ­dia</span>
+                                    <span class="task-image-add-button-label">Adicionar m&iacute;dia</span>
                                 </button>
                                 <button type="button" class="btn btn-mini btn-ghost task-image-add-button" data-task-detail-drive-add>
                                     <span class="task-image-add-button-icon" aria-hidden="true">
@@ -2972,7 +2972,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     <span class="task-image-add-button-label">Google Drive</span>
                                 </button>
                             </div>
-                            <div class="task-detail-edit-image-picker" data-task-detail-image-picker tabindex="0" aria-label="Adicionar mÃ­dias de referÃªncia">
+                            <div class="task-detail-edit-image-picker" data-task-detail-image-picker tabindex="0" aria-label="Adicionar m&iacute;dias de refer&ecirc;ncia">
                                 <input type="file" accept="image/*" multiple data-task-detail-image-input hidden>
                                 <div class="task-detail-edit-image-list" data-task-detail-image-list></div>
                             </div>
@@ -2985,10 +2985,10 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         <div class="task-inline-list-head task-subtasks-editor-head">
                             <div class="task-subtasks-editor-title">
                                 <span>Etapas</span>
-                                <label class="task-subtasks-dependency-toggle" title="Ativar sequÃªncia entre etapas">
+                                <label class="task-subtasks-dependency-toggle" title="Ativar sequ&ecirc;ncia entre etapas">
                                     <input
                                         type="checkbox"
-                                        aria-label="Ativar sequÃªncia entre etapas"
+                                        aria-label="Ativar sequ&ecirc;ncia entre etapas"
                                         data-task-detail-edit-subtasks-dependency-toggle
                                     >
                                     <span class="task-subtasks-dependency-icon" aria-hidden="true">
@@ -3002,7 +3002,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                             <path d="M8.9 12.8 10 14l1.1-1.2"></path>
                                         </svg>
                                     </span>
-                                    <span class="sr-only">Ativar sequÃªncia entre etapas</span>
+                                    <span class="sr-only">Ativar sequ&ecirc;ncia entre etapas</span>
                                 </label>
                             </div>
                             <button type="button" class="btn btn-mini btn-ghost task-inline-list-add-trigger" data-task-detail-edit-subtask-toggle-add>+&nbsp;Etapa</button>
@@ -3014,7 +3014,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                 placeholder="Nova etapa"
                                 data-task-detail-edit-subtask-input
                             >
-                            <button type="button" class="task-inline-action task-inline-action-confirm" data-task-detail-edit-subtask-add aria-label="Confirmar etapa">âœ“</button>
+                            <button type="button" class="task-inline-action task-inline-action-confirm" data-task-detail-edit-subtask-add aria-label="Confirmar etapa">&#10003;</button>
                             <button type="button" class="task-inline-action task-inline-action-cancel" data-task-detail-edit-subtask-cancel aria-label="Cancelar etapa">X</button>
                         </div>
                         <div class="task-subtasks-edit-list" data-task-detail-edit-subtasks-list></div>
@@ -3024,7 +3024,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <section class="task-inline-list-editor task-inline-list-editor--links">
                         <div class="task-inline-list-head">
-                            <span>Links de referencia</span>
+                            <span>Links de refer&ecirc;ncia</span>
                             <button type="button" class="btn btn-mini btn-ghost task-inline-list-add-trigger" data-task-detail-edit-link-toggle-add>+&nbsp;Link</button>
                         </div>
                         <div class="task-inline-add-row" data-task-detail-edit-link-add-form hidden>
@@ -3034,7 +3034,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                 placeholder="https://site.com"
                                 data-task-detail-edit-link-input
                             >
-                            <button type="button" class="task-inline-action task-inline-action-confirm" data-task-detail-edit-link-confirm aria-label="Confirmar link">âœ“</button>
+                            <button type="button" class="task-inline-action task-inline-action-confirm" data-task-detail-edit-link-confirm aria-label="Confirmar link">&#10003;</button>
                             <button type="button" class="task-inline-action task-inline-action-cancel" data-task-detail-edit-link-cancel aria-label="Cancelar link">X</button>
                         </div>
                         <div class="task-reference-edit-list" data-task-detail-edit-links-list></div>
@@ -3047,7 +3047,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     </section>
                     </div>
                     <div class="task-detail-edit-media-actions">
-                        <button type="button" class="btn btn-mini btn-ghost" data-task-detail-open-media>MÃ­dias</button>
+                        <button type="button" class="btn btn-mini btn-ghost" data-task-detail-open-media>M&iacute;dias</button>
                         <button type="button" class="btn btn-mini btn-ghost" data-task-detail-back-main hidden>Voltar</button>
                     </div>
                 </div>
@@ -3072,7 +3072,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             <input type="hidden" name="task_id" value="" data-task-review-task-id>
 
             <label>
-                <span>Nova descriÃ§Ã£o para ajustes</span>
+                <span>Nova descri&ccedil;&atilde;o para ajustes</span>
                 <textarea name="revision_description" rows="6" maxlength="8000" required data-task-review-description></textarea>
             </label>
 
@@ -3092,7 +3092,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
 <div class="modal-backdrop task-image-preview-modal" data-task-image-preview-modal hidden>
     <div class="modal-scrim" data-close-task-image-preview></div>
-    <section class="modal-card task-image-preview-card" role="dialog" aria-modal="true" aria-label="MÃ­dia de referÃªncia">
+    <section class="modal-card task-image-preview-card" role="dialog" aria-modal="true" aria-label="M&iacute;dia de refer&ecirc;ncia">
         <header class="modal-head task-image-preview-head">
             <div class="task-image-preview-title" data-task-image-preview-title></div>
             <a
@@ -3108,7 +3108,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                 <span aria-hidden="true">&#8681;</span>
                 <span>Baixar</span>
             </a>
-            <button type="button" class="modal-close-button" data-close-task-image-preview aria-label="Fechar visualizaÃ§Ã£o da mÃ­dia">
+            <button type="button" class="modal-close-button" data-close-task-image-preview aria-label="Fechar visualiza&ccedil;&atilde;o da m&iacute;dia">
                 <span aria-hidden="true">&#10005;</span>
             </button>
         </header>
@@ -3118,14 +3118,14 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     type="button"
                     class="task-image-preview-nav task-image-preview-nav-prev"
                     data-task-image-preview-prev
-                    aria-label="Midia anterior"
+                    aria-label="M&iacute;dia anterior"
                     hidden
                 >
                     <span aria-hidden="true">&#8249;</span>
                 </button>
             </div>
             <div class="task-image-preview-viewport">
-                <img src="" alt="Imagem de referÃªncia ampliada" data-task-image-preview-img>
+                <img src="" alt="Imagem de refer&ecirc;ncia ampliada" data-task-image-preview-img>
                 <video controls playsinline preload="metadata" hidden data-task-image-preview-video></video>
             </div>
             <div class="task-image-preview-nav-slot">
@@ -3133,7 +3133,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     type="button"
                     class="task-image-preview-nav task-image-preview-nav-next"
                     data-task-image-preview-next
-                    aria-label="Proxima midia"
+                    aria-label="Pr&oacute;xima m&iacute;dia"
                     hidden
                 >
                     <span aria-hidden="true">&#8250;</span>
@@ -3149,7 +3149,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         <header class="modal-head google-drive-browser-modal-head">
             <div class="google-drive-browser-head-copy">
                 <h2 id="google-drive-browser-title">Google Drive</h2>
-                <p>Escolha mÃ­dias por pasta, com navegaÃ§Ã£o hierÃ¡rquica dentro do Bexon.</p>
+                <p>Escolha m&iacute;dias por pasta, com navega&ccedil;&atilde;o hier&aacute;rquica dentro do Bexon.</p>
             </div>
             <button type="button" class="modal-close-button" data-close-google-drive-browser aria-label="Fechar navegador do Google Drive">
                 <span aria-hidden="true">&#10005;</span>
@@ -3168,7 +3168,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     </span>
                     <span class="google-drive-browser-root-copy">
                         <strong>Meu Drive</strong>
-                        <span>Arquivos e pastas do prÃ³prio usuÃ¡rio.</span>
+                        <span>Arquivos e pastas do pr&oacute;prio usu&aacute;rio.</span>
                     </span>
                 </button>
 
