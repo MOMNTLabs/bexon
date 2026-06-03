@@ -491,17 +491,25 @@
                             <?php
                             $accountingExpenseTotalCents = max(0, (int) ($accountingSummary['expense_total_cents'] ?? 0));
                             $accountingExpensePaidCents = max(0, (int) ($accountingSummary['expense_paid_cents'] ?? 0));
+                            $accountingExpenseRemainingCents = max(0, $accountingExpenseTotalCents - $accountingExpensePaidCents);
+                            $accountingExpenseRemainingDisplay = dueAmountLabelFromCents($accountingExpenseRemainingCents);
                             $accountingHideExpensePaidTotal = $accountingExpenseTotalCents > 0
                                 && $accountingExpensePaidCents >= $accountingExpenseTotalCents;
+                            $accountingShowExpenseRemaining = !$accountingHideExpensePaidTotal
+                                && $accountingExpenseRemainingCents > 0;
+                            $accountingExpenseTotalAriaLabel = $accountingHideExpensePaidTotal
+                                ? ('Total pago ' . (string) ($accountingSummary['expense_total_display'] ?? 'R$ 0,00'))
+                                : ('Pago ' . (string) ($accountingSummary['expense_paid_display'] ?? 'R$ 0,00') . ' de ' . (string) ($accountingSummary['expense_total_display'] ?? 'R$ 0,00'));
+                            if ($accountingShowExpenseRemaining) {
+                                $accountingExpenseTotalAriaLabel .= '. Faltam ' . $accountingExpenseRemainingDisplay . ' para pagar.';
+                            }
                             ?>
                             <dl class="accounting-totals is-single">
-                                <div class="is-expense-total">
+                                <div class="is-expense-total<?= $accountingShowExpenseRemaining ? ' has-helper' : '' ?>">
                                     <dt>Total</dt>
                                     <dd
                                         class="accounting-total-pair"
-                                        aria-label="<?= $accountingHideExpensePaidTotal
-                                            ? ('Total pago ' . e((string) ($accountingSummary['expense_total_display'] ?? 'R$ 0,00')))
-                                            : ('Pago ' . e((string) ($accountingSummary['expense_paid_display'] ?? 'R$ 0,00')) . ' de ' . e((string) ($accountingSummary['expense_total_display'] ?? 'R$ 0,00'))) ?>"
+                                        aria-label="<?= e($accountingExpenseTotalAriaLabel) ?>"
                                     >
                                         <?php if (!$accountingHideExpensePaidTotal): ?>
                                             <span class="accounting-total-secondary"><?= $renderAccountingMoney((string) ($accountingSummary['expense_paid_display'] ?? 'R$ 0,00')) ?></span>
@@ -509,6 +517,12 @@
                                         <?php endif; ?>
                                         <strong class="accounting-total-main"><?= $renderAccountingMoney((string) ($accountingSummary['expense_total_display'] ?? 'R$ 0,00')) ?></strong>
                                     </dd>
+                                    <?php if ($accountingShowExpenseRemaining): ?>
+                                        <span class="accounting-total-helper">
+                                            <span>Faltam</span>
+                                            <strong><?= $renderAccountingMoney($accountingExpenseRemainingDisplay) ?></strong>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </dl>
                         </div>

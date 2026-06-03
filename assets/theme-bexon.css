@@ -5729,6 +5729,10 @@ body.is-dashboard .accounting-card.is-expense-card .accounting-totals .is-expens
     color: #9a6960;
 }
 
+body.is-dashboard .accounting-card.is-expense-card .accounting-totals .is-expense-total .accounting-total-helper {
+    color: #9a6960;
+}
+
 body.is-dashboard .accounting-card.is-expense-card .accounting-totals .is-expense-total .accounting-total-main {
     color: #a35650;
 }
