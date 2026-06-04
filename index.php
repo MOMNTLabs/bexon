@@ -674,6 +674,14 @@ if ($currentUser && $currentWorkspaceId !== null) {
 $accountingEntriesByType = workspaceAccountingEntriesByType($accountingEntries);
 $accountingExpenseEntries = $accountingEntriesByType['expense'] ?? [];
 $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];
+$accountingTaskLinkOptions = ['workspaces' => [], 'groups_by_workspace' => [], 'users_by_workspace' => []];
+if ($currentUser) {
+    try {
+        $accountingTaskLinkOptions = accountingTaskLinkOptionsForUser((int) ($currentUser['id'] ?? 0));
+    } catch (Throwable $e) {
+        $appendDashboardLoadError('Não foi possível carregar as opções de vínculo das tarefas concluídas.', $e);
+    }
+}
 $accountingOpeningBalanceCents = 0;
 if ($currentUser && $currentWorkspaceId !== null) {
     try {

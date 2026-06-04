@@ -184,11 +184,13 @@ function respondAccountingPanelSnapshot(): void
 {
     $ctx = requireSnapshotWorkspaceContext();
     $workspaceId = (int) $ctx['workspace_id'];
+    $userId = (int) $ctx['user_id'];
     $accountingPeriod = normalizeAccountingPeriodKey((string) ($_GET['accounting_period'] ?? ''));
     $accountingEntries = workspaceAccountingEntriesList($workspaceId, $accountingPeriod);
     $accountingEntriesByType = workspaceAccountingEntriesByType($accountingEntries);
     $accountingExpenseEntries = $accountingEntriesByType['expense'] ?? [];
     $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];
+    $accountingTaskLinkOptions = accountingTaskLinkOptionsForUser($userId);
     $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($workspaceId, $accountingPeriod);
     $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents);
     $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(

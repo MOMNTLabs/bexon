@@ -121,6 +121,7 @@ function migrateSqlite(PDO $pdo): void
             due_date TEXT DEFAULT NULL,
             overdue_flag INTEGER NOT NULL DEFAULT 0,
             overdue_since_date TEXT DEFAULT NULL,
+            completed_at TEXT DEFAULT NULL,
             created_by INTEGER NOT NULL,
             assigned_to INTEGER DEFAULT NULL,
             group_name TEXT NOT NULL DEFAULT \'Geral\',
@@ -209,6 +210,7 @@ function migratePostgres(PDO $pdo): void
             due_date DATE DEFAULT NULL,
             overdue_flag SMALLINT NOT NULL DEFAULT 0,
             overdue_since_date DATE DEFAULT NULL,
+            completed_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
             created_by BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             assigned_to BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
             group_name TEXT NOT NULL DEFAULT \'Geral\',
@@ -1247,6 +1249,12 @@ function ensureWorkspaceSchema(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_tasks_workspace_due_status
          ON tasks(workspace_id, due_date, status)'
     );
+    if (tableHasColumn($pdo, 'tasks', 'completed_at')) {
+        $pdo->exec(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_workspace_completed_at
+             ON tasks(workspace_id, completed_at)'
+        );
+    }
 
     $users = $pdo->query('SELECT id, name, email FROM users ORDER BY id ASC')->fetchAll();
     if (!$users) {
@@ -1461,7 +1469,7 @@ function ensureWorkspaceEmailInvitationSchema(PDO $pdo): void
 function ensureTaskExtendedSchema(PDO $pdo): void
 {
     $needsBackfill = false;
-    $backfillMetaKey = 'task_extended_backfill_v5';
+    $backfillMetaKey = 'task_extended_backfill_v6';
 
     if (!tableHasColumn($pdo, 'tasks', 'group_name')) {
         $pdo->exec("ALTER TABLE tasks ADD COLUMN group_name TEXT NOT NULL DEFAULT 'Geral'");
@@ -1496,6 +1504,14 @@ function ensureTaskExtendedSchema(PDO $pdo): void
         }
         $needsBackfill = true;
     }
+    if (!tableHasColumn($pdo, 'tasks', 'completed_at')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE tasks ADD COLUMN completed_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE tasks ADD COLUMN completed_at TEXT DEFAULT NULL");
+        }
+        $needsBackfill = true;
+    }
     if (!tableHasColumn($pdo, 'tasks', 'subtasks_json')) {
         $pdo->exec("ALTER TABLE tasks ADD COLUMN subtasks_json TEXT NOT NULL DEFAULT '[]'");
         $needsBackfill = true;
@@ -1517,12 +1533,16 @@ function ensureTaskExtendedSchema(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_tasks_workspace_assigned_to
          ON tasks(workspace_id, assigned_to)'
     );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_tasks_workspace_completed_at
+         ON tasks(workspace_id, completed_at)'
+    );
 
     if (!$needsBackfill && appMetaGet($pdo, $backfillMetaKey) === '1') {
         return;
     }
 
-    $stmt = $pdo->query('SELECT id, assigned_to, group_name, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, title_tag FROM tasks');
+    $stmt = $pdo->query('SELECT id, workspace_id, status, updated_at, completed_at, assigned_to, group_name, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, title_tag FROM tasks');
     $rows = $stmt ? $stmt->fetchAll() : [];
     if (!$rows) {
         appMetaSet($pdo, $backfillMetaKey, '1');
@@ -1538,7 +1558,8 @@ function ensureTaskExtendedSchema(PDO $pdo): void
              review_file_json = :review_file_json,
              subtasks_json = :subtasks_json,
              subtasks_dependency_enabled = :subtasks_dependency_enabled,
-             title_tag = :title_tag
+             title_tag = :title_tag,
+             completed_at = :completed_at
          WHERE id = :id'
     );
 
@@ -1554,6 +1575,16 @@ function ensureTaskExtendedSchema(PDO $pdo): void
         $subtasksDependencyEnabled = normalizePermissionFlag($row['subtasks_dependency_enabled'] ?? 0);
         $subtasks = decodeTaskSubtasks($row['subtasks_json'] ?? null, $subtasksDependencyEnabled === 1);
         $titleTag = normalizeTaskTitleTag((string) ($row['title_tag'] ?? ''));
+        $workspaceId = (int) ($row['workspace_id'] ?? 0);
+        $status = normalizeTaskStatus((string) ($row['status'] ?? 'todo'), $workspaceId > 0 ? $workspaceId : null);
+        $updatedAt = trim((string) ($row['updated_at'] ?? ''));
+        $completedAt = taskCompletedAtValueForStatusChange(
+            $status,
+            $status,
+            trim((string) ($row['completed_at'] ?? '')),
+            $updatedAt !== '' ? $updatedAt : nowIso(),
+            $workspaceId > 0 ? $workspaceId : null
+        );
 
         $update->execute([
             ':group_name' => $groupName,
@@ -1564,6 +1595,7 @@ function ensureTaskExtendedSchema(PDO $pdo): void
             ':subtasks_json' => encodeTaskSubtasks($subtasks, $subtasksDependencyEnabled === 1),
             ':subtasks_dependency_enabled' => $subtasksDependencyEnabled,
             ':title_tag' => $titleTag,
+            ':completed_at' => $completedAt,
             ':id' => (int) $row['id'],
         ]);
     }
@@ -2304,6 +2336,11 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 installment_total INTEGER NOT NULL DEFAULT 0,
                 is_settled SMALLINT NOT NULL DEFAULT 0,
                 due_date DATE DEFAULT NULL,
+                automation_type VARCHAR(24) NOT NULL DEFAULT \'manual\',
+                task_link_workspace_id BIGINT DEFAULT NULL REFERENCES workspaces(id) ON DELETE SET NULL,
+                task_link_group_name TEXT DEFAULT NULL,
+                task_link_assignee_ids_json TEXT NOT NULL DEFAULT \'[]\',
+                task_link_rate_cents BIGINT NOT NULL DEFAULT 0,
                 source_due_entry_id BIGINT DEFAULT NULL REFERENCES workspace_due_entries(id) ON DELETE SET NULL,
                 carry_source_entry_id BIGINT DEFAULT NULL REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -2350,6 +2387,11 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 installment_total INTEGER NOT NULL DEFAULT 0,
                 is_settled INTEGER NOT NULL DEFAULT 0,
                 due_date TEXT DEFAULT NULL,
+                automation_type TEXT NOT NULL DEFAULT \'manual\',
+                task_link_workspace_id INTEGER DEFAULT NULL,
+                task_link_group_name TEXT DEFAULT NULL,
+                task_link_assignee_ids_json TEXT NOT NULL DEFAULT \'[]\',
+                task_link_rate_cents INTEGER NOT NULL DEFAULT 0,
                 source_due_entry_id INTEGER DEFAULT NULL,
                 carry_source_entry_id INTEGER DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -2450,6 +2492,33 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN due_date DATE DEFAULT NULL");
         } else {
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN due_date TEXT DEFAULT NULL");
+        }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'automation_type')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN automation_type VARCHAR(24) NOT NULL DEFAULT 'manual'");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN automation_type TEXT NOT NULL DEFAULT 'manual'");
+        }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_workspace_id')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_workspace_id BIGINT DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_workspace_id INTEGER DEFAULT NULL");
+        }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_group_name')) {
+        $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_group_name TEXT DEFAULT NULL");
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_assignee_ids_json')) {
+        $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_assignee_ids_json TEXT NOT NULL DEFAULT '[]'");
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_rate_cents')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_rate_cents BIGINT NOT NULL DEFAULT 0");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN task_link_rate_cents INTEGER NOT NULL DEFAULT 0");
         }
     }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id')) {
@@ -2924,6 +2993,11 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
 
     $capabilities = [
         'due_date' => tableHasColumn($pdo, 'workspace_accounting_entries', 'due_date'),
+        'automation_type' => tableHasColumn($pdo, 'workspace_accounting_entries', 'automation_type'),
+        'task_link_workspace_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_workspace_id'),
+        'task_link_group_name' => tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_group_name'),
+        'task_link_assignee_ids_json' => tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_assignee_ids_json'),
+        'task_link_rate_cents' => tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_rate_cents'),
         'source_due_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id'),
         'carry_source_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id'),
         'carry_stop_period_key' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key'),
@@ -2934,6 +3008,11 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
 
     if (
         !$capabilities['due_date']
+        || !$capabilities['automation_type']
+        || !$capabilities['task_link_workspace_id']
+        || !$capabilities['task_link_group_name']
+        || !$capabilities['task_link_assignee_ids_json']
+        || !$capabilities['task_link_rate_cents']
         || !$capabilities['source_due_entry_id']
         || !$capabilities['carry_source_entry_id']
         || !$capabilities['carry_stop_period_key']
@@ -2948,6 +3027,11 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         }
 
         $capabilities['due_date'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'due_date');
+        $capabilities['automation_type'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'automation_type');
+        $capabilities['task_link_workspace_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_workspace_id');
+        $capabilities['task_link_group_name'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_group_name');
+        $capabilities['task_link_assignee_ids_json'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_assignee_ids_json');
+        $capabilities['task_link_rate_cents'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'task_link_rate_cents');
         $capabilities['source_due_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id');
         $capabilities['carry_source_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id');
         $capabilities['carry_stop_period_key'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key');
@@ -5797,6 +5881,13 @@ function normalizeAccountingEntryType(string $value): string
     return $normalized === 'income' ? 'income' : 'expense';
 }
 
+function normalizeAccountingAutomationType(string $value): string
+{
+    return mb_strtolower(trim($value)) === 'completed_tasks'
+        ? 'completed_tasks'
+        : 'manual';
+}
+
 function normalizeAccountingEntryLabel(string $value): string
 {
     $value = trim($value);
@@ -5897,6 +5988,24 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $row['installment_progress'] = $row['is_installment'] === 1
         ? accountingInstallmentProgressLabel((int) $row['installment_number'], (int) $row['installment_total'])
         : '';
+    $row['automation_type'] = normalizeAccountingAutomationType((string) ($row['automation_type'] ?? 'manual'));
+    $taskLinkWorkspaceId = isset($row['task_link_workspace_id']) ? (int) ($row['task_link_workspace_id'] ?? 0) : 0;
+    $row['task_link_workspace_id'] = $taskLinkWorkspaceId > 0 ? $taskLinkWorkspaceId : null;
+    $taskLinkGroupName = trim((string) ($row['task_link_group_name'] ?? ''));
+    $row['task_link_group_name'] = $taskLinkGroupName !== ''
+        ? normalizeTaskGroupName($taskLinkGroupName)
+        : '';
+    $row['task_link_assignee_ids'] = decodeAssigneeIds($row['task_link_assignee_ids_json'] ?? null);
+    $row['task_link_rate_cents'] = normalizeDueAmountCents($row['task_link_rate_cents'] ?? null) ?? 0;
+    $row['task_link_rate_display'] = dueAmountLabelFromCents($row['task_link_rate_cents']);
+    $row['task_link_rate_input'] = dueAmountLabelFromCents($row['task_link_rate_cents']);
+    $row['is_task_linked'] = (
+        $row['entry_type'] === 'income'
+        && $row['automation_type'] === 'completed_tasks'
+        && $row['task_link_workspace_id'] !== null
+        && $row['task_link_group_name'] !== ''
+        && $row['task_link_rate_cents'] > 0
+    ) ? 1 : 0;
 
     $row['is_settled'] = ((int) ($row['is_settled'] ?? 0)) === 1 ? 1 : 0;
     $row['due_date'] = dueDateForStorage((string) ($row['due_date'] ?? ''));
@@ -5995,6 +6104,299 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $row['carry_stop_period_key'] = $carryStopPeriodKey !== '' ? $carryStopPeriodKey : null;
 
     return $row;
+}
+
+function accountingPeriodRangeBounds(string $periodKey): array
+{
+    $normalizedPeriodKey = normalizeAccountingPeriodKey($periodKey);
+    $periodDate = DateTimeImmutable::createFromFormat('!Y-m', $normalizedPeriodKey)
+        ?: new DateTimeImmutable('first day of this month');
+
+    return [
+        'start' => $periodDate->format('Y-m-01'),
+        'next_start' => $periodDate->modify('+1 month')->format('Y-m-01'),
+    ];
+}
+
+function workspaceCompletedTasksForAccountingTaskLink(PDO $pdo, int $workspaceId, string $periodKey): array
+{
+    static $cache = [];
+
+    if ($workspaceId <= 0) {
+        return [];
+    }
+
+    $cacheKey = spl_object_id($pdo) . ':' . $workspaceId . ':' . normalizeAccountingPeriodKey($periodKey);
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $range = accountingPeriodRangeBounds($periodKey);
+    $stmt = $pdo->prepare(
+        'SELECT id,
+                group_name,
+                assigned_to,
+                assignee_ids_json,
+                completed_at
+         FROM tasks
+         WHERE workspace_id = :workspace_id
+           AND completed_at IS NOT NULL
+           AND completed_at >= :period_start
+           AND completed_at < :next_period_start'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':period_start' => $range['start'],
+        ':next_period_start' => $range['next_start'],
+    ]);
+    $rows = $stmt->fetchAll() ?: [];
+    $usersById = usersMapById($workspaceId);
+
+    $cache[$cacheKey] = array_map(
+        static function (array $row) use ($usersById): array {
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'group_name' => normalizeTaskGroupName((string) ($row['group_name'] ?? 'Geral')),
+                'assignee_ids' => normalizeAssigneeIds(
+                    decodeAssigneeIds(
+                        $row['assignee_ids_json'] ?? null,
+                        isset($row['assigned_to']) ? (int) ($row['assigned_to'] ?? 0) : null
+                    ),
+                    $usersById
+                ),
+                'completed_at' => trim((string) ($row['completed_at'] ?? '')),
+            ];
+        },
+        $rows
+    );
+
+    return $cache[$cacheKey];
+}
+
+function workspaceAccountingApplyCompletedTaskAutomation(PDO $pdo, array $entry): array
+{
+    if (((int) ($entry['is_task_linked'] ?? 0)) !== 1) {
+        $entry['task_link_match_count'] = 0;
+        $entry['task_link_workspace_name'] = '';
+        $entry['task_link_assignee_names'] = [];
+        $entry['task_link_assignee_summary'] = 'Todos os responsáveis';
+        $entry['task_link_summary_label'] = '';
+        $entry['task_link_scope_label'] = '';
+        return $entry;
+    }
+
+    $sourceWorkspaceId = (int) ($entry['task_link_workspace_id'] ?? 0);
+    $periodKey = normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''));
+    $taskLinkGroupName = normalizeTaskGroupName((string) ($entry['task_link_group_name'] ?? 'Geral'));
+    $selectedAssigneeIds = normalizeAssigneeIds(
+        is_array($entry['task_link_assignee_ids'] ?? null) ? $entry['task_link_assignee_ids'] : []
+    );
+    $selectedAssigneeLookup = array_fill_keys($selectedAssigneeIds, true);
+    $matchingTaskCount = 0;
+
+    foreach (workspaceCompletedTasksForAccountingTaskLink($pdo, $sourceWorkspaceId, $periodKey) as $task) {
+        if (normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral')) !== $taskLinkGroupName) {
+            continue;
+        }
+
+        if ($selectedAssigneeLookup) {
+            $taskAssigneeIds = is_array($task['assignee_ids'] ?? null) ? $task['assignee_ids'] : [];
+            $hasMatchingAssignee = false;
+            foreach ($taskAssigneeIds as $taskAssigneeId) {
+                if (isset($selectedAssigneeLookup[(int) $taskAssigneeId])) {
+                    $hasMatchingAssignee = true;
+                    break;
+                }
+            }
+
+            if (!$hasMatchingAssignee) {
+                continue;
+            }
+        }
+
+        $matchingTaskCount++;
+    }
+
+    $rateCents = max(0, (int) ($entry['task_link_rate_cents'] ?? 0));
+    $computedAmountCents = $matchingTaskCount * $rateCents;
+    $entry['task_link_match_count'] = $matchingTaskCount;
+    $entry['amount_cents'] = $computedAmountCents;
+    $entry['total_amount_cents'] = $computedAmountCents;
+    $entry['amount_display'] = dueAmountLabelFromCents($computedAmountCents);
+    $entry['amount_input'] = dueAmountLabelFromCents($computedAmountCents);
+    $entry['total_amount_display'] = dueAmountLabelFromCents($computedAmountCents);
+    $entry['total_amount_input'] = dueAmountLabelFromCents($computedAmountCents);
+
+    static $workspaceNames = [];
+    if (!isset($workspaceNames[$sourceWorkspaceId])) {
+        $workspaceNames[$sourceWorkspaceId] = normalizeWorkspaceName((string) (workspaceById($sourceWorkspaceId)['name'] ?? ''));
+    }
+    $entry['task_link_workspace_name'] = $workspaceNames[$sourceWorkspaceId] ?? '';
+
+    $sourceUsersById = usersMapById($sourceWorkspaceId);
+    $taskLinkAssigneeNames = [];
+    foreach ($selectedAssigneeIds as $assigneeId) {
+        if (!isset($sourceUsersById[$assigneeId])) {
+            continue;
+        }
+        $taskLinkAssigneeNames[] = normalizeUserDisplayName((string) ($sourceUsersById[$assigneeId]['name'] ?? ''));
+    }
+    $entry['task_link_assignee_names'] = array_values(array_filter($taskLinkAssigneeNames));
+    $entry['task_link_assignee_summary'] = $entry['task_link_assignee_names']
+        ? implode(', ', $entry['task_link_assignee_names'])
+        : 'Todos os responsáveis';
+    $entry['task_link_summary_label'] = $matchingTaskCount . ' concluída' . ($matchingTaskCount === 1 ? '' : 's')
+        . ' x '
+        . dueAmountLabelFromCents($rateCents);
+    $entry['task_link_scope_label'] = trim(
+        implode(
+            ' • ',
+            array_values(
+                array_filter([
+                    $entry['task_link_workspace_name'],
+                    $taskLinkGroupName,
+                ], static fn ($value): bool => trim((string) $value) !== '')
+            )
+        )
+    );
+
+    return $entry;
+}
+
+function workspaceAccountingApplyAutomations(PDO $pdo, array $entries): array
+{
+    if (!$entries) {
+        return $entries;
+    }
+
+    foreach ($entries as &$entry) {
+        $entry = workspaceAccountingApplyCompletedTaskAutomation($pdo, $entry);
+    }
+    unset($entry);
+
+    return $entries;
+}
+
+function accountingTaskLinkOptionsForUser(int $userId): array
+{
+    if ($userId <= 0) {
+        return [
+            'workspaces' => [],
+            'groups_by_workspace' => [],
+            'users_by_workspace' => [],
+        ];
+    }
+
+    $workspaces = [];
+    $groupsByWorkspace = [];
+    $usersByWorkspace = [];
+
+    foreach (workspaceMembershipsDetailedForUser($userId) as $workspace) {
+        $workspaceId = (int) ($workspace['id'] ?? 0);
+        if ($workspaceId <= 0 || !userHasWorkspaceAccess($userId, $workspaceId)) {
+            continue;
+        }
+
+        $workspaces[] = [
+            'id' => $workspaceId,
+            'name' => normalizeWorkspaceName((string) ($workspace['name'] ?? 'Workspace')),
+        ];
+
+        $visibleGroups = [];
+        foreach (taskGroupsList($workspaceId) as $groupName) {
+            if (!userCanViewTaskGroup($userId, $workspaceId, $groupName)) {
+                continue;
+            }
+            $visibleGroups[] = normalizeTaskGroupName((string) $groupName);
+        }
+        $groupsByWorkspace[(string) $workspaceId] = array_values(array_unique($visibleGroups));
+
+        $workspaceUsers = [];
+        foreach (usersList($workspaceId) as $workspaceUser) {
+            $workspaceUserId = (int) ($workspaceUser['id'] ?? 0);
+            if ($workspaceUserId <= 0) {
+                continue;
+            }
+            $workspaceUsers[] = [
+                'id' => $workspaceUserId,
+                'name' => normalizeUserDisplayName((string) ($workspaceUser['name'] ?? 'Usuário')),
+                'avatar' => userAvatarImageSrc($workspaceUser),
+                'initial' => userDisplayInitial((string) ($workspaceUser['name'] ?? 'U')),
+            ];
+        }
+        $usersByWorkspace[(string) $workspaceId] = $workspaceUsers;
+    }
+
+    return [
+        'workspaces' => $workspaces,
+        'groups_by_workspace' => $groupsByWorkspace,
+        'users_by_workspace' => $usersByWorkspace,
+    ];
+}
+
+function workspaceAccountingResolvedAutomationConfig(
+    PDO $pdo,
+    string $periodKey,
+    string $entryType,
+    ?array $automationConfig = null
+): array {
+    $resolved = [
+        'automation_type' => 'manual',
+        'task_link_workspace_id' => null,
+        'task_link_group_name' => null,
+        'task_link_assignee_ids' => [],
+        'task_link_assignee_ids_json' => '[]',
+        'task_link_rate_cents' => 0,
+        'task_link_match_count' => 0,
+        'computed_amount_cents' => null,
+    ];
+
+    $automationType = normalizeAccountingAutomationType((string) ($automationConfig['automation_type'] ?? 'manual'));
+    if ($automationType !== 'completed_tasks') {
+        return $resolved;
+    }
+
+    if ($entryType !== 'income') {
+        throw new RuntimeException('A automação por tarefas concluídas só pode ser usada em entradas.');
+    }
+
+    $sourceWorkspaceId = max(0, (int) ($automationConfig['task_link_workspace_id'] ?? 0));
+    if ($sourceWorkspaceId <= 0) {
+        throw new RuntimeException('Selecione o workspace de tarefas concluídas.');
+    }
+
+    $taskLinkGroupName = normalizeTaskGroupName((string) ($automationConfig['task_link_group_name'] ?? ''));
+    if ($taskLinkGroupName === '') {
+        throw new RuntimeException('Selecione o projeto de tarefas concluídas.');
+    }
+
+    $selectedAssigneeIds = normalizeAssigneeIds(
+        is_array($automationConfig['task_link_assignee_ids'] ?? null) ? $automationConfig['task_link_assignee_ids'] : []
+    );
+    $rateCents = normalizeDueAmountCents($automationConfig['task_link_rate_cents'] ?? null);
+    if ($rateCents === null || $rateCents <= 0) {
+        throw new RuntimeException('Informe um valor válido por tarefa concluída.');
+    }
+
+    $previewEntry = workspaceAccountingApplyCompletedTaskAutomation($pdo, [
+        'is_task_linked' => 1,
+        'period_key' => normalizeAccountingPeriodKey($periodKey),
+        'task_link_workspace_id' => $sourceWorkspaceId,
+        'task_link_group_name' => $taskLinkGroupName,
+        'task_link_assignee_ids' => $selectedAssigneeIds,
+        'task_link_rate_cents' => $rateCents,
+    ]);
+
+    $resolved['automation_type'] = 'completed_tasks';
+    $resolved['task_link_workspace_id'] = $sourceWorkspaceId;
+    $resolved['task_link_group_name'] = $taskLinkGroupName;
+    $resolved['task_link_assignee_ids'] = $selectedAssigneeIds;
+    $resolved['task_link_assignee_ids_json'] = encodeAssigneeIds($selectedAssigneeIds);
+    $resolved['task_link_rate_cents'] = $rateCents;
+    $resolved['task_link_match_count'] = max(0, (int) ($previewEntry['task_link_match_count'] ?? 0));
+    $resolved['computed_amount_cents'] = max(0, (int) ($previewEntry['amount_cents'] ?? 0));
+
+    return $resolved;
 }
 
 function workspaceAccountingGoalPaymentHistoryByEntryIds(PDO $pdo, int $workspaceId, array $entryIds): array
@@ -6147,6 +6549,21 @@ function workspaceAccountingEntriesListRaw(
     $paidAmountSelect = !empty($accountingSchema['paid_amount_cents'])
         ? 'ae.paid_amount_cents'
         : '0 AS paid_amount_cents';
+    $automationTypeSelect = !empty($accountingSchema['automation_type'])
+        ? 'ae.automation_type'
+        : "'manual' AS automation_type";
+    $taskLinkWorkspaceSelect = !empty($accountingSchema['task_link_workspace_id'])
+        ? 'ae.task_link_workspace_id'
+        : 'NULL AS task_link_workspace_id';
+    $taskLinkGroupSelect = !empty($accountingSchema['task_link_group_name'])
+        ? 'ae.task_link_group_name'
+        : 'NULL AS task_link_group_name';
+    $taskLinkAssigneeIdsSelect = !empty($accountingSchema['task_link_assignee_ids_json'])
+        ? 'ae.task_link_assignee_ids_json'
+        : "'[]' AS task_link_assignee_ids_json";
+    $taskLinkRateSelect = !empty($accountingSchema['task_link_rate_cents'])
+        ? 'ae.task_link_rate_cents'
+        : '0 AS task_link_rate_cents';
     $sourceDueRecurrenceSelect = !empty($accountingSchema['source_due_entry_id'])
         ? 'de.recurrence_type AS source_due_recurrence_type'
         : 'NULL AS source_due_recurrence_type';
@@ -6169,6 +6586,11 @@ function workspaceAccountingEntriesListRaw(
                 ' . $isMonthlySelect . ',
                 ' . $monthlyModeSelect . ',
                 ' . $paidAmountSelect . ',
+                ' . $automationTypeSelect . ',
+                ' . $taskLinkWorkspaceSelect . ',
+                ' . $taskLinkGroupSelect . ',
+                ' . $taskLinkAssigneeIdsSelect . ',
+                ' . $taskLinkRateSelect . ',
                 ae.installment_number,
                 ae.installment_total,
                 ae.is_settled,
@@ -6207,6 +6629,8 @@ function workspaceAccountingEntriesListRaw(
     }
     unset($row);
 
+    $rows = workspaceAccountingApplyAutomations($pdo, $rows);
+
     return workspaceAccountingAttachGoalPaymentHistory($pdo, $workspaceId, $rows);
 }
 
@@ -6238,6 +6662,21 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     $paidAmountSelect = !empty($accountingSchema['paid_amount_cents'])
         ? 'ae.paid_amount_cents'
         : '0 AS paid_amount_cents';
+    $automationTypeSelect = !empty($accountingSchema['automation_type'])
+        ? 'ae.automation_type'
+        : "'manual' AS automation_type";
+    $taskLinkWorkspaceSelect = !empty($accountingSchema['task_link_workspace_id'])
+        ? 'ae.task_link_workspace_id'
+        : 'NULL AS task_link_workspace_id';
+    $taskLinkGroupSelect = !empty($accountingSchema['task_link_group_name'])
+        ? 'ae.task_link_group_name'
+        : 'NULL AS task_link_group_name';
+    $taskLinkAssigneeIdsSelect = !empty($accountingSchema['task_link_assignee_ids_json'])
+        ? 'ae.task_link_assignee_ids_json'
+        : "'[]' AS task_link_assignee_ids_json";
+    $taskLinkRateSelect = !empty($accountingSchema['task_link_rate_cents'])
+        ? 'ae.task_link_rate_cents'
+        : '0 AS task_link_rate_cents';
     $sourceDueRecurrenceSelect = !empty($accountingSchema['source_due_entry_id'])
         ? 'de.recurrence_type AS source_due_recurrence_type'
         : 'NULL AS source_due_recurrence_type';
@@ -6260,6 +6699,11 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
                 ' . $isMonthlySelect . ',
                 ' . $monthlyModeSelect . ',
                 ' . $paidAmountSelect . ',
+                ' . $automationTypeSelect . ',
+                ' . $taskLinkWorkspaceSelect . ',
+                ' . $taskLinkGroupSelect . ',
+                ' . $taskLinkAssigneeIdsSelect . ',
+                ' . $taskLinkRateSelect . ',
                 ae.installment_number,
                 ae.installment_total,
                 ae.is_settled,
@@ -6291,6 +6735,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
         $row,
         normalizeAccountingPeriodKey((string) ($row['period_key'] ?? ''))
     );
+    $entry = workspaceAccountingApplyCompletedTaskAutomation($pdo, $entry);
     $entry['goal_payment_history'] = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1
         ? workspaceAccountingGoalPaymentHistory($pdo, $workspaceId, $entryId)
         : [];
@@ -7852,7 +8297,8 @@ function createWorkspaceAccountingEntry(
     $installmentTotalInput = null,
     int $isMonthly = 0,
     $monthlyDayInput = null,
-    ?string $monthlyMode = null
+    ?string $monthlyMode = null,
+    ?array $automationConfig = null
 ): int {
     if ($workspaceId <= 0) {
         throw new RuntimeException('Workspace inválido.');
@@ -7860,21 +8306,40 @@ function createWorkspaceAccountingEntry(
 
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     $entryType = normalizeAccountingEntryType($entryType);
+    workspaceAccountingSchemaCapabilities($pdo);
     $label = normalizeAccountingEntryLabel($label);
     if ($label === '') {
         throw new RuntimeException('Informe um nome para o registro.');
     }
+    $resolvedAutomation = workspaceAccountingResolvedAutomationConfig($pdo, $periodKey, $entryType, $automationConfig);
+    $isCompletedTasksAutomation = $resolvedAutomation['automation_type'] === 'completed_tasks';
     $requestedMonthlyMode = normalizeAccountingMonthlyMode(
         (string) ($monthlyMode ?? 'uniform'),
         $entryType,
         $isMonthly === 1 ? 1 : 0
     );
+    if ($isCompletedTasksAutomation) {
+        $isInstallment = 0;
+        $isMonthly = 0;
+        $requestedMonthlyMode = 'uniform';
+    }
     $isGoalMonthly = $entryType === 'expense' && $isMonthly === 1 && $requestedMonthlyMode === 'goal';
     $monthlyFlag = ($entryType === 'income' && $isMonthly === 1) || $isGoalMonthly ? 1 : 0;
     if ($monthlyFlag === 1) {
         $isInstallment = 0;
     }
-    if ($isGoalMonthly) {
+    if ($isCompletedTasksAutomation) {
+        $computedAmountCents = max(0, (int) ($resolvedAutomation['computed_amount_cents'] ?? 0));
+        $amountPayload = [
+            'amount_cents' => $computedAmountCents,
+            'total_amount_cents' => $computedAmountCents,
+            'is_installment' => 0,
+            'installment_number' => 0,
+            'installment_total' => 0,
+        ];
+        $settledFlag = $isSettled === 1 ? 1 : 0;
+        $paidAmountCents = 0;
+    } elseif ($isGoalMonthly) {
         $amountPayload = resolveAccountingGoalMonthlyState($amountInput);
         $settledFlag = (int) $amountPayload['is_settled'];
         $paidAmountCents = (int) $amountPayload['paid_amount_cents'];
@@ -7931,6 +8396,11 @@ function createWorkspaceAccountingEntry(
                 is_monthly,
                 monthly_mode,
                 paid_amount_cents,
+                automation_type,
+                task_link_workspace_id,
+                task_link_group_name,
+                task_link_assignee_ids_json,
+                task_link_rate_cents,
                 installment_number,
                 installment_total,
                 is_settled,
@@ -7950,6 +8420,11 @@ function createWorkspaceAccountingEntry(
                 :is_monthly,
                 :monthly_mode,
                 :paid_amount_cents,
+                :automation_type,
+                :task_link_workspace_id,
+                :task_link_group_name,
+                :task_link_assignee_ids_json,
+                :task_link_rate_cents,
                 :installment_number,
                 :installment_total,
                 :is_settled,
@@ -7974,6 +8449,11 @@ function createWorkspaceAccountingEntry(
                 is_monthly,
                 monthly_mode,
                 paid_amount_cents,
+                automation_type,
+                task_link_workspace_id,
+                task_link_group_name,
+                task_link_assignee_ids_json,
+                task_link_rate_cents,
                 installment_number,
                 installment_total,
                 is_settled,
@@ -7993,6 +8473,11 @@ function createWorkspaceAccountingEntry(
                 :is_monthly,
                 :monthly_mode,
                 :paid_amount_cents,
+                :automation_type,
+                :task_link_workspace_id,
+                :task_link_group_name,
+                :task_link_assignee_ids_json,
+                :task_link_rate_cents,
                 :installment_number,
                 :installment_total,
                 :is_settled,
@@ -8015,6 +8500,19 @@ function createWorkspaceAccountingEntry(
     $stmt->bindValue(':is_monthly', $monthlyFlag, PDO::PARAM_INT);
     $stmt->bindValue(':monthly_mode', $requestedMonthlyMode, PDO::PARAM_STR);
     $stmt->bindValue(':paid_amount_cents', $paidAmountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':automation_type', (string) ($resolvedAutomation['automation_type'] ?? 'manual'), PDO::PARAM_STR);
+    if (($resolvedAutomation['task_link_workspace_id'] ?? null) !== null) {
+        $stmt->bindValue(':task_link_workspace_id', (int) $resolvedAutomation['task_link_workspace_id'], PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':task_link_workspace_id', null, PDO::PARAM_NULL);
+    }
+    if (($resolvedAutomation['task_link_group_name'] ?? null) !== null) {
+        $stmt->bindValue(':task_link_group_name', (string) $resolvedAutomation['task_link_group_name'], PDO::PARAM_STR);
+    } else {
+        $stmt->bindValue(':task_link_group_name', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':task_link_assignee_ids_json', (string) ($resolvedAutomation['task_link_assignee_ids_json'] ?? '[]'), PDO::PARAM_STR);
+    $stmt->bindValue(':task_link_rate_cents', (int) ($resolvedAutomation['task_link_rate_cents'] ?? 0), PDO::PARAM_INT);
     $stmt->bindValue(':installment_number', (int) $amountPayload['installment_number'], PDO::PARAM_INT);
     $stmt->bindValue(':installment_total', (int) $amountPayload['installment_total'], PDO::PARAM_INT);
     $stmt->bindValue(':is_settled', $settledFlag, PDO::PARAM_INT);
@@ -8057,7 +8555,8 @@ function updateWorkspaceAccountingEntry(
     ?string $periodKey = null,
     string $entryType = 'expense',
     ?string $monthlyMode = null,
-    ?int $existingPaidAmountCents = null
+    ?int $existingPaidAmountCents = null,
+    ?array $automationConfig = null
 ): void {
     if ($workspaceId <= 0 || $entryId <= 0) {
         throw new RuntimeException('Registro inválido.');
@@ -8068,17 +8567,37 @@ function updateWorkspaceAccountingEntry(
         throw new RuntimeException('Informe um nome para o registro.');
     }
     $entryType = normalizeAccountingEntryType($entryType);
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    workspaceAccountingSchemaCapabilities($pdo);
+    $resolvedAutomation = workspaceAccountingResolvedAutomationConfig($pdo, $periodKey, $entryType, $automationConfig);
+    $isCompletedTasksAutomation = $resolvedAutomation['automation_type'] === 'completed_tasks';
     $requestedMonthlyMode = normalizeAccountingMonthlyMode(
         (string) ($monthlyMode ?? 'uniform'),
         $entryType,
         $isMonthly === 1 ? 1 : 0
     );
+    if ($isCompletedTasksAutomation) {
+        $isInstallment = 0;
+        $isMonthly = 0;
+        $requestedMonthlyMode = 'uniform';
+    }
     $isGoalMonthly = $entryType === 'expense' && $isMonthly === 1 && $requestedMonthlyMode === 'goal';
     $monthlyFlag = $isMonthly === 1 ? 1 : 0;
     if ($monthlyFlag === 1) {
         $isInstallment = 0;
     }
-    if ($isGoalMonthly) {
+    if ($isCompletedTasksAutomation) {
+        $computedAmountCents = max(0, (int) ($resolvedAutomation['computed_amount_cents'] ?? 0));
+        $amountPayload = [
+            'amount_cents' => $computedAmountCents,
+            'total_amount_cents' => $computedAmountCents,
+            'is_installment' => 0,
+            'installment_number' => 0,
+            'installment_total' => 0,
+        ];
+        $settledFlag = $isSettled === 1 ? 1 : 0;
+        $paidAmountCents = 0;
+    } elseif ($isGoalMonthly) {
         $requestedTotalAmountCents = normalizeDueAmountCents($amountInput);
         if ($requestedTotalAmountCents === null) {
             throw new RuntimeException('Informe um valor válido.');
@@ -8126,6 +8645,11 @@ function updateWorkspaceAccountingEntry(
              is_monthly = :is_monthly,
              monthly_mode = :monthly_mode,
              paid_amount_cents = :paid_amount_cents,
+             automation_type = :automation_type,
+             task_link_workspace_id = :task_link_workspace_id,
+             task_link_group_name = :task_link_group_name,
+             task_link_assignee_ids_json = :task_link_assignee_ids_json,
+             task_link_rate_cents = :task_link_rate_cents,
              installment_number = :installment_number,
              installment_total = :installment_total,
              is_settled = :is_settled,
@@ -8142,6 +8666,13 @@ function updateWorkspaceAccountingEntry(
         ':is_monthly' => $monthlyFlag,
         ':monthly_mode' => $requestedMonthlyMode,
         ':paid_amount_cents' => $paidAmountCents,
+        ':automation_type' => (string) ($resolvedAutomation['automation_type'] ?? 'manual'),
+        ':task_link_workspace_id' => $resolvedAutomation['task_link_workspace_id'] !== null
+            ? (int) $resolvedAutomation['task_link_workspace_id']
+            : null,
+        ':task_link_group_name' => $resolvedAutomation['task_link_group_name'],
+        ':task_link_assignee_ids_json' => (string) ($resolvedAutomation['task_link_assignee_ids_json'] ?? '[]'),
+        ':task_link_rate_cents' => (int) ($resolvedAutomation['task_link_rate_cents'] ?? 0),
         ':installment_number' => (int) $amountPayload['installment_number'],
         ':installment_total' => (int) $amountPayload['installment_total'],
         ':is_settled' => $settledFlag,
@@ -8446,7 +8977,8 @@ function updateWorkspaceAccountingEntryWithCarrySync(
     $installmentTotalInput = null,
     $monthlyDayInput = null,
     ?int $isMonthlyInput = null,
-    ?string $monthlyModeInput = null
+    ?string $monthlyModeInput = null,
+    ?array $automationConfig = null
 ): void
 {
     $existingEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
@@ -8543,7 +9075,8 @@ function updateWorkspaceAccountingEntryWithCarrySync(
                 $monthlyMode,
                 $monthlyMode === 'goal'
                     ? workspaceAccountingGoalPaymentTotalCents($pdo, $workspaceId, $entryId)
-                    : null
+                    : null,
+                $automationConfig
             );
 
             if ($monthlyMode === 'goal') {
@@ -9495,17 +10028,23 @@ function workspaceUpdateTaskStatusConfiguration(
             }
 
             $fallbackKey = (string) ($workingList[$fallbackIndex]['key'] ?? 'todo');
+            $fallbackIsDone = taskStatusKind($fallbackKey, $workspaceId) === 'done';
             $remapStmt = $pdo->prepare(
                 'UPDATE tasks
-                 SET status = :fallback_status
+                 SET status = :fallback_status,
+                     completed_at = ' . ($fallbackIsDone ? 'COALESCE(completed_at, :completed_at)' : 'NULL') . '
                  WHERE workspace_id = :workspace_id
                    AND status = :removed_status'
             );
-            $remapStmt->execute([
+            $remapParams = [
                 ':fallback_status' => $fallbackKey,
                 ':workspace_id' => $workspaceId,
                 ':removed_status' => $removeStatusKey,
-            ]);
+            ];
+            if ($fallbackIsDone) {
+                $remapParams[':completed_at'] = nowIso();
+            }
+            $remapStmt->execute($remapParams);
 
             array_splice($workingList, $removeIndex, 1);
             if ($workingReviewStatusKey === $removeStatusKey) {
@@ -10361,6 +10900,31 @@ function normalizeTaskOverdueState(
         'overdue_since_date' => $overdueFlag === 1 ? ($overdueSinceDate ?? $dueDate) : null,
         'overdue_days' => $overdueFlag === 1 ? taskOverdueDays($overdueSinceDate ?? $dueDate) : 0,
     ];
+}
+
+function taskCompletedAtValueForStatusChange(
+    string $status,
+    ?string $previousStatus = null,
+    ?string $existingCompletedAt = null,
+    ?string $transitionedAt = null,
+    ?int $workspaceId = null,
+    ?array $workspace = null
+): ?string {
+    $currentCompletedAt = trim((string) ($existingCompletedAt ?? ''));
+    $currentCompletedAt = $currentCompletedAt !== '' ? $currentCompletedAt : null;
+    $nextIsDone = taskStatusKind($status, $workspaceId, $workspace) === 'done';
+    if (!$nextIsDone) {
+        return null;
+    }
+
+    $previousIsDone = $previousStatus !== null
+        && taskStatusKind($previousStatus, $workspaceId, $workspace) === 'done';
+    if ($previousIsDone && $currentCompletedAt !== null) {
+        return $currentCompletedAt;
+    }
+
+    $resolvedTransitionedAt = trim((string) ($transitionedAt ?? ''));
+    return $resolvedTransitionedAt !== '' ? $resolvedTransitionedAt : nowIso();
 }
 
 function encodeTaskHistoryPayload(array $payload): string
@@ -12470,6 +13034,7 @@ function taskUndoColumns(): array
         'due_date',
         'overdue_flag',
         'overdue_since_date',
+        'completed_at',
         'created_by',
         'assigned_to',
         'assignee_ids_json',
@@ -12495,6 +13060,7 @@ function taskUndoComparableColumns(): array
         'due_date',
         'overdue_flag',
         'overdue_since_date',
+        'completed_at',
         'assigned_to',
         'assignee_ids_json',
         'reference_links_json',

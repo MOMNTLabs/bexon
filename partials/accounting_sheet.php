@@ -24,8 +24,234 @@
 
                 return '<span class="' . e($className) . '">' . e($normalized) . '</span>';
             };
+            $accountingTaskLinkOptions = is_array($accountingTaskLinkOptions ?? null)
+                ? $accountingTaskLinkOptions
+                : ['workspaces' => [], 'groups_by_workspace' => [], 'users_by_workspace' => []];
+            $accountingTaskLinkWorkspaces = is_array($accountingTaskLinkOptions['workspaces'] ?? null)
+                ? array_values($accountingTaskLinkOptions['workspaces'])
+                : [];
+            $accountingTaskLinkGroupsByWorkspace = is_array($accountingTaskLinkOptions['groups_by_workspace'] ?? null)
+                ? $accountingTaskLinkOptions['groups_by_workspace']
+                : [];
+            $accountingTaskLinkUsersByWorkspace = is_array($accountingTaskLinkOptions['users_by_workspace'] ?? null)
+                ? $accountingTaskLinkOptions['users_by_workspace']
+                : [];
+            $accountingTaskLinkContextWorkspaceId = isset($currentWorkspaceId)
+                ? (int) $currentWorkspaceId
+                : (isset($workspaceId) ? (int) $workspaceId : 0);
+            $resolveAccountingTaskLinkWorkspaceId = static function (?int $preferredWorkspaceId = null) use ($accountingTaskLinkWorkspaces, $accountingTaskLinkContextWorkspaceId): ?int {
+                $candidateWorkspaceId = $preferredWorkspaceId !== null && $preferredWorkspaceId > 0
+                    ? $preferredWorkspaceId
+                    : ($accountingTaskLinkContextWorkspaceId > 0 ? $accountingTaskLinkContextWorkspaceId : null);
+                foreach ($accountingTaskLinkWorkspaces as $workspaceOption) {
+                    $workspaceOptionId = (int) ($workspaceOption['id'] ?? 0);
+                    if ($workspaceOptionId <= 0) {
+                        continue;
+                    }
+                    if ($candidateWorkspaceId !== null && $workspaceOptionId === $candidateWorkspaceId) {
+                        return $workspaceOptionId;
+                    }
+                }
+
+                foreach ($accountingTaskLinkWorkspaces as $workspaceOption) {
+                    $workspaceOptionId = (int) ($workspaceOption['id'] ?? 0);
+                    if ($workspaceOptionId > 0) {
+                        return $workspaceOptionId;
+                    }
+                }
+
+                return null;
+            };
+            $accountingTaskLinkDefaultWorkspaceId = $resolveAccountingTaskLinkWorkspaceId(null);
+            $accountingTaskLinkGroupsForWorkspace = static function (?int $workspaceId = null) use ($accountingTaskLinkGroupsByWorkspace, $resolveAccountingTaskLinkWorkspaceId): array {
+                $resolvedWorkspaceId = $resolveAccountingTaskLinkWorkspaceId($workspaceId);
+                if ($resolvedWorkspaceId === null) {
+                    return [];
+                }
+
+                $groups = $accountingTaskLinkGroupsByWorkspace[(string) $resolvedWorkspaceId] ?? [];
+                if (!is_array($groups)) {
+                    return [];
+                }
+
+                return array_values(array_unique(array_map(
+                    static fn ($groupName): string => normalizeTaskGroupName((string) $groupName),
+                    $groups
+                )));
+            };
+            $accountingTaskLinkUsersForWorkspace = static function (?int $workspaceId = null) use ($accountingTaskLinkUsersByWorkspace, $resolveAccountingTaskLinkWorkspaceId): array {
+                $resolvedWorkspaceId = $resolveAccountingTaskLinkWorkspaceId($workspaceId);
+                if ($resolvedWorkspaceId === null) {
+                    return [];
+                }
+
+                $users = $accountingTaskLinkUsersByWorkspace[(string) $resolvedWorkspaceId] ?? [];
+                return is_array($users) ? array_values($users) : [];
+            };
+            $renderAccountingTaskLinkWorkspaceOptions = static function (?int $selectedWorkspaceId = null) use ($accountingTaskLinkWorkspaces, $resolveAccountingTaskLinkWorkspaceId): string {
+                $resolvedWorkspaceId = $resolveAccountingTaskLinkWorkspaceId($selectedWorkspaceId);
+                ob_start();
+                if (!$accountingTaskLinkWorkspaces) {
+                    echo '<option value="">Nenhum workspace disponível</option>';
+                } else {
+                    foreach ($accountingTaskLinkWorkspaces as $workspaceOption) {
+                        $workspaceOptionId = (int) ($workspaceOption['id'] ?? 0);
+                        if ($workspaceOptionId <= 0) {
+                            continue;
+                        }
+                        $workspaceOptionName = normalizeWorkspaceName((string) ($workspaceOption['name'] ?? 'Workspace'));
+                        echo '<option value="' . e((string) $workspaceOptionId) . '"'
+                            . ($resolvedWorkspaceId === $workspaceOptionId ? ' selected' : '')
+                            . '>'
+                            . e($workspaceOptionName)
+                            . '</option>';
+                    }
+                }
+
+                return (string) ob_get_clean();
+            };
+            $renderAccountingTaskLinkGroupOptions = static function (?int $workspaceId = null, ?string $selectedGroupName = null) use ($accountingTaskLinkGroupsForWorkspace): string {
+                $groupNames = $accountingTaskLinkGroupsForWorkspace($workspaceId);
+                $resolvedGroupName = $selectedGroupName !== null && trim($selectedGroupName) !== ''
+                    ? normalizeTaskGroupName($selectedGroupName)
+                    : ($groupNames[0] ?? '');
+                ob_start();
+                if (!$groupNames) {
+                    echo '<option value="">Nenhum projeto disponível</option>';
+                } else {
+                    foreach ($groupNames as $groupName) {
+                        echo '<option value="' . e($groupName) . '"'
+                            . ($resolvedGroupName === $groupName ? ' selected' : '')
+                            . '>'
+                            . e($groupName)
+                            . '</option>';
+                    }
+                }
+
+                return (string) ob_get_clean();
+            };
+            $accountingTaskLinkAssigneeSummary = static function (?int $workspaceId = null, array $selectedAssigneeIds = []) use ($accountingTaskLinkUsersForWorkspace): string {
+                $selectedLookup = array_fill_keys(normalizeAssigneeIds($selectedAssigneeIds), true);
+                if (!$selectedLookup) {
+                    return 'Todos os responsáveis';
+                }
+
+                $selectedNames = [];
+                foreach ($accountingTaskLinkUsersForWorkspace($workspaceId) as $workspaceUser) {
+                    $workspaceUserId = (int) ($workspaceUser['id'] ?? 0);
+                    if ($workspaceUserId <= 0 || !isset($selectedLookup[$workspaceUserId])) {
+                        continue;
+                    }
+                    $selectedNames[] = normalizeUserDisplayName((string) ($workspaceUser['name'] ?? 'Usuário'));
+                }
+
+                return $selectedNames ? implode(', ', $selectedNames) : 'Todos os responsáveis';
+            };
+            $renderAccountingTaskLinkAssigneePicker = static function (?int $workspaceId = null, array $selectedAssigneeIds = [], bool $disabled = false) use ($accountingTaskLinkUsersForWorkspace, $accountingTaskLinkAssigneeSummary): string {
+                $workspaceUsers = $accountingTaskLinkUsersForWorkspace($workspaceId);
+                $selectedLookup = array_fill_keys(normalizeAssigneeIds($selectedAssigneeIds), true);
+                $summaryLabel = $accountingTaskLinkAssigneeSummary($workspaceId, $selectedAssigneeIds);
+                ob_start();
+                ?>
+                <div class="assignee-picker-wrap task-detail-inline-field task-detail-inline-assignees accounting-task-link-picker-wrap">
+                    <span class="assignee-picker-label">Respons&aacute;veis</span>
+                    <details class="assignee-picker row-assignee-picker" data-accounting-task-link-assignees>
+                        <summary><?= e($summaryLabel) ?></summary>
+                        <div class="assignee-picker-menu" aria-label="Selecionar responsáveis" data-sheet-title="Responsáveis" data-accounting-task-link-assignee-menu>
+                            <?php if (!$workspaceUsers): ?>
+                                <p class="assignee-picker-empty">Nenhum usu&aacute;rio dispon&iacute;vel.</p>
+                            <?php else: ?>
+                                <?php foreach ($workspaceUsers as $workspaceUser): ?>
+                                    <?php $workspaceUserId = (int) ($workspaceUser['id'] ?? 0); ?>
+                                    <?php if ($workspaceUserId <= 0) { continue; } ?>
+                                    <label class="assignee-option">
+                                        <input
+                                            type="checkbox"
+                                            name="task_link_assignee_ids[]"
+                                            value="<?= e((string) $workspaceUserId) ?>"
+                                            data-assignee-name="<?= e((string) ($workspaceUser['name'] ?? 'Usuário')) ?>"
+                                            data-assignee-avatar="<?= e((string) ($workspaceUser['avatar'] ?? '')) ?>"
+                                            data-assignee-initial="<?= e((string) ($workspaceUser['initial'] ?? 'U')) ?>"
+                                            <?= isset($selectedLookup[$workspaceUserId]) ? 'checked' : '' ?>
+                                            <?= $disabled ? 'disabled' : '' ?>
+                                        >
+                                        <?= renderUserAvatar($workspaceUser, 'avatar small assignee-option-avatar', true, 'span') ?>
+                                        <span class="assignee-option-text"><?= e((string) ($workspaceUser['name'] ?? 'Usuário')) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </details>
+                </div>
+                <?php
+                return (string) ob_get_clean();
+            };
+            $renderAccountingTaskLinkFields = static function (
+                ?int $workspaceId = null,
+                ?string $groupName = null,
+                array $selectedAssigneeIds = [],
+                bool $hidden = true,
+                bool $disabled = true
+            ) use (
+                $renderAccountingTaskLinkWorkspaceOptions,
+                $renderAccountingTaskLinkGroupOptions,
+                $renderAccountingTaskLinkAssigneePicker
+            ): string {
+                ob_start();
+                ?>
+                <div class="accounting-task-link-fields" data-accounting-task-link-fields<?= $hidden ? ' hidden' : '' ?>>
+                    <label class="accounting-entry-edit-control">
+                        <span>Workspace</span>
+                        <select
+                            name="task_link_workspace_id"
+                            class="accounting-installment-select"
+                            aria-label="Workspace das tarefas concluídas"
+                            data-accounting-task-link-workspace
+                            <?= $disabled ? 'disabled' : '' ?>
+                        >
+                            <?= $renderAccountingTaskLinkWorkspaceOptions($workspaceId) ?>
+                        </select>
+                    </label>
+                    <label class="accounting-entry-edit-control">
+                        <span>Projeto</span>
+                        <select
+                            name="task_link_group_name"
+                            class="accounting-installment-select"
+                            aria-label="Projeto das tarefas concluídas"
+                            data-accounting-task-link-group
+                            <?= $disabled ? 'disabled' : '' ?>
+                        >
+                            <?= $renderAccountingTaskLinkGroupOptions($workspaceId, $groupName) ?>
+                        </select>
+                    </label>
+                    <?= $renderAccountingTaskLinkAssigneePicker($workspaceId, $selectedAssigneeIds, $disabled) ?>
+                    <span class="accounting-entry-goal-status" data-accounting-task-link-rate-note>
+                        O valor informado acima passa a ser o ganho por tarefa. O total desta entrada se atualiza sozinho conforme as conclu&iacute;das do per&iacute;odo.
+                    </span>
+                </div>
+                <?php
+                return (string) ob_get_clean();
+            };
+            $renderAccountingTaskLinkHiddenAssigneeInputs = static function (array $selectedAssigneeIds = []): string {
+                $selectedAssigneeIds = normalizeAssigneeIds($selectedAssigneeIds);
+                ob_start();
+                foreach ($selectedAssigneeIds as $selectedAssigneeId) {
+                    echo '<input type="hidden" name="task_link_assignee_ids[]" value="' . e((string) $selectedAssigneeId) . '">';
+                }
+
+                return (string) ob_get_clean();
+            };
+            $accountingTaskLinkOptionsJson = json_encode(
+                [
+                    'workspaces' => $accountingTaskLinkWorkspaces,
+                    'groups_by_workspace' => $accountingTaskLinkGroupsByWorkspace,
+                    'users_by_workspace' => $accountingTaskLinkUsersByWorkspace,
+                ],
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            ) ?: '{}';
             ?>
             <div class="accounting-sheet">
+                <script type="application/json" data-accounting-task-link-options><?= e($accountingTaskLinkOptionsJson) ?></script>
                 <div class="accounting-columns">
                     <section class="accounting-card is-expense-card<?= empty($accountingExpenseEntries) ? ' is-empty' : '' ?>">
                         <header class="accounting-card-head">
@@ -274,7 +500,7 @@
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>
                                         </form>
-                                        <form method="post" class="accounting-entry-form accounting-entry-editor-form" data-accounting-form hidden autocomplete="off">
+                                        <form method="post" class="accounting-entry-form accounting-entry-editor-form<?= $accountingEntryIsTaskLinked ? ' has-task-link' : '' ?>" data-accounting-form hidden autocomplete="off">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="update_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
@@ -553,6 +779,24 @@
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
                                     $accountingEntryAmountInput = (string) ($accountingEntry['amount_input'] ?? '0,00');
                                     $accountingEntryTotalAmountInput = (string) ($accountingEntry['total_amount_input'] ?? $accountingEntryAmountInput);
+                                    $accountingEntryAutomationType = normalizeAccountingAutomationType((string) ($accountingEntry['automation_type'] ?? 'manual'));
+                                    $accountingEntryIsTaskLinked = ((int) ($accountingEntry['is_task_linked'] ?? 0)) === 1;
+                                    $accountingEntryTaskLinkWorkspaceId = isset($accountingEntry['task_link_workspace_id'])
+                                        ? (int) ($accountingEntry['task_link_workspace_id'] ?? 0)
+                                        : 0;
+                                    $accountingEntryTaskLinkWorkspaceId = $accountingEntryTaskLinkWorkspaceId > 0
+                                        ? $accountingEntryTaskLinkWorkspaceId
+                                        : $accountingTaskLinkDefaultWorkspaceId;
+                                    $accountingEntryTaskLinkGroupName = (string) ($accountingEntry['task_link_group_name'] ?? '');
+                                    $accountingEntryTaskLinkAssigneeIds = normalizeAssigneeIds(
+                                        is_array($accountingEntry['task_link_assignee_ids'] ?? null)
+                                            ? $accountingEntry['task_link_assignee_ids']
+                                            : []
+                                    );
+                                    $accountingEntryTaskLinkRateInput = (string) ($accountingEntry['task_link_rate_input'] ?? $accountingEntryAmountInput);
+                                    $accountingEntryTaskLinkSummaryLabel = (string) ($accountingEntry['task_link_summary_label'] ?? '');
+                                    $accountingEntryTaskLinkScopeLabel = (string) ($accountingEntry['task_link_scope_label'] ?? '');
+                                    $accountingEntryTaskLinkAssigneeSummary = (string) ($accountingEntry['task_link_assignee_summary'] ?? 'Todos os responsáveis');
                                     $accountingEntryIsSettled = ((int) ($accountingEntry['is_settled'] ?? 0)) === 1;
                                     $accountingEntryIsInstallment = ((int) ($accountingEntry['is_installment'] ?? 0)) === 1;
                                     $accountingEntryInstallmentProgress = (string) ($accountingEntry['installment_progress'] ?? '');
@@ -575,9 +819,17 @@
                                             <span class="accounting-entry-summary-main">
                                                 <span class="accounting-entry-summary-head">
                                                     <span class="accounting-entry-summary-title" title="<?= e($accountingEntryLabel) ?>"><?= e($accountingEntryLabel) ?></span>
-                                                    <?php if ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
+                                                    <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
                                                         <span class="accounting-entry-summary-meta">
-                                                            <?php if ($accountingEntryMonthlyBadge !== ''): ?>
+                                                            <?php if ($accountingEntryIsTaskLinked): ?>
+                                                                <span class="accounting-entry-badge is-monthly">Por conclu&iacute;das</span>
+                                                                <?php if ($accountingEntryTaskLinkSummaryLabel !== ''): ?>
+                                                                    <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkSummaryLabel) ?></span>
+                                                                <?php endif; ?>
+                                                                <?php if ($accountingEntryTaskLinkScopeLabel !== ''): ?>
+                                                                    <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryTaskLinkScopeLabel) ?></span>
+                                                                <?php endif; ?>
+                                                            <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
                                                             <?php elseif ($accountingEntryIsInstallment): ?>
                                                                 <span class="accounting-entry-badge is-installment"><?= e($accountingEntryInstallmentBadge) ?></span>
@@ -593,13 +845,20 @@
                                             <input type="hidden" name="action" value="update_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                            <input type="hidden" name="entry_type" value="income">
                                             <input type="hidden" name="label" value="<?= e($accountingEntryLabel) ?>">
-                                            <input type="hidden" name="amount_value" value="<?= e($accountingEntryAmountInput) ?>">
+                                            <input type="hidden" name="amount_value" value="<?= e($accountingEntryIsTaskLinked ? $accountingEntryTaskLinkRateInput : $accountingEntryAmountInput) ?>">
                                             <input type="hidden" name="is_installment" value="<?= $accountingEntryIsInstallment ? '1' : '0' ?>">
                                             <input type="hidden" name="installment_progress" value="<?= e($accountingEntryInstallmentProgress) ?>">
                                             <input type="hidden" name="total_amount_value" value="<?= e($accountingEntryTotalAmountInput) ?>">
-                                            <input type="hidden" name="is_monthly_due" value="<?= $accountingEntryIsMonthly ? '1' : '0' ?>">
-                                            <input type="hidden" name="monthly_day" value="<?= $accountingEntryMonthlyDay !== null ? e((string) $accountingEntryMonthlyDay) : '' ?>">
+                                            <input type="hidden" name="automation_type" value="<?= e($accountingEntryAutomationType) ?>" data-accounting-automation-type>
+                                            <?php if ($accountingEntryIsTaskLinked): ?>
+                                                <input type="hidden" name="task_link_workspace_id" value="<?= e((string) ($accountingEntryTaskLinkWorkspaceId ?? 0)) ?>">
+                                                <input type="hidden" name="task_link_group_name" value="<?= e($accountingEntryTaskLinkGroupName) ?>">
+                                                <?= $renderAccountingTaskLinkHiddenAssigneeInputs($accountingEntryTaskLinkAssigneeIds) ?>
+                                            <?php endif; ?>
+                                            <input type="hidden" name="is_monthly_due" value="<?= (!$accountingEntryIsTaskLinked && $accountingEntryIsMonthly) ? '1' : '0' ?>">
+                                            <input type="hidden" name="monthly_day" value="<?= (!$accountingEntryIsTaskLinked && $accountingEntryMonthlyDay !== null) ? e((string) $accountingEntryMonthlyDay) : '' ?>">
                                             <label class="accounting-check">
                                                 <input type="checkbox" name="is_settled" value="1" <?= $accountingEntryIsSettled ? 'checked' : '' ?>>
                                                 <span>Recebido</span>
@@ -619,6 +878,8 @@
                                             <input type="hidden" name="action" value="update_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                            <input type="hidden" name="entry_type" value="income">
+                                            <input type="hidden" name="automation_type" value="<?= e($accountingEntryAutomationType) ?>" data-accounting-automation-type>
                                             <input
                                                 type="text"
                                                 name="label"
@@ -632,7 +893,7 @@
                                             <input
                                                 type="text"
                                                 name="amount_value"
-                                                value="<?= e($accountingEntryAmountInput) ?>"
+                                                value="<?= e($accountingEntryIsTaskLinked ? $accountingEntryTaskLinkRateInput : $accountingEntryAmountInput) ?>"
                                                 class="accounting-input accounting-input-amount"
                                                 inputmode="numeric"
                                                 placeholder="0,00"
@@ -641,9 +902,17 @@
                                                 data-accounting-primary-amount
                                                 <?= $accountingEntryIsInstallment ? 'readonly' : '' ?>
                                             >
-                                            <?php if ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
+                                            <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
                                                 <div class="accounting-entry-meta">
-                                                    <?php if ($accountingEntryMonthlyBadge !== ''): ?>
+                                                    <?php if ($accountingEntryIsTaskLinked): ?>
+                                                        <span class="accounting-entry-badge is-monthly">Por conclu&iacute;das</span>
+                                                        <?php if ($accountingEntryTaskLinkSummaryLabel !== ''): ?>
+                                                            <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkSummaryLabel) ?></span>
+                                                        <?php endif; ?>
+                                                        <?php if ($accountingEntryTaskLinkScopeLabel !== ''): ?>
+                                                            <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryTaskLinkScopeLabel) ?></span>
+                                                        <?php endif; ?>
+                                                    <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
                                                             <span>Mensal -</span>
                                                             <select name="monthly_day" class="accounting-installment-select" aria-label="Dia do recebimento mensal">
@@ -658,6 +927,15 @@
                                                         <span class="accounting-entry-badge is-installment"><?= e($accountingEntryInstallmentBadge) ?></span>
                                                     <?php endif; ?>
                                                 </div>
+                                            <?php endif; ?>
+                                            <?php if ($accountingEntryIsTaskLinked): ?>
+                                                <?= $renderAccountingTaskLinkFields(
+                                                    $accountingEntryTaskLinkWorkspaceId,
+                                                    $accountingEntryTaskLinkGroupName,
+                                                    $accountingEntryTaskLinkAssigneeIds,
+                                                    false,
+                                                    false
+                                                ) ?>
                                             <?php endif; ?>
                                             <div class="accounting-entry-status">
                                                 <label class="accounting-check">
@@ -684,8 +962,8 @@
                                                 name="total_amount_value"
                                                 value="<?= e($accountingEntryTotalAmountInput) ?>"
                                             >
-                                            <input type="hidden" name="is_monthly_due" value="<?= $accountingEntryIsMonthly ? '1' : '0' ?>">
-                                            <?php if (!$accountingEntryIsMonthly): ?>
+                                            <input type="hidden" name="is_monthly_due" value="<?= (!$accountingEntryIsTaskLinked && $accountingEntryIsMonthly) ? '1' : '0' ?>">
+                                            <?php if ($accountingEntryIsTaskLinked || !$accountingEntryIsMonthly): ?>
                                                 <input type="hidden" name="monthly_day" value="">
                                             <?php endif; ?>
                                         </form>
@@ -732,6 +1010,7 @@
                                                 >
                                                     <option value="single">&Uacute;nica</option>
                                                     <option value="monthly">Mensal</option>
+                                                    <option value="completed_tasks">Por conclu&iacute;das</option>
                                                 </select>
                                                 <input
                                                     type="checkbox"
@@ -750,6 +1029,12 @@
                                                     data-accounting-monthly-toggle
                                                     tabindex="-1"
                                                     aria-hidden="true"
+                                                >
+                                                <input
+                                                    type="hidden"
+                                                    name="automation_type"
+                                                    value="manual"
+                                                    data-accounting-automation-type
                                                 >
                                                 <div class="accounting-installment-fields" data-accounting-installment-fields hidden>
                                                     <select
@@ -789,6 +1074,15 @@
                                                         <?php endfor; ?>
                                                     </select>
                                                 </div>
+                                                <?= $renderAccountingTaskLinkFields(
+                                                    $accountingTaskLinkDefaultWorkspaceId,
+                                                    $accountingTaskLinkDefaultWorkspaceId !== null
+                                                        ? ($accountingTaskLinkGroupsForWorkspace($accountingTaskLinkDefaultWorkspaceId)[0] ?? '')
+                                                        : '',
+                                                    [],
+                                                    true,
+                                                    true
+                                                ) ?>
                                             </div>
                                         </div>
                                         <div class="accounting-create-actions">

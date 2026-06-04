@@ -1,6 +1,66 @@
 <?php
 declare(strict_types=1);
 
+function accountingAutomationConfigFromRequest(PDO $pdo, int $userId, string $entryType): ?array
+{
+    $requestedAutomationType = normalizeAccountingAutomationType(
+        (string) (
+            $_POST['automation_type']
+            ?? (((string) ($_POST['accounting_type_choice'] ?? '')) === 'completed_tasks' ? 'completed_tasks' : 'manual')
+        )
+    );
+    if ($requestedAutomationType !== 'completed_tasks') {
+        return null;
+    }
+
+    if ($entryType !== 'income') {
+        throw new RuntimeException('A automação por tarefas concluídas só pode ser usada em entradas.');
+    }
+
+    $sourceWorkspaceId = (int) ($_POST['task_link_workspace_id'] ?? 0);
+    if ($sourceWorkspaceId <= 0 || !userHasWorkspaceAccess($userId, $sourceWorkspaceId)) {
+        throw new RuntimeException('Selecione um workspace de tarefas concluídas que você possa acessar.');
+    }
+
+    $taskGroupName = normalizeTaskGroupName((string) ($_POST['task_link_group_name'] ?? ''));
+    $availableGroupNames = array_values(array_unique(array_map(
+        static fn ($groupName): string => normalizeTaskGroupName((string) $groupName),
+        taskGroupsList($sourceWorkspaceId)
+    )));
+    if ($taskGroupName === '' || !in_array($taskGroupName, $availableGroupNames, true)) {
+        throw new RuntimeException('Selecione um projeto válido para vincular as tarefas concluídas.');
+    }
+    if (!userCanViewTaskGroup($userId, $sourceWorkspaceId, $taskGroupName)) {
+        throw new RuntimeException('Você não possui acesso ao projeto selecionado.');
+    }
+
+    $rawAssigneeIds = is_array($_POST['task_link_assignee_ids'] ?? null)
+        ? $_POST['task_link_assignee_ids']
+        : [];
+    $submittedAssigneeIds = array_values(array_unique(array_filter(
+        array_map('intval', $rawAssigneeIds),
+        static fn (int $assigneeId): bool => $assigneeId > 0
+    )));
+    $sourceUsersById = usersMapById($sourceWorkspaceId);
+    $selectedAssigneeIds = normalizeAssigneeIds($submittedAssigneeIds, $sourceUsersById);
+    if (count($selectedAssigneeIds) !== count($submittedAssigneeIds)) {
+        throw new RuntimeException('Um ou mais responsáveis selecionados são inválidos para esse workspace.');
+    }
+
+    $taskLinkRateCents = normalizeDueAmountCents($_POST['amount_value'] ?? null);
+    if ($taskLinkRateCents === null || $taskLinkRateCents <= 0) {
+        throw new RuntimeException('Informe um valor válido por tarefa concluída.');
+    }
+
+    return [
+        'automation_type' => 'completed_tasks',
+        'task_link_workspace_id' => $sourceWorkspaceId,
+        'task_link_group_name' => $taskGroupName,
+        'task_link_assignee_ids' => $selectedAssigneeIds,
+        'task_link_rate_cents' => $taskLinkRateCents,
+    ];
+}
+
 function handleAccountingPostAction(PDO $pdo, string $action): bool
 {
     switch ($action) {
@@ -47,6 +107,11 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 $isMonthlyGoal = $entryType === 'expense'
                     && $isMonthlyDue === 1
                     && normalizeAccountingMonthlyMode($monthlyMode, $entryType, 1) === 'goal';
+                $automationConfig = accountingAutomationConfigFromRequest(
+                    $pdo,
+                    (int) ($authUser['id'] ?? 0),
+                    $entryType
+                );
 
                 if ($isMonthlyDue === 1 && !$isMonthlyGoal) {
                     createWorkspaceAccountingMonthlyDue(
@@ -76,7 +141,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['installment_total'] ?? null,
                         ($isMonthlyIncome === 1 || $isMonthlyGoal) ? 1 : 0,
                         $_POST['monthly_day'] ?? null,
-                        $monthlyMode
+                        $monthlyMode,
+                        $automationConfig
                     );
                 }
 
@@ -119,6 +185,11 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 $entryType = normalizeAccountingEntryType((string) ($entryRow['entry_type'] ?? 'expense'));
                 $isInstallment = $entryType === 'expense' && ((string) ($_POST['is_installment'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyFlag = ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
+                $automationConfig = accountingAutomationConfigFromRequest(
+                    $pdo,
+                    (int) ($authUser['id'] ?? 0),
+                    $entryType
+                );
                 updateWorkspaceAccountingEntryWithCarrySync(
                     $pdo,
                     $workspaceId,
@@ -133,7 +204,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $_POST['installment_total'] ?? null,
                     $_POST['monthly_day'] ?? null,
                     $isMonthlyFlag,
-                    (string) ($_POST['monthly_mode'] ?? 'uniform')
+                    (string) ($_POST['monthly_mode'] ?? 'uniform'),
+                    $automationConfig
                 );
 
                 if (requestExpectsJson()) {

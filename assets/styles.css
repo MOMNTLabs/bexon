@@ -14942,6 +14942,32 @@ select option:checked,
     flex-basis: 100%;
 }
 
+.accounting-task-link-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    width: 100%;
+    flex-basis: 100%;
+    align-items: start;
+}
+
+.accounting-task-link-fields[hidden] {
+    display: none !important;
+}
+
+.accounting-task-link-fields .accounting-entry-edit-control {
+    min-width: 0;
+}
+
+.accounting-task-link-fields .accounting-entry-goal-status {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
+.accounting-task-link-picker-wrap {
+    grid-column: 1 / -1;
+}
+
 .accounting-installment-fields[hidden] {
     display: none !important;
 }
@@ -15311,6 +15337,19 @@ select option:checked,
 .accounting-entry-form .accounting-entry-status {
     grid-column: 3;
     grid-row: 1;
+}
+
+.accounting-entry-form.has-task-link {
+    grid-template-rows: auto auto auto auto;
+}
+
+.accounting-entry-form.has-task-link .accounting-task-link-fields {
+    grid-column: 1 / -1;
+    grid-row: 3;
+}
+
+.accounting-entry-form.has-task-link .accounting-entry-editor-actions {
+    grid-row: 4;
 }
 
 .accounting-entry-goal-payment-panel {

@@ -480,6 +480,16 @@ window.addEventListener("DOMContentLoaded", () => {
     return Number.isFinite(order) && order > 0 ? order : 99;
   };
 
+  const getTaskItemStatusColor = (taskItem) => {
+    if (!(taskItem instanceof HTMLElement)) return "";
+    const select = taskItem.querySelector("select.status-select");
+    if (select instanceof HTMLSelectElement) {
+      return getStatusOptionColor(getSelectedStatusOption(select));
+    }
+
+    return normalizeStatusColorValue(taskItem.dataset.statusColor || "", getTaskItemStatusKind(taskItem));
+  };
+
   const isDoneTaskItem = (taskItem) => {
     if (!(taskItem instanceof HTMLElement)) return false;
     return getTaskItemStatusKind(taskItem) === "done";
@@ -500,6 +510,39 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!(dropzone instanceof HTMLElement)) return;
+
+    dropzone
+      .querySelectorAll("[data-task-status-divider]")
+      .forEach((divider) => divider.remove());
+
+    const taskItems = Array.from(dropzone.children).filter(
+      (child) => child instanceof HTMLElement && child.matches("[data-task-item]")
+    );
+    if (taskItems.length < 2) return;
+
+    const firstNonTaskChild = Array.from(dropzone.children).find(
+      (child) => child instanceof HTMLElement && !child.matches("[data-task-item]")
+    );
+
+    taskItems
+      .map((taskItem, index) => ({
+        taskItem,
+        index,
+        statusOrder: getTaskItemStatusOrder(taskItem),
+      }))
+      .sort((left, right) => {
+        if (left.statusOrder !== right.statusOrder) {
+          return left.statusOrder - right.statusOrder;
+        }
+        return left.index - right.index;
+      })
+      .forEach(({ taskItem }) => {
+        if (firstNonTaskChild instanceof HTMLElement) {
+          dropzone.insertBefore(taskItem, firstNonTaskChild);
+          return;
+        }
+        dropzone.append(taskItem);
+      });
   };
 
   const syncGroupStatusDividers = (groupSectionOrDropzone) => {
@@ -514,6 +557,31 @@ window.addEventListener("DOMContentLoaded", () => {
     dropzone
       .querySelectorAll("[data-task-status-divider]")
       .forEach((divider) => divider.remove());
+
+    const visibleTaskItems = Array.from(dropzone.children).filter(
+      (child) =>
+        child instanceof HTMLElement &&
+        child.matches("[data-task-item]") &&
+        !child.hidden
+    );
+    if (visibleTaskItems.length < 2) return;
+
+    let previousStatusKind = getTaskItemStatusKind(visibleTaskItems[0]);
+
+    visibleTaskItems.slice(1).forEach((taskItem) => {
+      const statusKind = getTaskItemStatusKind(taskItem);
+      if (statusKind === previousStatusKind) return;
+
+      const divider = document.createElement("div");
+      divider.className = "task-status-subgroup-divider";
+      divider.dataset.taskStatusDivider = "";
+      divider.dataset.statusKind = statusKind;
+      divider.setAttribute("aria-hidden", "true");
+      applyStatusStyleVars(divider, getTaskItemStatusColor(taskItem), statusKind);
+      dropzone.insertBefore(divider, taskItem);
+
+      previousStatusKind = statusKind;
+    });
   };
 
   const syncTaskRowStatusOverlay = (select) => {
@@ -6839,6 +6907,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const monthlyDayField = form.querySelector("[data-accounting-monthly-day]");
     const settledCheck = form.querySelector("[data-accounting-settled-check]");
     const typeSelect = form.querySelector("[data-accounting-type-select]");
+    const automationTypeField = form.querySelector("[data-accounting-automation-type]");
 
     if (!(installmentToggle instanceof HTMLInputElement)) return;
     if (!(installmentFields instanceof HTMLElement)) return;
@@ -6849,9 +6918,16 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(primaryAmountField instanceof HTMLInputElement)) return;
 
     if (typeSelect instanceof HTMLSelectElement) {
+      const isCompletedTasksType = typeSelect.value === "completed_tasks";
       installmentToggle.checked = typeSelect.value === "installment";
       if (monthlyToggle instanceof HTMLInputElement) {
         monthlyToggle.checked = typeSelect.value === "monthly" || typeSelect.value === "goal";
+        if (isCompletedTasksType) {
+          monthlyToggle.checked = false;
+        }
+      }
+      if (isCompletedTasksType) {
+        installmentToggle.checked = false;
       }
       if (
         monthlyModeField instanceof HTMLSelectElement ||
@@ -6859,8 +6935,15 @@ window.addEventListener("DOMContentLoaded", () => {
       ) {
         monthlyModeField.value = typeSelect.value === "goal" ? "goal" : "uniform";
       }
+      if (automationTypeField instanceof HTMLInputElement) {
+        automationTypeField.value = isCompletedTasksType ? "completed_tasks" : "manual";
+      }
     }
 
+    const isCompletedTasks =
+      (automationTypeField instanceof HTMLInputElement &&
+        automationTypeField.value === "completed_tasks") ||
+      (typeSelect instanceof HTMLSelectElement && typeSelect.value === "completed_tasks");
     const isMonthlyDue = monthlyToggle instanceof HTMLInputElement && monthlyToggle.checked;
     const monthlyMode =
       (monthlyModeField instanceof HTMLSelectElement ||
@@ -6870,8 +6953,8 @@ window.addEventListener("DOMContentLoaded", () => {
         : "uniform";
     const isMonthlyGoal = isMonthlyDue && monthlyMode === "goal";
     if (monthlyToggle instanceof HTMLInputElement) {
-      installmentToggle.disabled = isMonthlyDue;
-      if (isMonthlyDue) {
+      installmentToggle.disabled = isMonthlyDue || isCompletedTasks;
+      if (isMonthlyDue || isCompletedTasks) {
         installmentToggle.checked = false;
       }
     }
@@ -6919,19 +7002,23 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
     if (monthlyToggle instanceof HTMLInputElement) {
-      monthlyToggle.disabled = isInstallment;
-      if (isInstallment) {
+      monthlyToggle.disabled = isInstallment || isCompletedTasks;
+      if (isInstallment || isCompletedTasks) {
         monthlyToggle.checked = false;
       }
     }
     if (typeSelect instanceof HTMLSelectElement) {
-      typeSelect.value = isInstallment
-        ? "installment"
-        : isMonthlyGoal
-          ? "goal"
-          : isMonthlyDue
-            ? "monthly"
-            : "single";
+      if (isCompletedTasks) {
+        typeSelect.value = "completed_tasks";
+      } else {
+        typeSelect.value = isInstallment
+          ? "installment"
+          : isMonthlyGoal
+            ? "goal"
+            : isMonthlyDue
+              ? "monthly"
+              : "single";
+      }
     }
 
     let installmentTotal = Number.parseInt(installmentTotalCountField.value, 10);
@@ -6984,6 +7071,219 @@ window.addEventListener("DOMContentLoaded", () => {
     primaryAmountField.value = totalAmountField.value || "";
   };
 
+  const getAccountingTaskLinkOptions = (form) => {
+    const sheet = form?.closest?.(".accounting-sheet") || document.querySelector(".accounting-sheet");
+    const rawElement = sheet?.querySelector?.("[data-accounting-task-link-options]");
+    if (!(rawElement instanceof HTMLScriptElement)) {
+      return {
+        workspaces: [],
+        groups_by_workspace: {},
+        users_by_workspace: {},
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(rawElement.textContent || "{}");
+      return {
+        workspaces: Array.isArray(parsed?.workspaces) ? parsed.workspaces : [],
+        groups_by_workspace:
+          parsed?.groups_by_workspace && typeof parsed.groups_by_workspace === "object"
+            ? parsed.groups_by_workspace
+            : {},
+        users_by_workspace:
+          parsed?.users_by_workspace && typeof parsed.users_by_workspace === "object"
+            ? parsed.users_by_workspace
+            : {},
+      };
+    } catch (_error) {
+      return {
+        workspaces: [],
+        groups_by_workspace: {},
+        users_by_workspace: {},
+      };
+    }
+  };
+
+  const syncAccountingTaskLinkGroupOptions = (
+    groupField,
+    groupNames,
+    selectedGroupName,
+    disabled
+  ) => {
+    if (!(groupField instanceof HTMLSelectElement)) return;
+
+    const normalizedGroups = Array.isArray(groupNames)
+      ? groupNames
+          .map((groupName) => String(groupName || "").trim())
+          .filter(Boolean)
+      : [];
+    const preferredGroupName = String(selectedGroupName || "").trim();
+    const resolvedGroupName =
+      normalizedGroups.find((groupName) => groupName === preferredGroupName) ||
+      normalizedGroups[0] ||
+      "";
+
+    groupField.innerHTML = "";
+    if (!normalizedGroups.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Nenhum projeto disponível";
+      groupField.append(option);
+    } else {
+      normalizedGroups.forEach((groupName) => {
+        const option = document.createElement("option");
+        option.value = groupName;
+        option.textContent = groupName;
+        if (groupName === resolvedGroupName) {
+          option.selected = true;
+        }
+        groupField.append(option);
+      });
+    }
+
+    groupField.disabled = disabled || !normalizedGroups.length;
+    groupField.required = !disabled;
+    if (resolvedGroupName) {
+      groupField.value = resolvedGroupName;
+    }
+  };
+
+  const syncAccountingTaskLinkAssigneeOptions = (
+    picker,
+    users,
+    selectedAssigneeIds,
+    disabled
+  ) => {
+    if (!(picker instanceof HTMLElement)) return;
+
+    const menu = picker.querySelector("[data-accounting-task-link-assignee-menu]");
+    if (!(menu instanceof HTMLElement)) return;
+
+    const selectedLookup = new Set(
+      Array.isArray(selectedAssigneeIds)
+        ? selectedAssigneeIds
+            .map((assigneeId) => Number.parseInt(String(assigneeId || ""), 10))
+            .filter((assigneeId) => Number.isFinite(assigneeId) && assigneeId > 0)
+        : []
+    );
+
+    const normalizedUsers = Array.isArray(users)
+      ? users
+          .map((user) => ({
+            id: Number.parseInt(String(user?.id || ""), 10),
+            name: String(user?.name || "").trim(),
+            avatar: String(user?.avatar || ""),
+            initial: String(user?.initial || "U"),
+          }))
+          .filter((user) => Number.isFinite(user.id) && user.id > 0)
+      : [];
+
+    if (!normalizedUsers.length) {
+      menu.innerHTML = '<p class="assignee-picker-empty">Nenhum usuário disponível.</p>';
+      updateAssigneePickerSummaryVisual(picker);
+      return;
+    }
+
+    menu.innerHTML = normalizedUsers
+      .map((user) => {
+        const checked = selectedLookup.has(user.id) ? " checked" : "";
+        const disabledAttr = disabled ? " disabled" : "";
+        return `<label class="assignee-option"><input type="checkbox" name="task_link_assignee_ids[]" value="${escapeHtml(
+          String(user.id)
+        )}" data-assignee-name="${escapeHtml(user.name)}" data-assignee-avatar="${escapeHtml(
+          user.avatar
+        )}" data-assignee-initial="${escapeHtml(user.initial)}"${checked}${disabledAttr}>${renderAssigneeAvatarMarkup(
+          {
+            avatar: user.avatar,
+            initial: user.initial,
+          },
+          "avatar small assignee-option-avatar"
+        )}<span class="assignee-option-text">${escapeHtml(user.name)}</span></label>`;
+      })
+      .join("");
+
+    updateAssigneePickerSummaryVisual(picker);
+  };
+
+  const syncAccountingTaskLinkForm = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+
+    const taskLinkFields = form.querySelector("[data-accounting-task-link-fields]");
+    const automationTypeField = form.querySelector("[data-accounting-automation-type]");
+    if (!(taskLinkFields instanceof HTMLElement) || !(automationTypeField instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const entryTypeField = form.querySelector('input[name="entry_type"]');
+    const entryType =
+      entryTypeField instanceof HTMLInputElement ? String(entryTypeField.value || "") : "";
+    const typeSelect = form.querySelector("[data-accounting-type-select]");
+    const isCompletedTasks =
+      entryType === "income" &&
+      ((typeSelect instanceof HTMLSelectElement && typeSelect.value === "completed_tasks") ||
+        automationTypeField.value === "completed_tasks");
+
+    automationTypeField.value = isCompletedTasks ? "completed_tasks" : "manual";
+    taskLinkFields.hidden = !isCompletedTasks;
+
+    const workspaceField = form.querySelector("[data-accounting-task-link-workspace]");
+    const groupField = form.querySelector("[data-accounting-task-link-group]");
+    const picker = form.querySelector("[data-accounting-task-link-assignees]");
+    const controls = taskLinkFields.querySelectorAll("select, input[type='checkbox']");
+    const options = getAccountingTaskLinkOptions(form);
+    const availableWorkspaces = Array.isArray(options.workspaces) ? options.workspaces : [];
+
+    let selectedWorkspaceId = "";
+    if (workspaceField instanceof HTMLSelectElement) {
+      const availableWorkspaceIds = availableWorkspaces
+        .map((workspace) => String(workspace?.id || "").trim())
+        .filter(Boolean);
+      const fallbackWorkspaceId = availableWorkspaceIds[0] || "";
+      selectedWorkspaceId = availableWorkspaceIds.includes(workspaceField.value)
+        ? workspaceField.value
+        : fallbackWorkspaceId;
+      if (selectedWorkspaceId) {
+        workspaceField.value = selectedWorkspaceId;
+      }
+      workspaceField.disabled = !isCompletedTasks || !availableWorkspaceIds.length;
+    }
+
+    const previousSelectedAssigneeIds =
+      picker instanceof HTMLElement
+        ? Array.from(
+            picker.querySelectorAll('input[name="task_link_assignee_ids[]"]:checked')
+          ).map((checkbox) => checkbox.value)
+        : [];
+    const groupOptions =
+      selectedWorkspaceId && Array.isArray(options.groups_by_workspace?.[selectedWorkspaceId])
+        ? options.groups_by_workspace[selectedWorkspaceId]
+        : [];
+    const userOptions =
+      selectedWorkspaceId && Array.isArray(options.users_by_workspace?.[selectedWorkspaceId])
+        ? options.users_by_workspace[selectedWorkspaceId]
+        : [];
+
+    syncAccountingTaskLinkGroupOptions(
+      groupField,
+      groupOptions,
+      groupField instanceof HTMLSelectElement ? groupField.value : "",
+      !isCompletedTasks
+    );
+    syncAccountingTaskLinkAssigneeOptions(
+      picker,
+      userOptions,
+      previousSelectedAssigneeIds,
+      !isCompletedTasks
+    );
+
+    controls.forEach((control) => {
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) return;
+      if (control === workspaceField) return;
+      if (control === groupField) return;
+      control.disabled = !isCompletedTasks;
+    });
+  };
+
   const refreshAccountingSectionFromServer = async () => {
     let snapshotData = null;
     let nextDoc = null;
@@ -7032,6 +7332,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     normalizeAccountingLabelField(form);
     syncAccountingInstallmentForm(form);
+    syncAccountingTaskLinkForm(form);
 
     form.dataset.submitting = "1";
     form.classList.add("is-saving");
@@ -7116,6 +7417,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (reset) {
       form.reset();
       syncAccountingInstallmentForm(form);
+      syncAccountingTaskLinkForm(form);
     }
 
     form.hidden = true;
@@ -7269,6 +7571,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (reset && form instanceof HTMLFormElement) {
       form.reset();
       syncAccountingInstallmentForm(form);
+      syncAccountingTaskLinkForm(form);
     }
 
     toggle.open = false;
@@ -12712,6 +13015,7 @@ window.addEventListener("DOMContentLoaded", () => {
     applySerializableFormState(form, payload.state);
     ensureAppReleaseField(form);
     syncAccountingInstallmentForm(form);
+    syncAccountingTaskLinkForm(form);
     form
       .querySelectorAll(
         'input[name="amount_value"], input[name="total_amount_value"], input[name="opening_balance_value"], input[name="paid_amount_value"], input[name="payment_amount_value"]'
@@ -18592,9 +18896,19 @@ window.addEventListener("DOMContentLoaded", () => {
     if (
       accountingEntryForm instanceof HTMLFormElement &&
       isAccountingEntryField &&
-      ["label", "amount_value", "is_settled", "monthly_day"].includes(target.name)
+      [
+        "label",
+        "amount_value",
+        "is_settled",
+        "monthly_day",
+        "task_link_workspace_id",
+        "task_link_group_name",
+        "task_link_assignee_ids[]",
+        "automation_type",
+      ].includes(target.name)
     ) {
       syncAccountingInstallmentForm(accountingEntryForm);
+      syncAccountingTaskLinkForm(accountingEntryForm);
       if (accountingEntryForm.classList.contains("accounting-entry-editor-form")) {
         return;
       }
@@ -18610,7 +18924,21 @@ window.addEventListener("DOMContentLoaded", () => {
     if (
       accountingCreateForm instanceof HTMLFormElement &&
       isAccountingCreateField &&
-      ["accounting_type_choice", "is_installment", "is_monthly_due", "installment_number", "installment_total", "total_amount_value", "amount_value", "monthly_day", "monthly_mode"].includes(target.name)
+      [
+        "accounting_type_choice",
+        "is_installment",
+        "is_monthly_due",
+        "installment_number",
+        "installment_total",
+        "total_amount_value",
+        "amount_value",
+        "monthly_day",
+        "monthly_mode",
+        "task_link_workspace_id",
+        "task_link_group_name",
+        "task_link_assignee_ids[]",
+        "automation_type",
+      ].includes(target.name)
     ) {
       if (target.name === "is_installment" && target instanceof HTMLInputElement && target.checked) {
         const monthlyToggle = accountingCreateForm.querySelector("[data-accounting-monthly-toggle]");
@@ -18625,6 +18953,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
       syncAccountingInstallmentForm(accountingCreateForm);
+      syncAccountingTaskLinkForm(accountingCreateForm);
       return;
     }
 
@@ -18658,6 +18987,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const accountingForm = target.closest(".accounting-entry-form, .accounting-create-form");
     if (!(accountingForm instanceof HTMLFormElement)) return;
     syncAccountingInstallmentForm(accountingForm);
+    syncAccountingTaskLinkForm(accountingForm);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -18752,6 +19082,7 @@ window.addEventListener("DOMContentLoaded", () => {
       ["label", "amount_value", "monthly_day"].includes(target.name)
     ) {
       syncAccountingInstallmentForm(accountingEntryForm);
+      syncAccountingTaskLinkForm(accountingEntryForm);
       if (accountingEntryForm.classList.contains("accounting-entry-editor-form")) {
         return;
       }
@@ -18927,6 +19258,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (form.matches(".accounting-entry-form, .accounting-entry-quick-status-form")) {
       event.preventDefault();
       syncAccountingInstallmentForm(form);
+      syncAccountingTaskLinkForm(form);
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
       }
@@ -18939,6 +19271,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (form.matches(".accounting-create-form")) {
       event.preventDefault();
       syncAccountingInstallmentForm(form);
+      syncAccountingTaskLinkForm(form);
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
       }
@@ -19018,6 +19351,7 @@ window.addEventListener("DOMContentLoaded", () => {
     root.querySelectorAll("[data-accounting-form]").forEach((form) => {
       if (!(form instanceof HTMLFormElement)) return;
       syncAccountingInstallmentForm(form);
+      syncAccountingTaskLinkForm(form);
       form
         .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="opening_balance_value"], input[name="paid_amount_value"], input[name="payment_amount_value"]')
         .forEach((field) => {

@@ -149,11 +149,18 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     if ($reviewFile !== null && !in_array($actorUserId, $assigneeIds, true)) {
                         throw new RuntimeException('Apenas o responsável pode alterar o arquivo de revisão.');
                     }
-                    $stmt = $pdo->prepare(
-                        'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
-                         VALUES (:workspace_id, :t, :tt, :d, :s, :p, :dd, :of, :osd, :cb, :at, :aj, :rl, :ri, :rf, :sj, :sde, :g, :c, :u)'
-                    );
                     $now = nowIso();
+                    $completedAt = taskCompletedAtValueForStatusChange(
+                        $status,
+                        null,
+                        null,
+                        $now,
+                        $workspaceId
+                    );
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, completed_at, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
+                         VALUES (:workspace_id, :t, :tt, :d, :s, :p, :dd, :of, :osd, :ca, :cb, :at, :aj, :rl, :ri, :rf, :sj, :sde, :g, :c, :u)'
+                    );
                     $stmt->execute([
                         ':workspace_id' => $workspaceId,
                         ':t' => $title,
@@ -164,6 +171,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         ':dd' => $dueDate,
                         ':of' => $overdueFlag,
                         ':osd' => $overdueSinceDate,
+                        ':ca' => $completedAt,
                         ':cb' => $actorUserId,
                         ':at' => $assignedTo,
                         ':aj' => $assigneeIdsJson,
@@ -252,7 +260,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Tarefa inválida.');
                 }
                 $existingTaskStmt = $pdo->prepare(
-                    'SELECT title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, assignee_ids_json, group_name, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, updated_at
+                    'SELECT title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, completed_at, assignee_ids_json, group_name, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, updated_at
                      FROM tasks
                      WHERE id = :id
                        AND workspace_id = :workspace_id
@@ -325,7 +333,17 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $overdueFlag = $normalized['overdue_flag'];
                 $overdueSinceDate = $normalized['overdue_since_date'];
                 $overdueDays = (int) ($normalized['overdue_days'] ?? 0);
+                $existingStatus = normalizeTaskStatus((string) ($existingTaskRow['status'] ?? 'todo'), $workspaceId);
+                $existingCompletedAt = trim((string) ($existingTaskRow['completed_at'] ?? ''));
                 $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
+                $updatedAt = nowIso();
+                $completedAt = taskCompletedAtValueForStatusChange(
+                    $status,
+                    $existingStatus,
+                    $existingCompletedAt,
+                    $updatedAt,
+                    $workspaceId
+                );
 
                 $reviewFileChanged =
                     encodeTaskReviewFile($existingReviewFile) !== encodeTaskReviewFile($reviewFile);
@@ -345,6 +363,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                          due_date = :dd,
                          overdue_flag = :of,
                          overdue_since_date = :osd,
+                         completed_at = :ca,
                          assigned_to = :at,
                          assignee_ids_json = :aj,
                          reference_links_json = :rl,
@@ -358,7 +377,6 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                        AND workspace_id = :workspace_id' . ($enforceTaskRevisionCheck ? '
                        AND updated_at = :expected_updated_at' : '')
                 );
-                $updatedAt = nowIso();
                 $updateParams = [
                     ':t' => $title,
                     ':tt' => $titleTag,
@@ -368,6 +386,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     ':dd' => $dueDate,
                     ':of' => $overdueFlag,
                     ':osd' => $overdueSinceDate,
+                    ':ca' => $completedAt,
                     ':at' => $assignedTo,
                     ':aj' => $assigneeIdsJson,
                     ':rl' => encodeReferenceUrlList($referenceLinks ?? []),
@@ -1039,7 +1058,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 $existingTaskStmt = $pdo->prepare(
-                    'SELECT status, overdue_flag, overdue_since_date, group_name
+                    'SELECT status, overdue_flag, overdue_since_date, completed_at, group_name
                      FROM tasks
                      WHERE id = :id
                        AND workspace_id = :workspace_id
@@ -1062,14 +1081,23 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingStatus = normalizeTaskStatus((string) ($existingTaskRow['status'] ?? 'todo'), $workspaceId);
                 $existingOverdueFlag = ((int) ($existingTaskRow['overdue_flag'] ?? 0)) === 1 ? 1 : 0;
                 $existingOverdueSinceDate = dueDateForStorage((string) ($existingTaskRow['overdue_since_date'] ?? ''));
+                $existingCompletedAt = trim((string) ($existingTaskRow['completed_at'] ?? ''));
                 $status = normalizeTaskStatus((string) ($_POST['status'] ?? 'todo'), $workspaceId);
                 $doneStatusKey = taskDoneStatusKey($workspaceId);
                 $updatedAt = nowIso();
+                $completedAt = taskCompletedAtValueForStatusChange(
+                    $status,
+                    $existingStatus,
+                    $existingCompletedAt,
+                    $updatedAt,
+                    $workspaceId
+                );
                 $stmt = $pdo->prepare(
                     'UPDATE tasks
                      SET status = :s,
                          overdue_flag = CASE WHEN :s = :done THEN 0 ELSE overdue_flag END,
                          overdue_since_date = CASE WHEN :s = :done THEN NULL ELSE overdue_since_date END,
+                         completed_at = :completed_at,
                          updated_at = :u
                      WHERE id = :id
                        AND workspace_id = :workspace_id'
@@ -1077,6 +1105,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $stmt->execute([
                     ':s' => $status,
                     ':done' => $doneStatusKey,
+                    ':completed_at' => $completedAt,
                     ':u' => $updatedAt,
                     ':id' => $taskId,
                     ':workspace_id' => $workspaceId,
