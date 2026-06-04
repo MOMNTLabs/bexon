@@ -74,6 +74,29 @@ function migrate(PDO $pdo): void
     ensureBillingSchema($pdo);
 }
 
+function runWithMigrationLock(PDO $pdo, callable $callback): mixed
+{
+    if (dbDriverName($pdo) !== 'pgsql') {
+        return $callback();
+    }
+
+    $lockParams = [
+        ':class_key' => 23117,
+        ':object_key' => 1001,
+    ];
+
+    $lockStmt = $pdo->prepare('SELECT pg_advisory_lock(:class_key, :object_key)');
+    $unlockStmt = $pdo->prepare('SELECT pg_advisory_unlock(:class_key, :object_key)');
+
+    $lockStmt->execute($lockParams);
+
+    try {
+        return $callback();
+    } finally {
+        $unlockStmt->execute($lockParams);
+    }
+}
+
 function migrateSqlite(PDO $pdo): void
 {
     $pdo->exec(

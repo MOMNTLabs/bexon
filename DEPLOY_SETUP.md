@@ -8,7 +8,7 @@ Este projeto pode rodar localmente com fallback para SQLite e arquivos em `stora
 - Nao dependa de fallback para SQLite em producao.
 - Defina `APP_VAULT_ENCRYPTION_KEY` com uma chave fixa fora do repositorio.
 - Mantenha `APP_AUTO_MIGRATE=false` em producao.
-- Execute migracoes de forma explicita no deploy.
+- Garanta que o deploy execute `php scripts/release.php` antes de atender trafego.
 
 ## Variaveis recomendadas
 
@@ -70,6 +70,10 @@ Rode o release completo com preflight + migracao:
 ```bash
 php scripts/release.php
 ```
+
+Se o deploy usar o `Dockerfile` deste repositorio, o container ja executa `php scripts/release.php`
+automaticamente no startup antes de subir o FrankenPHP. Em runtimes que ignoram esse `CMD`/entrypoint,
+mantenha esse passo explicitamente no pipeline.
 
 Se quiser rodar apenas as migracoes de forma explicita:
 

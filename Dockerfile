@@ -9,11 +9,13 @@ WORKDIR /app
 
 COPY . /app
 COPY Caddyfile /etc/caddy/Caddyfile
+COPY docker-entrypoint.sh /usr/local/bin/bexon-entrypoint
 
 RUN mkdir -p /app/storage \
-    && chown -R www-data:www-data /app/storage
+    && chown -R www-data:www-data /app/storage \
+    && chmod +x /usr/local/bin/bexon-entrypoint
 
 EXPOSE 8080
 
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+CMD ["/usr/local/bin/bexon-entrypoint"]
 
