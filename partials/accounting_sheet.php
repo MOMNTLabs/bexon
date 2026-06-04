@@ -247,11 +247,16 @@
                     'groups_by_workspace' => $accountingTaskLinkGroupsByWorkspace,
                     'users_by_workspace' => $accountingTaskLinkUsersByWorkspace,
                 ],
-                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_HEX_TAG
+                | JSON_HEX_AMP
+                | JSON_HEX_APOS
+                | JSON_HEX_QUOT
             ) ?: '{}';
             ?>
             <div class="accounting-sheet">
-                <script type="application/json" data-accounting-task-link-options><?= e($accountingTaskLinkOptionsJson) ?></script>
+                <script type="application/json" data-accounting-task-link-options><?= $accountingTaskLinkOptionsJson ?></script>
                 <div class="accounting-columns">
                     <section class="accounting-card is-expense-card<?= empty($accountingExpenseEntries) ? ' is-empty' : '' ?>">
                         <header class="accounting-card-head">

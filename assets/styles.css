@@ -14815,6 +14815,11 @@ select option:checked,
     margin-top: 2px;
 }
 
+.accounting-create-toggle[open] {
+    display: grid;
+    gap: 8px;
+}
+
 .accounting-card.is-empty .accounting-create-toggle {
     justify-self: start;
     width: 100%;
@@ -14855,7 +14860,7 @@ select option:checked,
 }
 
 .accounting-create-toggle[open] > .accounting-create-trigger {
-    display: none;
+    margin-bottom: 0;
 }
 
 .accounting-create-footer {
