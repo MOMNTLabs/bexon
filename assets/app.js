@@ -2116,25 +2116,6 @@ window.addEventListener("DOMContentLoaded", () => {
     normalizeDescriptionEditorLists(editor);
   };
 
-  const isDescriptionEditorEffectivelyEmpty = (editor) => {
-    if (!(editor instanceof HTMLElement)) return true;
-    return descriptionTextFromEditor(editor).trim() === "";
-  };
-
-  const seedDescriptionEditorParagraph = (editor) => {
-    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
-    editor.innerHTML = "<p><br></p>";
-    const paragraph = editor.querySelector("p");
-    if (paragraph instanceof HTMLElement) {
-      setSelectionAtElementStart(paragraph);
-    }
-  };
-
-  const clearDescriptionEditorIfEmpty = (editor) => {
-    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
-    editor.innerHTML = "";
-  };
-
   const descriptionInlineNodeToText = (node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent || "";
