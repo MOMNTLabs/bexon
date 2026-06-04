@@ -3184,19 +3184,12 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const taskStatusKindFromForm = (form) => {
-    if (!(form instanceof HTMLFormElement)) return "";
-    const statusSelect = form.querySelector('select[name="status"]');
-    return getStatusOptionKind(getSelectedStatusOption(statusSelect));
-  };
-
   const prepareTaskReviewFileFieldForSubmit = (form) => {
     if (!(form instanceof HTMLFormElement)) return null;
     const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
     if (!(reviewFileField instanceof HTMLInputElement)) return null;
 
-    const nextReviewFile =
-      taskStatusKindFromForm(form) === "done" ? null : readTaskReviewFileField(reviewFileField);
+    const nextReviewFile = readTaskReviewFileField(reviewFileField);
     writeTaskReviewFileField(reviewFileField, nextReviewFile, { withName: true });
     syncTaskReviewFileBadge(form);
     return nextReviewFile;
@@ -3854,16 +3847,15 @@ window.addEventListener("DOMContentLoaded", () => {
     const canEdit = taskDetailCanCurrentUserEditReviewFile(taskDetailContext, { editing: true });
     const statusKind = taskDetailReviewFileStatusKind({ editing: true });
     const canManage = canEdit && (statusKind === "review" || Boolean(file));
-    const willClearOnSave = Boolean(file) && statusKind === "done";
 
     taskDetailEditReviewFileWrap.hidden = !file && !canManage;
     taskDetailEditReviewFile.innerHTML = "";
 
     if (taskDetailEditReviewFileActions instanceof HTMLElement) {
-      taskDetailEditReviewFileActions.hidden = !canManage || willClearOnSave;
+      taskDetailEditReviewFileActions.hidden = !canManage;
     }
     if (taskDetailEditReviewFileAddButton instanceof HTMLButtonElement) {
-      taskDetailEditReviewFileAddButton.disabled = !canManage || willClearOnSave;
+      taskDetailEditReviewFileAddButton.disabled = !canManage;
       const labelWrap = taskDetailEditReviewFileAddButton.querySelector(".task-image-add-button-label");
       const buttonLabel = file ? "Trocar arquivo" : "Adicionar arquivo";
       if (labelWrap instanceof HTMLElement) {
@@ -3873,14 +3865,12 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
     if (taskDetailEditReviewFileRemoveButton instanceof HTMLButtonElement) {
-      taskDetailEditReviewFileRemoveButton.hidden = !canManage || !file || willClearOnSave;
-      taskDetailEditReviewFileRemoveButton.disabled = !canManage || !file || willClearOnSave;
+      taskDetailEditReviewFileRemoveButton.hidden = !canManage || !file;
+      taskDetailEditReviewFileRemoveButton.disabled = !canManage || !file;
     }
     if (taskDetailEditReviewFileNote instanceof HTMLElement) {
       let note = "";
-      if (willClearOnSave) {
-        note = "O arquivo sera removido ao salvar a tarefa como Concluido.";
-      } else if (!canEdit && file) {
+      if (!canEdit && file) {
         note = "Somente o responsavel pode alterar este arquivo.";
       }
       taskDetailEditReviewFileNote.textContent = note;
@@ -11911,6 +11901,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
     const currentReviewFile = readTaskReviewFileField(reviewFileField);
     if (currentReviewFile && !forcePrompt) return currentReviewFile;
+    if (!currentUserIsCheckedTaskAssignee(form)) return null;
 
     const wantsFile = await new Promise((resolve) => {
       if (!(confirmModal instanceof HTMLElement)) {
@@ -13596,10 +13587,6 @@ window.addEventListener("DOMContentLoaded", () => {
         showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
         return;
       }
-      if (getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus)) === "done") {
-        showClientFlash("error", "Troque o status antes de alterar o arquivo de revisao.");
-        return;
-      }
       void (async () => {
         const reviewFile = await chooseTaskReviewFile();
         if (!reviewFile) return;
@@ -14928,11 +14915,7 @@ window.addEventListener("DOMContentLoaded", () => {
       context.reviewFileField = ensureTaskReviewFileField(context.form, { withName: false });
     }
     if (context.reviewFileField instanceof HTMLInputElement) {
-      const nextReviewFile =
-        getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus)) === "done"
-          ? null
-          : taskDetailEditReviewFileItem;
-      writeTaskReviewFileField(context.reviewFileField, nextReviewFile, { withName: false });
+      writeTaskReviewFileField(context.reviewFileField, taskDetailEditReviewFileItem, { withName: false });
       syncTaskReviewFileBadge(context.form);
     }
     if (context.subtasksField instanceof HTMLInputElement) {
@@ -18036,7 +18019,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       if (createTaskReviewFileField instanceof HTMLInputElement) {
         const reviewFile = readTaskReviewFileField(createTaskReviewFileField);
-        if (reviewFile && isReviewStatus) {
+        if (reviewFile) {
           writeTaskReviewFileField(createTaskReviewFileField, reviewFile, { withName: true });
         } else {
           writeTaskReviewFileField(createTaskReviewFileField, null, { withName: false });

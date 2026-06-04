@@ -146,8 +146,8 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     $subtasksDependencyEnabled ??= 0;
                     $subtasks ??= [];
                     $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
-                    if (taskStatusKind($status, $workspaceId) === 'done') {
-                        $reviewFile = null;
+                    if ($reviewFile !== null && !in_array($actorUserId, $assigneeIds, true)) {
+                        throw new RuntimeException('Apenas o responsável pode alterar o arquivo de revisão.');
                     }
                     $stmt = $pdo->prepare(
                         'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
@@ -326,16 +326,12 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $overdueSinceDate = $normalized['overdue_since_date'];
                 $overdueDays = (int) ($normalized['overdue_days'] ?? 0);
                 $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
-                $nextStatusKind = taskStatusKind($status, $workspaceId);
-                if ($nextStatusKind === 'done') {
-                    $reviewFile = null;
-                }
 
                 $reviewFileChanged =
                     encodeTaskReviewFile($existingReviewFile) !== encodeTaskReviewFile($reviewFile);
                 $canEditReviewFile = in_array($actorUserId, $assigneeIds, true)
                     || in_array($actorUserId, $existingAssigneeIds, true);
-                if ($reviewFileChanged && $nextStatusKind !== 'done' && !$canEditReviewFile) {
+                if ($reviewFileChanged && !$canEditReviewFile) {
                     throw new RuntimeException('Apenas o responsável pode alterar o arquivo de revisão.');
                 }
 
