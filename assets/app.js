@@ -500,29 +500,6 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!(dropzone instanceof HTMLElement)) return;
-
-    const taskItems = Array.from(dropzone.children).filter(
-      (child) => child instanceof HTMLElement && child.matches("[data-task-item]") && !child.hidden
-    );
-
-    if (taskItems.length < 2) return;
-
-    const sorted = taskItems
-      .map((taskItem, index) => ({
-        taskItem,
-        index,
-        statusRank: taskStatusSortRank(getTaskItemStatusValue(taskItem), getTaskItemStatusOrder(taskItem)),
-        priorityRank: taskPrioritySortRank(getTaskItemPriorityValue(taskItem)),
-      }))
-      .sort((a, b) => {
-        if (a.statusRank !== b.statusRank) return a.statusRank - b.statusRank;
-        if (a.priorityRank !== b.priorityRank) return a.priorityRank - b.priorityRank;
-        return a.index - b.index;
-      });
-
-    sorted.forEach(({ taskItem }) => {
-      dropzone.append(taskItem);
-    });
   };
 
   const syncGroupStatusDividers = (groupSectionOrDropzone) => {
@@ -537,36 +514,6 @@ window.addEventListener("DOMContentLoaded", () => {
     dropzone
       .querySelectorAll("[data-task-status-divider]")
       .forEach((divider) => divider.remove());
-
-    const taskItems = Array.from(dropzone.children).filter(
-      (child) => child instanceof HTMLElement && child.matches("[data-task-item]")
-    );
-
-    if (taskItems.length < 2) return;
-
-    const uniqueStatuses = new Set(
-      taskItems.map((taskItem) => getTaskItemStatusValue(taskItem)).filter(Boolean)
-    );
-
-    if (uniqueStatuses.size <= 1) return;
-
-    let previousStatus = getTaskItemStatusValue(taskItems[0]);
-
-    taskItems.slice(1).forEach((taskItem) => {
-      const currentStatus = getTaskItemStatusValue(taskItem);
-      if (!currentStatus || currentStatus === previousStatus) {
-        previousStatus = currentStatus || previousStatus;
-        return;
-      }
-
-      const divider = document.createElement("div");
-      divider.className = "task-status-subgroup-divider";
-      divider.dataset.taskStatusDivider = "";
-      divider.setAttribute("aria-hidden", "true");
-      dropzone.insertBefore(divider, taskItem);
-
-      previousStatus = currentStatus;
-    });
   };
 
   const syncTaskRowStatusOverlay = (select) => {
@@ -1470,6 +1417,18 @@ window.addEventListener("DOMContentLoaded", () => {
       "[data-task-detail-edit-description-editor]"
     );
     if (taskDetailDescriptionEditorTarget instanceof HTMLElement) {
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        insertTaskDetailDescriptionLineBreak()
+      ) {
+        event.preventDefault();
+        return;
+      }
+
       if (event.key === " " && convertDashLineToListInTaskDetailEditor()) {
         event.preventDefault();
         return;
@@ -1497,6 +1456,18 @@ window.addEventListener("DOMContentLoaded", () => {
       "[data-create-task-description-editor]"
     );
     if (createTaskDescriptionEditorTarget instanceof HTMLElement) {
+      if (
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        insertCreateTaskDescriptionLineBreak()
+      ) {
+        event.preventDefault();
+        return;
+      }
+
       if (event.key === " " && convertDashLineToListInCreateTaskEditor()) {
         event.preventDefault();
         return;
@@ -1779,6 +1750,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const line = rawLine.trim();
       if (!line) {
         flushList();
+        paragraphLines.push("");
         paragraphLines.push("");
         return;
       }
@@ -2144,6 +2116,25 @@ window.addEventListener("DOMContentLoaded", () => {
     normalizeDescriptionEditorLists(editor);
   };
 
+  const isDescriptionEditorEffectivelyEmpty = (editor) => {
+    if (!(editor instanceof HTMLElement)) return true;
+    return descriptionTextFromEditor(editor).trim() === "";
+  };
+
+  const seedDescriptionEditorParagraph = (editor) => {
+    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
+    editor.innerHTML = "<p><br></p>";
+    const paragraph = editor.querySelector("p");
+    if (paragraph instanceof HTMLElement) {
+      setSelectionAtElementStart(paragraph);
+    }
+  };
+
+  const clearDescriptionEditorIfEmpty = (editor) => {
+    if (!(editor instanceof HTMLElement) || !isDescriptionEditorEffectivelyEmpty(editor)) return;
+    editor.innerHTML = "";
+  };
+
   const descriptionInlineNodeToText = (node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent || "";
@@ -2356,6 +2347,47 @@ window.addEventListener("DOMContentLoaded", () => {
   const syncDescriptionTextareaFromEditor = (textarea, editor) => {
     if (!(textarea instanceof HTMLTextAreaElement)) return;
     textarea.value = descriptionTextFromEditor(editor);
+  };
+
+  const isDescriptionSelectionInsideListItem = (editor) => {
+    const range = getDescriptionSelectionRange(editor);
+    if (!range) return false;
+
+    const startNode =
+      range.startContainer instanceof HTMLElement
+        ? range.startContainer
+        : range.startContainer.parentElement;
+    return Boolean(startNode?.closest("li"));
+  };
+
+  const insertDescriptionLineBreak = (editor, textarea) => {
+    if (!(editor instanceof HTMLElement)) return false;
+    const range = getDescriptionSelectionRange(editor);
+    if (!range || isDescriptionSelectionInsideListItem(editor)) {
+      return false;
+    }
+
+    editor.focus();
+    let inserted = false;
+    try {
+      inserted = document.execCommand("insertLineBreak", false);
+    } catch (error) {
+      inserted = false;
+    }
+
+    if (!inserted) {
+      const lineBreak = document.createElement("br");
+      range.deleteContents();
+      range.insertNode(lineBreak);
+      range.setStartAfter(lineBreak);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+
+    syncDescriptionTextareaFromEditor(textarea, editor);
+    return true;
   };
 
   const getDescriptionSelectionRange = (editor) => {
@@ -2599,6 +2631,17 @@ window.addEventListener("DOMContentLoaded", () => {
     syncTaskDetailDescriptionToolbar();
   };
 
+  const insertTaskDetailDescriptionLineBreak = () => {
+    const inserted = insertDescriptionLineBreak(
+      taskDetailEditDescriptionEditor,
+      taskDetailEditDescription
+    );
+    if (inserted) {
+      syncTaskDetailDescriptionToolbar();
+    }
+    return inserted;
+  };
+
   const convertDashLineToListInTaskDetailEditor = () => {
     const converted = convertDashLineToListInEditor(
       taskDetailEditDescriptionEditor,
@@ -2627,6 +2670,9 @@ window.addEventListener("DOMContentLoaded", () => {
     applyDescriptionFormat(createTaskDescriptionEditor, createTaskDescription, format);
   };
 
+  const insertCreateTaskDescriptionLineBreak = () =>
+    insertDescriptionLineBreak(createTaskDescriptionEditor, createTaskDescription);
+
   const convertDashLineToListInCreateTaskEditor = () =>
     convertDashLineToListInEditor(createTaskDescriptionEditor, createTaskDescription);
 
@@ -2637,6 +2683,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const maxReferenceItems = 20;
   const maxReferenceImageChars = 2_000_000;
   const maxReferenceImageTitleChars = 80;
+  const maxTaskReviewFileChars = 8_000_000;
+  const taskReviewFileAccept =
+    "image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip";
 
   const parseReferenceRawList = (value) => {
     if (Array.isArray(value)) {
@@ -2696,6 +2745,24 @@ window.addEventListener("DOMContentLoaded", () => {
     return normalizeHttpReference(raw);
   };
 
+  const normalizeTaskReviewFileDataUrl = (value, maxChars = maxTaskReviewFileChars) => {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+
+    const compact = raw.replace(/\s+/g, "");
+    const match = compact.match(/^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,[a-z0-9+/]+=*$/i);
+    if (!match || compact.length > maxChars) {
+      return null;
+    }
+
+    const mimeType = String(match[1] || "").toLowerCase();
+    if (!isAllowedTaskReviewFileMimeType(mimeType)) {
+      return null;
+    }
+
+    return compact;
+  };
+
   const normalizeReferenceImageTitle = (value) =>
     String(value || "")
       .replace(/\s+/g, " ")
@@ -2729,7 +2796,35 @@ window.addEventListener("DOMContentLoaded", () => {
     String(value || "")
       .replace(/\s+/g, "")
       .trim()
+      .toLowerCase()
       .slice(0, 140);
+
+  const dataUrlMimeType = (value) => {
+    const match = String(value || "").match(/^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,/i);
+    return match ? normalizeReferenceMediaMimeType(match[1] || "") : "";
+  };
+
+  function isAllowedTaskReviewFileMimeType(mimeType) {
+    const normalized = normalizeReferenceMediaMimeType(mimeType);
+    if (!normalized) return false;
+    if (normalized.startsWith("image/") && normalized !== "image/svg+xml") return true;
+    if (normalized.startsWith("video/")) return true;
+
+    return [
+      "application/msword",
+      "application/octet-stream",
+      "application/pdf",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/x-zip-compressed",
+      "application/zip",
+      "text/csv",
+      "text/plain",
+    ].includes(normalized);
+  }
 
   const isGoogleDriveMediaItem = (item) =>
     Boolean(item && typeof item === "object" && item.provider === "google_drive" && item.fileId);
@@ -2787,7 +2882,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!item || typeof item !== "object") return "";
 
     if (isVideoReferenceMediaItem(item)) {
-      return normalizeHttpReference(item.downloadUrl || item.webViewLink || item.src || "");
+      return resolveReferenceMediaAssetUrl(item.downloadUrl || item.webViewLink || item.src || "");
     }
 
     if (isGoogleDriveMediaItem(item)) {
@@ -2804,6 +2899,8 @@ window.addEventListener("DOMContentLoaded", () => {
   const normalizeReferenceImageMediaItem = (value) => {
     let source = value;
     let title = "";
+    let explicitMimeType = "";
+    let explicitName = "";
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const provider = String(value.provider || "").trim().toLowerCase();
@@ -2844,12 +2941,19 @@ window.addEventListener("DOMContentLoaded", () => {
 
       source = value.src ?? value.url ?? value.image ?? value.value ?? "";
       title = normalizeReferenceImageTitle(value.title ?? value.name ?? value.label ?? "");
+      explicitMimeType = normalizeReferenceMediaMimeType(value.mime_type ?? value.mimeType ?? "");
+      explicitName = normalizeReferenceMediaName(value.name ?? value.label ?? "");
     }
 
-    const src = normalizeImageReference(source);
+    const imageSrc = normalizeImageReference(source);
+    const reviewFileDataSrc = normalizeTaskReviewFileDataUrl(source);
+    const src = imageSrc || reviewFileDataSrc;
     if (!src) return null;
 
-    return { src, title };
+    const mimeType = explicitMimeType || dataUrlMimeType(src);
+    const item = { src, title, mimeType };
+    if (explicitName) item.name = explicitName;
+    return item;
   };
 
   const formatReferenceLinkLabel = (value) => {
@@ -2944,6 +3048,139 @@ window.addEventListener("DOMContentLoaded", () => {
   const writeReferenceImageMediaField = (field, values) => {
     if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) return;
     field.value = JSON.stringify(serializeReferenceImageMediaItems(values || []));
+  };
+
+  const normalizeTaskReviewFileName = (value) => {
+    const normalized = String(value || "")
+      .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[. ]+$/g, "")
+      .slice(0, 180);
+    return normalized || "arquivo-para-revisao";
+  };
+
+  const taskReviewFileKind = (mimeType) => {
+    const normalized = normalizeReferenceMediaMimeType(mimeType);
+    if (normalized.startsWith("image/")) return "image";
+    if (normalized.startsWith("video/")) return "video";
+    return "file";
+  };
+
+  const normalizeTaskReviewFileItem = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+    const src = normalizeTaskReviewFileDataUrl(value.src || value.data_url || value.dataUrl || value.url || "");
+    if (!src) return null;
+
+    const mimeType =
+      normalizeReferenceMediaMimeType(value.mime_type || value.mimeType || "") ||
+      dataUrlMimeType(src);
+    if (!isAllowedTaskReviewFileMimeType(mimeType)) return null;
+
+    const uploaderName = String(value.uploader_name || value.uploaderName || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
+    const uploaderInitial = String(value.uploader_initial || value.uploaderInitial || uploaderName || "U")
+      .trim()
+      .slice(0, 1)
+      .toUpperCase();
+
+    const item = {
+      src,
+      name: normalizeTaskReviewFileName(value.name || value.title || value.label || ""),
+      mimeType,
+      mime_type: mimeType,
+      kind: taskReviewFileKind(mimeType),
+      size: Math.max(0, Number.parseInt(String(value.size || "0"), 10) || 0),
+      uploadedAt: String(value.uploaded_at || value.uploadedAt || "").trim(),
+      uploaded_at: String(value.uploaded_at || value.uploadedAt || "").trim(),
+      uploadedBy: Math.max(0, Number.parseInt(String(value.uploaded_by || value.uploadedBy || "0"), 10) || 0),
+      uploaded_by: Math.max(0, Number.parseInt(String(value.uploaded_by || value.uploadedBy || "0"), 10) || 0),
+      uploaderName,
+      uploader_name: uploaderName,
+      uploaderAvatarUrl: resolveReferenceMediaAssetUrl(value.uploader_avatar_url || value.uploaderAvatarUrl || ""),
+      uploader_avatar_url: resolveReferenceMediaAssetUrl(value.uploader_avatar_url || value.uploaderAvatarUrl || ""),
+      uploaderInitial,
+      uploader_initial: uploaderInitial,
+    };
+
+    return item;
+  };
+
+  const readTaskReviewFileField = (field) => {
+    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) return null;
+    const raw = String(field.value || "").trim();
+    if (!raw || raw === "{}") return null;
+    try {
+      return normalizeTaskReviewFileItem(JSON.parse(raw));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const serializeTaskReviewFileItem = (item) => {
+    const normalized = normalizeTaskReviewFileItem(item);
+    if (!normalized) return null;
+    const serialized = {
+      src: normalized.src,
+      name: normalized.name,
+      mime_type: normalized.mimeType,
+      kind: normalized.kind,
+    };
+    if (normalized.size > 0) serialized.size = normalized.size;
+    if (normalized.uploaded_at) serialized.uploaded_at = normalized.uploaded_at;
+    if (normalized.uploaded_by > 0) serialized.uploaded_by = normalized.uploaded_by;
+    if (normalized.uploader_name) serialized.uploader_name = normalized.uploader_name;
+    if (normalized.uploader_avatar_url) serialized.uploader_avatar_url = normalized.uploader_avatar_url;
+    if (normalized.uploader_initial) serialized.uploader_initial = normalized.uploader_initial;
+    return serialized;
+  };
+
+  const writeTaskReviewFileField = (field, item, { withName = false } = {}) => {
+    if (!(field instanceof HTMLInputElement) && !(field instanceof HTMLTextAreaElement)) return;
+    const serialized = serializeTaskReviewFileItem(item);
+    field.value = serialized ? JSON.stringify(serialized) : "{}";
+    if (withName) {
+      field.name = "review_file_json";
+    } else {
+      field.removeAttribute("name");
+    }
+  };
+
+  const ensureTaskReviewFileField = (form, { withName = false } = {}) =>
+    ensureTaskHiddenField(form, {
+      name: "review_file_json",
+      withName,
+      dataSelector: "[data-task-review-file-json]",
+      dataAttrName: "data-task-review-file-json",
+    });
+
+  const syncTaskReviewFileBadge = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+    const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
+    const reviewFile = readTaskReviewFileField(reviewFileField);
+    const stepper = form.querySelector("[data-status-stepper]");
+    if (!(stepper instanceof HTMLElement)) return;
+
+    let badge = stepper.querySelector("[data-task-review-file-badge]");
+    if (!reviewFile) {
+      if (badge instanceof HTMLElement) badge.remove();
+      form.closest("[data-task-item]")?.classList?.remove("has-review-file");
+      return;
+    }
+
+    if (!(badge instanceof HTMLElement)) {
+      badge = document.createElement("span");
+      badge.className = "task-review-file-badge";
+      badge.dataset.taskReviewFileBadge = "";
+      badge.textContent = "Arquivo";
+      const nextButton = stepper.querySelector('[data-status-step="-1"]');
+      stepper.insertBefore(badge, nextButton instanceof HTMLElement ? nextButton : stepper.firstChild);
+    }
+    badge.title = "Arquivo para revisao anexado";
+    form.closest("[data-task-item]")?.classList?.add("has-review-file");
   };
 
   const readJsonUrlListField = (field, parser = parseReferenceUrlLines) => {
@@ -3209,6 +3446,8 @@ window.addEventListener("DOMContentLoaded", () => {
         return "Solicitação de ajuste na descrição";
       case "revision_removed":
         return "Solicitação de ajuste removida";
+      case "review_file_added":
+        return "Arquivo para revisao anexado";
       case "overdue_started":
         return `Atraso detectado (${Math.max(0, Number(payload.overdue_days) || 0)} dia(s))`;
       case "overdue_cleared":
@@ -3406,6 +3645,119 @@ window.addEventListener("DOMContentLoaded", () => {
     if (taskDetailViewReferences instanceof HTMLElement) {
       taskDetailViewReferences.hidden = safeLinks.length === 0 && safeMedia.length === 0;
     }
+  };
+
+  const formatTaskReviewFileSize = (size) => {
+    const bytes = Math.max(0, Number.parseInt(String(size || "0"), 10) || 0);
+    if (!bytes) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 102.4) / 10} KB`;
+    return `${Math.round(bytes / (1024 * 102.4)) / 10} MB`;
+  };
+
+  const taskReviewFilePreviewMediaItem = (reviewFile) => {
+    const file = normalizeTaskReviewFileItem(reviewFile);
+    if (!file || !["image", "video"].includes(file.kind)) return null;
+    return normalizeTaskPreviewMediaItem({
+      src: file.src,
+      name: file.name,
+      title: file.name,
+      mimeType: file.mimeType,
+      mime_type: file.mimeType,
+    });
+  };
+
+  const renderTaskDetailReviewFileView = (reviewFile = null) => {
+    const file = normalizeTaskReviewFileItem(reviewFile);
+    if (taskDetailViewReviewFileWrap instanceof HTMLElement) {
+      taskDetailViewReviewFileWrap.hidden = !file;
+    }
+    if (!(taskDetailViewReviewFile instanceof HTMLElement)) return;
+
+    taskDetailViewReviewFile.innerHTML = "";
+    if (!file) return;
+
+    const card = document.createElement("div");
+    card.className = "task-detail-review-file-card";
+
+    const previewItem = taskReviewFilePreviewMediaItem(file);
+    const media = previewItem
+      ? createReferenceMediaPreviewButton(previewItem, "data-task-review-file-preview", 0, {
+          compact: true,
+        })
+      : document.createElement("div");
+
+    if (!previewItem) {
+      media.className = "task-detail-review-file-placeholder";
+      media.setAttribute("aria-hidden", "true");
+      media.textContent = "Arquivo";
+    } else {
+      media.classList.add("task-detail-review-file-preview");
+    }
+
+    const body = document.createElement("div");
+    body.className = "task-detail-review-file-body";
+
+    const title = document.createElement("strong");
+    title.className = "task-detail-review-file-name";
+    title.textContent = file.name || "arquivo-para-revisao";
+
+    const meta = document.createElement("span");
+    meta.className = "task-detail-review-file-meta";
+    meta.textContent = [file.mimeType, formatTaskReviewFileSize(file.size)].filter(Boolean).join(" - ");
+
+    body.append(title);
+    if (meta.textContent) body.append(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "task-detail-review-file-actions";
+
+    const uploader = document.createElement("span");
+    uploader.className = "task-detail-review-file-uploader";
+    const uploaderName = file.uploaderName || file.uploader_name || "Usuario";
+    uploader.title = uploaderName;
+    uploader.setAttribute("aria-label", `Enviado por ${uploaderName}`);
+    const avatarUrl = file.uploaderAvatarUrl || file.uploader_avatar_url || "";
+    if (avatarUrl) {
+      const avatar = document.createElement("img");
+      avatar.src = avatarUrl;
+      avatar.alt = "";
+      avatar.loading = "lazy";
+      avatar.decoding = "async";
+      uploader.append(avatar);
+    } else {
+      uploader.textContent = file.uploaderInitial || file.uploader_initial || "U";
+    }
+    actions.append(uploader);
+
+    const downloadUrl = referenceMediaDownloadUrl({
+      src: file.src,
+      name: file.name,
+      mimeType: file.mimeType,
+    });
+    if (downloadUrl) {
+      const download = document.createElement("a");
+      download.className = "task-detail-ref-download-link task-detail-review-file-download";
+      download.href = downloadUrl;
+      download.target = "_blank";
+      download.rel = "noreferrer noopener";
+      download.setAttribute("download", referenceMediaDownloadName({
+        src: file.src,
+        name: file.name,
+        mimeType: file.mimeType,
+      }));
+      download.title = `Baixar ${file.name || "arquivo"}`;
+      download.setAttribute("aria-label", `Baixar ${file.name || "arquivo"}`);
+      const downloadIcon = document.createElement("span");
+      downloadIcon.className = "task-detail-ref-download-icon";
+      downloadIcon.setAttribute("aria-hidden", "true");
+      downloadIcon.innerHTML = "&#8681;";
+      download.append(downloadIcon);
+      actions.append(download);
+    }
+
+    card.append(media, body, actions);
+    taskDetailViewReviewFile.append(card);
   };
 
   const syncDueDateDisplay = (input) => {
@@ -6858,6 +7210,16 @@ window.addEventListener("DOMContentLoaded", () => {
           imagesField.removeAttribute("name");
         }
       }
+      if (typeof task.review_file_json === "string") {
+        const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
+        if (reviewFileField instanceof HTMLInputElement) {
+          reviewFileField.value = task.review_file_json || "{}";
+          reviewFileField.removeAttribute("name");
+          if (taskDetailContext && taskDetailContext.form === form) {
+            taskDetailContext.reviewFileField = reviewFileField;
+          }
+        }
+      }
       if (typeof task.subtasks_json === "string") {
         const subtasksField = form.querySelector("[data-task-subtasks-json]");
         const subtasksDependencyField = ensureTaskHiddenField(form, {
@@ -6990,6 +7352,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
       syncTaskRevisionBadge(form);
+      syncTaskReviewFileBadge(form);
 
       if (taskItem instanceof HTMLElement && typeof task.group_name === "string") {
         moveTaskItemToGroupDom(taskItem, task.group_name);
@@ -7033,6 +7396,10 @@ window.addEventListener("DOMContentLoaded", () => {
         const referenceImagesField = form.querySelector("[data-task-reference-images-json]");
         if (referenceImagesField instanceof HTMLInputElement) {
           referenceImagesField.removeAttribute("name");
+        }
+        const reviewFileField = form.querySelector("[data-task-review-file-json]");
+        if (reviewFileField instanceof HTMLInputElement) {
+          reviewFileField.removeAttribute("name");
         }
       }
       form.classList.remove("is-saving");
@@ -7203,6 +7570,20 @@ window.addEventListener("DOMContentLoaded", () => {
         if (taskItem instanceof HTMLElement) {
           moveTaskItemToGroupDom(taskItem, target.value || "Geral");
           syncTaskGroupInputs();
+        }
+      }
+      if (target instanceof HTMLSelectElement && target.matches(".status-select")) {
+        const previousStatusKind = String(target.dataset.previousStatusKind || "").trim();
+        const nextStatusKind = getStatusOptionKind(getSelectedStatusOption(target));
+        target.dataset.previousStatusKind = nextStatusKind;
+        target.dataset.previousStatusValue = target.value || "";
+
+        if (nextStatusKind === "review" && previousStatusKind !== "review") {
+          void (async () => {
+            await maybeAttachReviewFileForStatusChange(form, target);
+            scheduleTaskAutosave(form, 180);
+          })();
+          return;
         }
       }
       scheduleTaskAutosave(form, 180);
@@ -7868,6 +8249,10 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      if (statusSelect.classList.contains("status-select")) {
+        statusSelect.dataset.previousStatusKind = getStatusOptionKind(getSelectedStatusOption(statusSelect));
+        statusSelect.dataset.previousStatusValue = statusSelect.value || "";
+      }
       statusSelect.selectedIndex = nextIndex;
       syncSelectColor(statusSelect);
       statusSelect.dispatchEvent(new Event("change", { bubbles: true }));
@@ -7894,11 +8279,30 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       const changed = select.value !== nextValue;
+      if (changed && select.classList.contains("status-select")) {
+        select.dataset.previousStatusKind = getStatusOptionKind(getSelectedStatusOption(select));
+        select.dataset.previousStatusValue = select.value || "";
+      }
       select.value = nextValue;
       syncSelectColor(select);
 
       if (details instanceof HTMLDetailsElement) {
         details.open = false;
+      }
+
+      if (!changed && select.classList.contains("status-select")) {
+        const form = select.closest("[data-task-autosave-form]");
+        const nextStatusKind = getStatusOptionKind(getSelectedStatusOption(select));
+        const reviewFileField =
+          form instanceof HTMLFormElement ? ensureTaskReviewFileField(form, { withName: false }) : null;
+        const hasReviewFile = Boolean(readTaskReviewFileField(reviewFileField));
+        if (form instanceof HTMLFormElement && nextStatusKind === "review" && !hasReviewFile) {
+          void (async () => {
+            await maybeAttachReviewFileForStatusChange(form, select);
+            scheduleTaskAutosave(form, 180);
+          })();
+        }
+        return;
       }
 
       if (changed) {
@@ -8619,6 +9023,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const createTaskLinkConfirmButton = document.querySelector("[data-create-task-link-confirm]");
   const createTaskLinkCancelButton = document.querySelector("[data-create-task-link-cancel]");
   const createTaskImagesField = document.querySelector("[data-create-task-images]");
+  const createTaskReviewFileField = document.querySelector("[data-create-task-review-file]");
   const createTaskSubtasksField = document.querySelector("[data-create-task-subtasks]");
   const createTaskSubtasksList = document.querySelector("[data-create-task-subtasks-list]");
   const createTaskSubtasksDependencyInput = document.querySelector(
@@ -8747,6 +9152,8 @@ window.addEventListener("DOMContentLoaded", () => {
   );
   const taskDetailViewSubtasksWrap = document.querySelector("[data-task-detail-view-subtasks-wrap]");
   const taskDetailViewSubtasks = document.querySelector("[data-task-detail-view-subtasks]");
+  const taskDetailViewReviewFileWrap = document.querySelector("[data-task-detail-view-review-file-wrap]");
+  const taskDetailViewReviewFile = document.querySelector("[data-task-detail-view-review-file]");
   const taskDetailViewReferences = document.querySelector("[data-task-detail-view-references]");
   const taskDetailViewLinksWrap = document.querySelector("[data-task-detail-view-links-wrap]");
   const taskDetailViewLinks = document.querySelector("[data-task-detail-view-links]");
@@ -11220,6 +11627,110 @@ window.addEventListener("DOMContentLoaded", () => {
       reader.readAsDataURL(file);
     });
 
+  const chooseTaskReviewFile = () =>
+    new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = taskReviewFileAccept;
+      input.hidden = true;
+      let settled = false;
+      let changeHandled = false;
+
+      const cleanup = () => {
+        input.remove();
+      };
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      input.addEventListener("change", async () => {
+        changeHandled = true;
+        const file = input.files?.[0] || null;
+        if (!(file instanceof File)) {
+          finish(null);
+          return;
+        }
+
+        try {
+          if (!isAllowedTaskReviewFileMimeType(file.type || "application/octet-stream")) {
+            showClientFlash("error", "Tipo de arquivo para revisao nao permitido.");
+            finish(null);
+            return;
+          }
+
+          const dataUrl = await readFileAsDataUrl(file);
+          const normalizedSource = normalizeTaskReviewFileDataUrl(dataUrl);
+          if (!normalizedSource) {
+            showClientFlash("error", "Arquivo para revisao muito grande ou invalido.");
+            finish(null);
+            return;
+          }
+
+          finish(
+            normalizeTaskReviewFileItem({
+              src: normalizedSource,
+              name: file.name || "arquivo-para-revisao",
+              mime_type: file.type || dataUrlMimeType(normalizedSource) || "application/octet-stream",
+              size: file.size || 0,
+            })
+          );
+        } catch (_error) {
+          showClientFlash("error", "Nao foi possivel ler o arquivo para revisao.");
+          finish(null);
+        }
+      });
+
+      input.addEventListener("cancel", () => {
+        finish(null);
+      });
+
+      document.body.append(input);
+      window.addEventListener(
+        "focus",
+        () => {
+          const startedAt = Date.now();
+          const waitForSelection = () => {
+            if (settled || changeHandled) return;
+            if (input.files && input.files.length) return;
+            if (Date.now() - startedAt < 1500) {
+              window.setTimeout(waitForSelection, 120);
+              return;
+            }
+            finish(null);
+          };
+          window.setTimeout(waitForSelection, 120);
+        },
+        { once: true }
+      );
+      input.click();
+    });
+
+  const maybeAttachReviewFileForStatusChange = async (form, statusSelect, { forcePrompt = false } = {}) => {
+    if (!(form instanceof HTMLFormElement)) return null;
+    if (!(statusSelect instanceof HTMLSelectElement)) return null;
+
+    const statusKind = getStatusOptionKind(getSelectedStatusOption(statusSelect));
+    if (statusKind !== "review") return null;
+
+    const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
+    const currentReviewFile = readTaskReviewFileField(reviewFileField);
+    if (currentReviewFile && !forcePrompt) return currentReviewFile;
+
+    const wantsFile = window.confirm("Deseja incluir um arquivo para revisao?");
+    if (!wantsFile) return null;
+
+    const reviewFile = await chooseTaskReviewFile();
+    if (!reviewFile) return null;
+
+    const writableField = ensureTaskReviewFileField(form, { withName: true });
+    writeTaskReviewFileField(writableField, reviewFile, { withName: true });
+    syncTaskReviewFileBadge(form);
+    return reviewFile;
+  };
+
   const addTaskDetailImagesFromFiles = async (files) => {
     const imageFiles = Array.from(files || []).filter(
       (file) => file instanceof File && String(file.type || "").toLowerCase().startsWith("image/")
@@ -13489,6 +14000,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const titleTagColorField = form.querySelector("[data-task-title-tag-color]");
     const referenceLinksField = form.querySelector('[data-task-reference-links-json]');
     const referenceImagesField = form.querySelector('[data-task-reference-images-json]');
+    const reviewFileField = form.querySelector("[data-task-review-file-json]");
     const subtasksField = form.querySelector("[data-task-subtasks-json]");
     const subtasksDependencyField = form.querySelector("[data-task-subtasks-dependency]");
     const overdueFlagField = form.querySelector("[data-task-overdue-flag]");
@@ -13525,6 +14037,7 @@ window.addEventListener("DOMContentLoaded", () => {
       titleTagColorField: titleTagColorField instanceof HTMLInputElement ? titleTagColorField : null,
       referenceLinksField: referenceLinksField instanceof HTMLInputElement ? referenceLinksField : null,
       referenceImagesField: referenceImagesField instanceof HTMLInputElement ? referenceImagesField : null,
+      reviewFileField: reviewFileField instanceof HTMLInputElement ? reviewFileField : null,
       subtasksField: subtasksField instanceof HTMLInputElement ? subtasksField : null,
       subtasksDependencyField:
         subtasksDependencyField instanceof HTMLInputElement ? subtasksDependencyField : null,
@@ -13592,6 +14105,16 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         imagesField.removeAttribute("name");
         context.referenceImagesField = imagesField;
+      }
+
+      const reviewFileField = ensureTaskReviewFileField(context.form, { withName: false });
+      if (reviewFileField instanceof HTMLInputElement) {
+        if (typeof task.review_file_json === "string") {
+          reviewFileField.value = task.review_file_json || "{}";
+          reviewFileField.removeAttribute("name");
+        }
+        context.reviewFileField = reviewFileField;
+        syncTaskReviewFileBadge(context.form);
       }
 
       const subtasksField = ensureTaskHiddenField(context.form, {
@@ -13781,6 +14304,7 @@ window.addEventListener("DOMContentLoaded", () => {
       titleTagColorField,
       referenceLinksField,
       referenceImagesField,
+      reviewFileField,
       subtasksField,
       subtasksDependencyField,
       overdueFlagField,
@@ -13805,6 +14329,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const description = (descriptionField.value || "").trim();
     const referenceLinks = readJsonUrlListField(referenceLinksField, parseReferenceUrlLines);
     const referenceImages = readReferenceImageMediaField(referenceImagesField);
+    const reviewFile = readTaskReviewFileField(reviewFileField);
     const subtasksDependencyEnabled = readTaskSubtasksDependencyField(subtasksDependencyField, false);
     const subtasks = readTaskSubtasksField(subtasksField, {
       enforceDependency: subtasksDependencyEnabled,
@@ -13864,6 +14389,7 @@ window.addEventListener("DOMContentLoaded", () => {
       dependencyEnabled: subtasksDependencyEnabled,
     });
     renderTaskDetailReferencesView({ links: referenceLinks, images: referenceImages });
+    renderTaskDetailReviewFileView(reviewFile);
     renderTaskDetailHistoryView({
       history,
       overdueFlag,
@@ -14543,6 +15069,8 @@ window.addEventListener("DOMContentLoaded", () => {
       taskDetailEditDescription.value = editedDescription;
       syncTaskDetailDescriptionEditorFromTextarea();
     }
+    const previousStatusKind = getStatusOptionKind(getSelectedStatusOption(taskDetailContext.statusSelect));
+    const nextStatusKind = getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus));
     if (!copyTaskDetailModalToRow(taskDetailContext)) return;
     taskDetailSaveInFlight = true;
     try {
@@ -14557,6 +15085,10 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!idle) {
           return;
         }
+      }
+
+      if (nextStatusKind === "review" && previousStatusKind !== "review") {
+        await maybeAttachReviewFileForStatusChange(taskDetailContext.form, taskDetailContext.statusSelect);
       }
 
       const ok = await submitTaskAutosave(taskDetailContext.form);
@@ -15306,6 +15838,10 @@ window.addEventListener("DOMContentLoaded", () => {
       setCreateTaskReferenceLinks([]);
       setCreateTaskSubtasks([]);
       renderCreateTaskSubtasksEditList();
+      const reviewFileField = ensureTaskReviewFileField(createTaskForm, { withName: false });
+      writeTaskReviewFileField(reviewFileField, null, { withName: false });
+      delete createTaskForm.dataset.reviewFilePromptHandled;
+      syncTaskReviewFileBadge(createTaskForm);
       closeInlineAddForm(createTaskLinkAddForm, createTaskLinkInput);
       closeInlineAddForm(createTaskSubtaskAddForm, createTaskSubtaskInput);
       createTaskForm
@@ -16401,6 +16937,19 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const reviewFilePreviewTrigger = target.closest("[data-task-review-file-preview]");
+    if (reviewFilePreviewTrigger instanceof HTMLElement) {
+      const reviewFile = readTaskReviewFileField(taskDetailContext?.reviewFileField);
+      const previewItem = taskReviewFilePreviewMediaItem(reviewFile);
+      if (previewItem) {
+        openTaskImagePreview({
+          items: [previewItem],
+          index: 0,
+        });
+      }
+      return;
+    }
+
     const downloadAllTrigger = target.closest("[data-task-detail-download-all]");
     if (downloadAllTrigger instanceof HTMLButtonElement) {
       const downloadLinks = Array.from(
@@ -17075,7 +17624,28 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   if (createTaskForm) {
-    createTaskForm.addEventListener("submit", () => {
+    createTaskForm.addEventListener("submit", (event) => {
+      const statusField = createTaskForm.querySelector('select[name="status"]');
+      const isReviewStatus =
+        statusField instanceof HTMLSelectElement &&
+        getStatusOptionKind(getSelectedStatusOption(statusField)) === "review";
+      const reviewPromptHandled = createTaskForm.dataset.reviewFilePromptHandled === "1";
+      if (
+        isReviewStatus &&
+        !reviewPromptHandled &&
+        !readTaskReviewFileField(createTaskReviewFileField)
+      ) {
+        event.preventDefault();
+        createTaskForm.dataset.reviewFilePromptHandled = "1";
+        void (async () => {
+          await maybeAttachReviewFileForStatusChange(createTaskForm, statusField);
+          createTaskForm.requestSubmit(
+            createTaskSubmitButton instanceof HTMLButtonElement ? createTaskSubmitButton : undefined
+          );
+        })();
+        return;
+      }
+      delete createTaskForm.dataset.reviewFilePromptHandled;
       clearGoogleDriveBrowserResumeState();
       if (createTaskTitleInput instanceof HTMLInputElement) {
         applyFirstLetterUppercaseToInput(createTaskTitleInput);
@@ -17104,6 +17674,14 @@ window.addEventListener("DOMContentLoaded", () => {
 
       if (createTaskImagesField instanceof HTMLTextAreaElement) {
         writeReferenceImageMediaField(createTaskImagesField, createTaskImageItems);
+      }
+      if (createTaskReviewFileField instanceof HTMLInputElement) {
+        const reviewFile = readTaskReviewFileField(createTaskReviewFileField);
+        if (reviewFile && isReviewStatus) {
+          writeTaskReviewFileField(createTaskReviewFileField, reviewFile, { withName: true });
+        } else {
+          writeTaskReviewFileField(createTaskReviewFileField, null, { withName: false });
+        }
       }
       if (createTaskSubtasksField instanceof HTMLTextAreaElement) {
         createTaskSubtasksField.value = JSON.stringify(

@@ -49,8 +49,12 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $description = trim((string) ($_POST['description'] ?? ''));
                 $referenceLinksPosted = array_key_exists('reference_links_json', $_POST);
                 $referenceImagesPosted = array_key_exists('reference_images_json', $_POST);
+                $reviewFilePosted = array_key_exists('review_file_json', $_POST);
                 $subtasksPosted = array_key_exists('subtasks_json', $_POST);
                 $subtasksDependencyPosted = array_key_exists('subtasks_dependency_enabled', $_POST);
+                $actorUser = is_array($usersById[$actorUserId] ?? null)
+                    ? $usersById[$actorUserId]
+                    : $authUser;
                 $subtasksDependencyEnabled = $subtasksDependencyPosted
                     ? normalizePermissionFlag($_POST['subtasks_dependency_enabled'] ?? 0)
                     : null;
@@ -60,6 +64,16 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $referenceImages = $referenceImagesPosted
                     ? decodeReferenceImageList((string) ($_POST['reference_images_json'] ?? '[]'))
                     : null;
+                $reviewFile = null;
+                if ($reviewFilePosted) {
+                    $reviewFileRaw = trim((string) ($_POST['review_file_json'] ?? ''));
+                    if ($reviewFileRaw !== '' && $reviewFileRaw !== '{}') {
+                        $reviewFile = normalizeTaskReviewFile($reviewFileRaw, $actorUser);
+                        if ($reviewFile === null) {
+                            throw new RuntimeException('Arquivo para revisao invalido.');
+                        }
+                    }
+                }
                 $subtasks = $subtasksPosted
                     ? decodeTaskSubtasks(
                         (string) ($_POST['subtasks_json'] ?? '[]'),
@@ -128,12 +142,13 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     $overdueSinceDate = $normalized['overdue_since_date'];
                     $referenceLinks ??= [];
                     $referenceImages ??= [];
+                    $reviewFile ??= null;
                     $subtasksDependencyEnabled ??= 0;
                     $subtasks ??= [];
                     $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
                     $stmt = $pdo->prepare(
-                        'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
-                         VALUES (:workspace_id, :t, :tt, :d, :s, :p, :dd, :of, :osd, :cb, :at, :aj, :rl, :ri, :sj, :sde, :g, :c, :u)'
+                        'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
+                         VALUES (:workspace_id, :t, :tt, :d, :s, :p, :dd, :of, :osd, :cb, :at, :aj, :rl, :ri, :rf, :sj, :sde, :g, :c, :u)'
                     );
                     $now = nowIso();
                     $stmt->execute([
@@ -151,6 +166,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         ':aj' => $assigneeIdsJson,
                         ':rl' => encodeReferenceUrlList($referenceLinks),
                         ':ri' => encodeReferenceImageList($referenceImages),
+                        ':rf' => encodeTaskReviewFile($reviewFile),
                         ':sj' => encodeTaskSubtasks($subtasks, $subtasksDependencyEnabled === 1),
                         ':sde' => $subtasksDependencyEnabled,
                         ':g' => $groupName,
@@ -200,6 +216,21 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                             );
                         }
 
+                        if ($reviewFile !== null) {
+                            logTaskHistory(
+                                $pdo,
+                                $createdTaskId,
+                                'review_file_added',
+                                [
+                                    'name' => (string) ($reviewFile['name'] ?? 'arquivo-para-revisao'),
+                                    'mime_type' => (string) ($reviewFile['mime_type'] ?? ''),
+                                    'kind' => (string) ($reviewFile['kind'] ?? 'file'),
+                                ],
+                                $actorUserId,
+                                $now
+                            );
+                        }
+
                         taskUndoPushOperation(
                             $workspaceId,
                             taskUndoBuildOperation(
@@ -218,7 +249,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Tarefa inválida.');
                 }
                 $existingTaskStmt = $pdo->prepare(
-                    'SELECT title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, assignee_ids_json, group_name, reference_links_json, reference_images_json, subtasks_json, subtasks_dependency_enabled, updated_at
+                    'SELECT title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, assignee_ids_json, group_name, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, updated_at
                      FROM tasks
                      WHERE id = :id
                        AND workspace_id = :workspace_id
@@ -248,6 +279,9 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
                 if ($referenceImages === null) {
                     $referenceImages = decodeReferenceImageList($existingTaskRow['reference_images_json'] ?? null);
+                }
+                if (!$reviewFilePosted) {
+                    $reviewFile = decodeTaskReviewFile($existingTaskRow['review_file_json'] ?? null);
                 }
                 if ($subtasksDependencyEnabled === null) {
                     $subtasksDependencyEnabled = normalizePermissionFlag(
@@ -299,6 +333,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                          assignee_ids_json = :aj,
                          reference_links_json = :rl,
                          reference_images_json = :ri,
+                         review_file_json = :rf,
                          subtasks_json = :sj,
                          subtasks_dependency_enabled = :sde,
                          group_name = :g,
@@ -321,6 +356,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     ':aj' => $assigneeIdsJson,
                     ':rl' => encodeReferenceUrlList($referenceLinks ?? []),
                     ':ri' => encodeReferenceImageList($referenceImages ?? []),
+                    ':rf' => encodeTaskReviewFile($reviewFile),
                     ':sj' => encodeTaskSubtasks($subtasks ?? [], $subtasksDependencyEnabled === 1),
                     ':sde' => $subtasksDependencyEnabled,
                     ':g' => $groupName,
@@ -384,6 +420,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingAssigneeIds = decodeAssigneeIds($existingTaskRow['assignee_ids_json'] ?? null);
                 $existingReferenceLinks = decodeReferenceUrlList($existingTaskRow['reference_links_json'] ?? null);
                 $existingReferenceImages = decodeReferenceImageList($existingTaskRow['reference_images_json'] ?? null);
+                $existingReviewFile = decodeTaskReviewFile($existingTaskRow['review_file_json'] ?? null);
                 $existingSubtasksDependencyEnabled = normalizePermissionFlag(
                     $existingTaskRow['subtasks_dependency_enabled'] ?? 0
                 );
@@ -524,6 +561,22 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         $updatedAt
                     );
                 }
+                if (encodeTaskReviewFile($existingReviewFile) !== encodeTaskReviewFile($reviewFile)) {
+                    if ($reviewFile !== null) {
+                        logTaskHistory(
+                            $pdo,
+                            $taskId,
+                            'review_file_added',
+                            [
+                                'name' => (string) ($reviewFile['name'] ?? 'arquivo-para-revisao'),
+                                'mime_type' => (string) ($reviewFile['mime_type'] ?? ''),
+                                'kind' => (string) ($reviewFile['kind'] ?? 'file'),
+                            ],
+                            $actorUserId,
+                            $updatedAt
+                        );
+                    }
+                }
                 if ($existingSubtasks !== $subtasks) {
                     $existingProgress = taskSubtasksProgress(
                         $existingSubtasks,
@@ -615,6 +668,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         ),
                         'subtasks_dependency_enabled' => $subtasksDependencyEnabled,
                         'reference_links_json' => encodeReferenceUrlList($referenceLinks ?? []),
+                        'review_file_json' => encodeTaskReviewFile($reviewFile),
                         'has_active_revision' => $hasActiveRevision ? 1 : 0,
                         'updated_at' => $updatedAt,
                         'updated_at_label' => (new DateTimeImmutable($updatedAt))->format('d/m H:i'),
@@ -1079,7 +1133,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 $taskStmt = $pdo->prepare(
-                    'SELECT id, group_name, description, reference_links_json, reference_images_json, subtasks_json, subtasks_dependency_enabled, updated_at
+                    'SELECT id, group_name, description, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, updated_at
                      FROM tasks
                      WHERE id = :id
                        AND workspace_id = :workspace_id
@@ -1117,6 +1171,9 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                             ),
                             'reference_images_json' => encodeReferenceImageList(
                                 decodeReferenceImageList($taskRow['reference_images_json'] ?? null)
+                            ),
+                            'review_file_json' => encodeTaskReviewFile(
+                                decodeTaskReviewFile($taskRow['review_file_json'] ?? null)
                             ),
                             'subtasks_json' => encodeTaskSubtasks(
                                 decodeTaskSubtasks(

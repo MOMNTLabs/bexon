@@ -1877,6 +1877,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         <div class="task-detail-edit-image-list" data-create-task-image-list></div>
                     </div>
                     <textarea name="reference_images_json" rows="1" data-create-task-images hidden></textarea>
+                    <input type="hidden" value="{}" data-create-task-review-file data-task-review-file-json>
                 </div>
             </div>
 
@@ -2612,6 +2613,11 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         <div class="task-detail-view-block" data-task-detail-view-subtasks-wrap hidden>
                             <div class="task-detail-view-label">Etapas</div>
                             <div class="task-detail-subtasks-list" data-task-detail-view-subtasks></div>
+                        </div>
+
+                        <div class="task-detail-view-block" data-task-detail-view-review-file-wrap hidden>
+                            <div class="task-detail-view-label">Arquivo para revisao</div>
+                            <div class="task-detail-review-file" data-task-detail-view-review-file></div>
                         </div>
 
                         <div class="task-detail-view-block" data-task-detail-view-references hidden>

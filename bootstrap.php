@@ -104,6 +104,7 @@ function migrateSqlite(PDO $pdo): void
             assignee_ids_json TEXT NOT NULL DEFAULT \'[]\',
             reference_links_json TEXT NOT NULL DEFAULT \'[]\',
             reference_images_json TEXT NOT NULL DEFAULT \'[]\',
+            review_file_json TEXT NOT NULL DEFAULT \'{}\',
             subtasks_json TEXT NOT NULL DEFAULT \'[]\',
             subtasks_dependency_enabled INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
@@ -191,6 +192,7 @@ function migratePostgres(PDO $pdo): void
             assignee_ids_json TEXT NOT NULL DEFAULT \'[]\',
             reference_links_json TEXT NOT NULL DEFAULT \'[]\',
             reference_images_json TEXT NOT NULL DEFAULT \'[]\',
+            review_file_json TEXT NOT NULL DEFAULT \'{}\',
             subtasks_json TEXT NOT NULL DEFAULT \'[]\',
             subtasks_dependency_enabled SMALLINT NOT NULL DEFAULT 0,
             created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
@@ -1436,7 +1438,7 @@ function ensureWorkspaceEmailInvitationSchema(PDO $pdo): void
 function ensureTaskExtendedSchema(PDO $pdo): void
 {
     $needsBackfill = false;
-    $backfillMetaKey = 'task_extended_backfill_v4';
+    $backfillMetaKey = 'task_extended_backfill_v5';
 
     if (!tableHasColumn($pdo, 'tasks', 'group_name')) {
         $pdo->exec("ALTER TABLE tasks ADD COLUMN group_name TEXT NOT NULL DEFAULT 'Geral'");
@@ -1453,6 +1455,10 @@ function ensureTaskExtendedSchema(PDO $pdo): void
     }
     if (!tableHasColumn($pdo, 'tasks', 'reference_images_json')) {
         $pdo->exec("ALTER TABLE tasks ADD COLUMN reference_images_json TEXT NOT NULL DEFAULT '[]'");
+        $needsBackfill = true;
+    }
+    if (!tableHasColumn($pdo, 'tasks', 'review_file_json')) {
+        $pdo->exec("ALTER TABLE tasks ADD COLUMN review_file_json TEXT NOT NULL DEFAULT '{}'");
         $needsBackfill = true;
     }
     if (!tableHasColumn($pdo, 'tasks', 'overdue_flag')) {
@@ -1493,7 +1499,7 @@ function ensureTaskExtendedSchema(PDO $pdo): void
         return;
     }
 
-    $stmt = $pdo->query('SELECT id, assigned_to, group_name, assignee_ids_json, reference_links_json, reference_images_json, subtasks_json, subtasks_dependency_enabled, title_tag FROM tasks');
+    $stmt = $pdo->query('SELECT id, assigned_to, group_name, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, title_tag FROM tasks');
     $rows = $stmt ? $stmt->fetchAll() : [];
     if (!$rows) {
         appMetaSet($pdo, $backfillMetaKey, '1');
@@ -1506,6 +1512,7 @@ function ensureTaskExtendedSchema(PDO $pdo): void
              assignee_ids_json = :assignee_ids_json,
              reference_links_json = :reference_links_json,
              reference_images_json = :reference_images_json,
+             review_file_json = :review_file_json,
              subtasks_json = :subtasks_json,
              subtasks_dependency_enabled = :subtasks_dependency_enabled,
              title_tag = :title_tag
@@ -1520,6 +1527,7 @@ function ensureTaskExtendedSchema(PDO $pdo): void
         );
         $referenceLinks = decodeReferenceUrlList($row['reference_links_json'] ?? null);
         $referenceImages = decodeReferenceImageList($row['reference_images_json'] ?? null);
+        $reviewFile = decodeTaskReviewFile($row['review_file_json'] ?? null);
         $subtasksDependencyEnabled = normalizePermissionFlag($row['subtasks_dependency_enabled'] ?? 0);
         $subtasks = decodeTaskSubtasks($row['subtasks_json'] ?? null, $subtasksDependencyEnabled === 1);
         $titleTag = normalizeTaskTitleTag((string) ($row['title_tag'] ?? ''));
@@ -1529,6 +1537,7 @@ function ensureTaskExtendedSchema(PDO $pdo): void
             ':assignee_ids_json' => encodeAssigneeIds($assigneeIds),
             ':reference_links_json' => encodeReferenceUrlList($referenceLinks),
             ':reference_images_json' => encodeReferenceImageList($referenceImages),
+            ':review_file_json' => encodeTaskReviewFile($reviewFile),
             ':subtasks_json' => encodeTaskSubtasks($subtasks, $subtasksDependencyEnabled === 1),
             ':subtasks_dependency_enabled' => $subtasksDependencyEnabled,
             ':title_tag' => $titleTag,
@@ -10506,6 +10515,7 @@ function taskNotificationEventTypes(): array
         'subtasks_changed',
         'revision_requested',
         'revision_removed',
+        'review_file_added',
         'overdue_started',
         'overdue_cleared',
     ];
@@ -10561,6 +10571,12 @@ function taskNotificationMessageFromHistory(array $historyEntry, int $viewerUser
             return [
                 'title' => 'Solicitação de revisão removida',
                 'message' => $actorPrefix . 'removeu o ajuste de "' . $taskTitle . '".',
+            ];
+
+        case 'review_file_added':
+            return [
+                'title' => 'Arquivo para revisao',
+                'message' => $actorPrefix . 'enviou um arquivo para revisar em "' . $taskTitle . '".',
             ];
 
         case 'overdue_started':
@@ -10725,9 +10741,6 @@ function taskNotificationsForUser(
     }
 
     $taskIds = taskIdsAssignedToUser($workspaceId, $userId);
-    if (!$taskIds) {
-        return [];
-    }
 
     $sinceHistoryId = max(0, $sinceHistoryId);
     $limit = max(1, min($limit, 100));
@@ -10753,8 +10766,20 @@ function taskNotificationsForUser(
         $params[$param] = $eventType;
     }
 
-    if (!$taskPlaceholders || !$eventPlaceholders) {
+    if (!$eventPlaceholders) {
         return [];
+    }
+
+    $params[':review_file_event_type'] = 'review_file_added';
+    $taskVisibilitySql = '(
+                h.event_type = :review_file_event_type
+                AND t.created_by = :viewer_user_id
+              )';
+    if ($taskPlaceholders) {
+        $taskVisibilitySql = '(
+                h.task_id IN (' . implode(', ', $taskPlaceholders) . ')
+                OR ' . $taskVisibilitySql . '
+              )';
     }
 
     $sql = 'SELECT
@@ -10771,7 +10796,7 @@ function taskNotificationsForUser(
             LEFT JOIN users actor ON actor.id = h.actor_user_id
             WHERE t.workspace_id = :workspace_id
               AND h.id > :since_history_id
-              AND h.task_id IN (' . implode(', ', $taskPlaceholders) . ')
+              AND ' . $taskVisibilitySql . '
               AND h.event_type IN (' . implode(', ', $eventPlaceholders) . ')
               AND (h.actor_user_id IS NULL OR h.actor_user_id <> :viewer_user_id)
             ORDER BY h.id ASC
@@ -11192,6 +11217,230 @@ function encodeReferenceImageList(array $images): string
 function decodeReferenceImageList($value): array
 {
     return normalizeReferenceImageList($value);
+}
+
+function taskReviewFileMaxDataUrlLength(): int
+{
+    return 8000000;
+}
+
+function normalizeTaskReviewFileName(string $value): string
+{
+    $normalized = trim((string) preg_replace('/\s+/u', ' ', $value));
+    if ($normalized === '') {
+        return 'arquivo-para-revisao';
+    }
+
+    $normalized = (string) preg_replace('/[<>:"\/\\\\|?*\x00-\x1F]+/u', '-', $normalized);
+    $normalized = trim($normalized, ". \t\n\r\0\x0B");
+    if ($normalized === '') {
+        return 'arquivo-para-revisao';
+    }
+
+    if (mb_strlen($normalized) > 180) {
+        $normalized = mb_substr($normalized, 0, 180);
+    }
+
+    return $normalized;
+}
+
+function normalizeTaskReviewFileMimeType(string $value): string
+{
+    $mimeType = strtolower(trim((string) preg_replace('/\s+/u', '', $value)));
+    if (mb_strlen($mimeType) > 140) {
+        $mimeType = mb_substr($mimeType, 0, 140);
+    }
+
+    if (preg_match('/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/', $mimeType) !== 1) {
+        return '';
+    }
+
+    return $mimeType;
+}
+
+function taskReviewFileAllowedMimeType(string $mimeType): bool
+{
+    $mimeType = normalizeTaskReviewFileMimeType($mimeType);
+    if ($mimeType === '') {
+        return false;
+    }
+
+    if (str_starts_with($mimeType, 'image/') && !in_array($mimeType, ['image/svg+xml'], true)) {
+        return true;
+    }
+    if (str_starts_with($mimeType, 'video/')) {
+        return true;
+    }
+
+    return in_array($mimeType, [
+        'application/pdf',
+        'application/msword',
+        'application/octet-stream',
+        'application/vnd.ms-excel',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/x-zip-compressed',
+        'application/zip',
+        'text/csv',
+        'text/plain',
+    ], true);
+}
+
+function taskReviewFileKindFromMimeType(string $mimeType): string
+{
+    $mimeType = normalizeTaskReviewFileMimeType($mimeType);
+    if (str_starts_with($mimeType, 'image/')) {
+        return 'image';
+    }
+    if (str_starts_with($mimeType, 'video/')) {
+        return 'video';
+    }
+
+    return 'file';
+}
+
+function normalizeTaskReviewFileDataUrl(string $value, int $maxDataUrlLength = 8000000): ?array
+{
+    $compact = trim((string) preg_replace('/\s+/u', '', $value));
+    if ($compact === '' || mb_strlen($compact) > $maxDataUrlLength) {
+        return null;
+    }
+
+    if (preg_match('/^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,([a-z0-9+\/=]+)$/i', $compact, $matches) !== 1) {
+        return null;
+    }
+
+    $mimeType = normalizeTaskReviewFileMimeType((string) ($matches[1] ?? ''));
+    if (!taskReviewFileAllowedMimeType($mimeType)) {
+        return null;
+    }
+
+    return [
+        'src' => $compact,
+        'mime_type' => $mimeType,
+        'kind' => taskReviewFileKindFromMimeType($mimeType),
+    ];
+}
+
+function taskReviewFileAvatarUrl(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+    if (str_starts_with($value, '?') || str_starts_with($value, '/')) {
+        return mb_substr($value, 0, 1000);
+    }
+    if (preg_match('/^data:image\//i', $value) === 1) {
+        $compact = (string) preg_replace('/\s+/u', '', $value);
+        return mb_strlen($compact) <= 2000000 ? $compact : '';
+    }
+
+    return normalizeHttpReferenceValue($value) ?? '';
+}
+
+function normalizeTaskReviewFile($value, ?array $uploader = null, ?string $uploadedAt = null): ?array
+{
+    if (is_string($value)) {
+        $raw = trim($value);
+        if ($raw === '' || $raw === '{}') {
+            return null;
+        }
+
+        try {
+            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $value = $decoded;
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    if (!is_array($value)) {
+        return null;
+    }
+
+    if (array_is_list($value)) {
+        $value = is_array($value[0] ?? null) ? $value[0] : [];
+    }
+
+    $rawSource = trim((string) ($value['src'] ?? $value['data_url'] ?? $value['dataUrl'] ?? $value['url'] ?? ''));
+    $source = normalizeTaskReviewFileDataUrl($rawSource, taskReviewFileMaxDataUrlLength());
+    if ($source === null) {
+        return null;
+    }
+
+    $mimeType = normalizeTaskReviewFileMimeType((string) ($value['mime_type'] ?? $value['mimeType'] ?? $source['mime_type']));
+    if ($mimeType === '' || !taskReviewFileAllowedMimeType($mimeType)) {
+        $mimeType = (string) $source['mime_type'];
+    }
+
+    $name = normalizeTaskReviewFileName((string) ($value['name'] ?? $value['title'] ?? $value['label'] ?? ''));
+    $size = max(0, (int) ($value['size'] ?? 0));
+    $reviewFile = [
+        'src' => (string) $source['src'],
+        'name' => $name,
+        'mime_type' => $mimeType,
+        'kind' => taskReviewFileKindFromMimeType($mimeType),
+    ];
+    if ($size > 0) {
+        $reviewFile['size'] = $size;
+    }
+
+    $uploadedAtValue = trim((string) ($uploadedAt ?? ($value['uploaded_at'] ?? $value['uploadedAt'] ?? '')));
+    if ($uploadedAtValue === '') {
+        $uploadedAtValue = nowIso();
+    }
+    $reviewFile['uploaded_at'] = $uploadedAtValue;
+
+    if (is_array($uploader) && (int) ($uploader['id'] ?? 0) > 0) {
+        $reviewFile['uploaded_by'] = (int) $uploader['id'];
+        $reviewFile['uploader_name'] = normalizeUserDisplayName((string) ($uploader['name'] ?? ''));
+        $reviewFile['uploader_avatar_url'] = userAvatarImageSrc($uploader);
+        $reviewFile['uploader_initial'] = userDisplayInitial((string) ($uploader['name'] ?? ''));
+    } else {
+        $uploadedBy = (int) ($value['uploaded_by'] ?? $value['uploadedBy'] ?? 0);
+        if ($uploadedBy > 0) {
+            $reviewFile['uploaded_by'] = $uploadedBy;
+        }
+        $uploaderName = normalizeUserDisplayName((string) ($value['uploader_name'] ?? $value['uploaderName'] ?? ''));
+        if ($uploaderName !== '') {
+            $reviewFile['uploader_name'] = $uploaderName;
+        }
+        $avatarUrl = taskReviewFileAvatarUrl((string) ($value['uploader_avatar_url'] ?? $value['uploaderAvatarUrl'] ?? ''));
+        if ($avatarUrl !== '') {
+            $reviewFile['uploader_avatar_url'] = $avatarUrl;
+        }
+        $initial = userDisplayInitial((string) ($value['uploader_initial'] ?? $value['uploaderInitial'] ?? $uploaderName));
+        if ($initial !== '') {
+            $reviewFile['uploader_initial'] = $initial;
+        }
+    }
+
+    return $reviewFile;
+}
+
+function encodeTaskReviewFile(?array $reviewFile): string
+{
+    if ($reviewFile === null) {
+        return '{}';
+    }
+
+    $normalized = normalizeTaskReviewFile($reviewFile);
+    if ($normalized === null) {
+        return '{}';
+    }
+
+    return json_encode(
+        $normalized,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    ) ?: '{}';
+}
+
+function decodeTaskReviewFile($value): ?array
+{
+    return normalizeTaskReviewFile($value);
 }
 
 function findTaskGroupByName(string $groupName, ?int $workspaceId = null): ?string
@@ -12146,6 +12395,7 @@ function taskUndoColumns(): array
         'assignee_ids_json',
         'reference_links_json',
         'reference_images_json',
+        'review_file_json',
         'subtasks_json',
         'subtasks_dependency_enabled',
         'group_name',
@@ -12169,6 +12419,7 @@ function taskUndoComparableColumns(): array
         'assignee_ids_json',
         'reference_links_json',
         'reference_images_json',
+        'review_file_json',
         'subtasks_json',
         'subtasks_dependency_enabled',
         'group_name',
@@ -12405,6 +12656,9 @@ function taskUndoOperationLabel(string $type, ?array $before, ?array $after): st
     if (taskUndoSnapshotValue($before, 'priority') !== taskUndoSnapshotValue($after, 'priority')) {
         return 'Alterar prioridade';
     }
+    if (taskUndoSnapshotValue($before, 'review_file_json') !== taskUndoSnapshotValue($after, 'review_file_json')) {
+        return 'Alterar arquivo de revisao';
+    }
 
     return 'Editar tarefa';
 }
@@ -12560,6 +12814,7 @@ function taskUndoRestoreSnapshot(PDO $pdo, int $workspaceId, array $snapshot): v
         'assignee_ids_json' => '[]',
         'reference_links_json' => '[]',
         'reference_images_json' => '[]',
+        'review_file_json' => '{}',
         'subtasks_json' => '[]',
         'subtasks_dependency_enabled' => 0,
         'group_name' => defaultTaskGroupName($workspaceId),
@@ -12862,6 +13117,7 @@ function allTasks(?int $workspaceId = null): array
         $task['assignee_ids'] = $assigneeIds;
         $task['reference_links'] = decodeReferenceUrlList($task['reference_links_json'] ?? null);
         $task['reference_images'] = decodeReferenceImageList($task['reference_images_json'] ?? null);
+        $task['review_file'] = decodeTaskReviewFile($task['review_file_json'] ?? null);
         $task['subtasks_dependency_enabled'] = normalizePermissionFlag($task['subtasks_dependency_enabled'] ?? 0);
         $task['subtasks'] = decodeTaskSubtasks(
             $task['subtasks_json'] ?? null,

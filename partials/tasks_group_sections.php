@@ -176,6 +176,10 @@
                         (string) ($task['description'] ?? ''),
                         is_array($task['history'] ?? null) ? $task['history'] : []
                     );
+                    $taskReviewFile = is_array($task['review_file'] ?? null)
+                        ? $task['review_file']
+                        : decodeTaskReviewFile($task['review_file_json'] ?? null);
+                    $hasReviewFile = is_array($taskReviewFile);
                     $taskStartsHidden = $taskGroupDoneHidden && $statusKind === 'done';
                     if ($taskStartsHidden) {
                         $groupHiddenDoneCount++;
@@ -184,7 +188,7 @@
                     }
                     ?>
                     <article
-                        class="task-list-item task-status-<?= e($statusKind) ?><?= $isOverdueMarked ? ' has-overdue-flag' : '' ?>"
+                        class="task-list-item task-status-<?= e($statusKind) ?><?= $isOverdueMarked ? ' has-overdue-flag' : '' ?><?= $hasReviewFile ? ' has-review-file' : '' ?>"
                         id="task-<?= e((string) $taskId) ?>"
                         data-task-item
                         data-task-readonly="<?= $taskGroupCanAccess ? '0' : '1' ?>"
@@ -205,6 +209,7 @@
                             <input type="hidden" name="include_history" value="1">
                             <input type="hidden" name="reference_links_json" value="<?= e(encodeReferenceUrlList($task['reference_links'] ?? [])) ?>" data-task-reference-links-json>
                             <input type="hidden" value="<?= e(encodeReferenceImageList($task['reference_images'] ?? [])) ?>" data-task-reference-images-json>
+                            <input type="hidden" value="<?= e(encodeTaskReviewFile($taskReviewFile)) ?>" data-task-review-file-json>
                             <input type="hidden" name="subtasks_json" value="<?= e(encodeTaskSubtasks($taskSubtasks, $taskSubtasksDependencyEnabled === 1)) ?>" data-task-subtasks-json>
                             <input type="hidden" name="subtasks_dependency_enabled" value="<?= $taskSubtasksDependencyEnabled === 1 ? '1' : '0' ?>" data-task-subtasks-dependency>
                             <input type="hidden" name="title_tag" value="<?= e($taskTitleTag) ?>" data-task-title-tag>
@@ -264,6 +269,13 @@
                                             title="Solicitação de revisão ativa. Clique para remover."
                                             aria-label="Remover solicitação de revisão"
                                         >Revisão</button>
+                                    <?php endif; ?>
+                                    <?php if ($hasReviewFile): ?>
+                                        <span
+                                            class="task-review-file-badge"
+                                            data-task-review-file-badge
+                                            title="Arquivo para revisao anexado"
+                                        >Arquivo</span>
                                     <?php endif; ?>
                                     <button
                                         type="button"

@@ -8484,6 +8484,24 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     outline: none;
 }
 
+.status-stepper .task-review-file-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -10px;
+    z-index: 4;
+    min-height: 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(82, 193, 168, 0.42);
+    background: rgba(43, 170, 143, 0.16);
+    color: #c8fff0;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    line-height: 1;
+    pointer-events: auto;
+}
+
 .status-stepper .tag-field {
     min-width: 0;
     grid-column: 2;
@@ -9643,11 +9661,12 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     color: rgba(255, 255, 255, 0.92);
     white-space: normal;
     line-height: 1.48;
+    line-height: 1.55;
     word-break: break-word;
 }
 
 .task-detail-view-description p {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
 }
 
 .task-detail-view-description p:last-child {
@@ -9667,10 +9686,10 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 .task-detail-description-list {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
     padding-left: 18px;
     display: grid;
-    gap: 2px;
+    gap: 3px;
 }
 
 .task-detail-description-list:last-child {
@@ -9760,11 +9779,11 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     padding: 10px 12px 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     color: rgba(245, 248, 255, 0.9);
-    line-height: 1.48;
+    line-height: 1.55;
 }
 
 .task-detail-description-version-body p {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
 }
 
 .task-detail-description-version-body p:last-child {
@@ -10018,6 +10037,118 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     border-color: rgba(120, 204, 255, 0.6);
     background: rgba(30, 56, 91, 0.86);
     outline: none;
+}
+
+.task-detail-review-file {
+    min-width: 0;
+}
+
+.task-detail-review-file-card {
+    display: grid;
+    grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.task-detail-review-file-preview,
+.task-detail-review-file-placeholder {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.task-detail-review-file-preview.task-detail-ref-image-link {
+    aspect-ratio: 16 / 9;
+}
+
+.task-detail-review-file-placeholder {
+    display: grid;
+    place-items: center;
+    border: 1px dashed rgba(116, 183, 214, 0.34);
+    background: rgba(50, 122, 157, 0.12);
+    color: rgba(214, 239, 255, 0.76);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.task-detail-review-file-body {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.task-detail-review-file-name {
+    min-width: 0;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-detail-review-file-meta {
+    min-width: 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-detail-review-file-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.task-detail-review-file-uploader {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(116, 183, 214, 0.18);
+    color: rgba(237, 250, 255, 0.96);
+    font-size: 0.78rem;
+    font-weight: 800;
+    overflow: hidden;
+}
+
+.task-detail-review-file-uploader img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.task-detail-review-file-download {
+    position: static;
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    box-shadow: none;
+}
+
+@media (max-width: 620px) {
+    .task-detail-review-file-card {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .task-detail-review-file-preview,
+    .task-detail-review-file-placeholder {
+        grid-column: 1 / -1;
+    }
 }
 
 .task-detail-view-meta {
@@ -11039,7 +11170,7 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
     background: rgba(255, 255, 255, 0.02);
     padding: 12px;
     color: rgba(255, 255, 255, 0.92);
-    line-height: 1.48;
+    line-height: 1.55;
     word-break: break-word;
     white-space: normal;
     outline: none;
@@ -11057,7 +11188,7 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 .task-detail-edit-description-editor :is(p, div) {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
 }
 
 .task-detail-edit-description-editor :is(p, div):last-child {
@@ -11065,10 +11196,10 @@ body.is-dashboard.is-account-settings .account-privacy-card h3 {
 }
 
 .task-detail-edit-description-editor ul {
-    margin: 0 0 4px;
+    margin: 0 0 6px;
     padding-left: 18px;
     display: grid;
-    gap: 2px;
+    gap: 3px;
 }
 
 .task-detail-edit-description-editor ul:last-child {
@@ -12468,6 +12599,12 @@ textarea:focus,
     background: rgba(222, 209, 248, 0.98);
 }
 
+.status-stepper .task-review-file-badge {
+    border-color: rgba(39, 151, 127, 0.42);
+    background: rgba(217, 247, 239, 0.98);
+    color: #23715f;
+}
+
 .status-stepper-btn,
 .task-expand-toggle,
 .task-row-delete,
@@ -12747,6 +12884,18 @@ textarea:focus,
 .task-detail-edit-description-editor {
     border-color: rgba(124, 161, 199, 0.5);
     background: #f0f7ff;
+}
+
+.task-detail-review-file-card {
+    border-color: rgba(124, 161, 199, 0.42);
+    background: rgba(255, 255, 255, 0.66);
+}
+
+.task-detail-review-file-placeholder,
+.task-detail-review-file-uploader {
+    border-color: rgba(69, 144, 177, 0.32);
+    background: rgba(220, 240, 250, 0.82);
+    color: #356981;
 }
 
 .task-detail-reference-input.has-multiple-rows {
