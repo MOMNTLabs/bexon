@@ -2744,6 +2744,16 @@ window.addEventListener("DOMContentLoaded", () => {
     return compact;
   };
 
+  const normalizePreviewImageAssetUrl = (value) => {
+    const imageReference = normalizeImageReference(value);
+    if (imageReference) return imageReference;
+
+    const reviewFileDataUrl = normalizeTaskReviewFileDataUrl(value);
+    return reviewFileDataUrl && dataUrlMimeType(reviewFileDataUrl).startsWith("image/")
+      ? reviewFileDataUrl
+      : "";
+  };
+
   const normalizeReferenceImageTitle = (value) =>
     String(value || "")
       .replace(/\s+/g, " ")
@@ -2839,10 +2849,10 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (isVideoReferenceMediaItem(item)) {
-      const thumbnailUrl = normalizeImageReference(item.thumbnailUrl || "");
+      const thumbnailUrl = normalizePreviewImageAssetUrl(item.thumbnailUrl || "");
       if (thumbnailUrl) return thumbnailUrl;
 
-      const source = normalizeImageReference(item.src || "");
+      const source = normalizePreviewImageAssetUrl(item.src || "");
       if (
         source &&
         source !== normalizeHttpReference(item.downloadUrl || "") &&
@@ -2854,7 +2864,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return "";
     }
 
-    return normalizeImageReference(
+    return normalizePreviewImageAssetUrl(
       item.src || item.thumbnailUrl || item.downloadUrl || item.webViewLink || ""
     );
   };
@@ -2867,12 +2877,12 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (isGoogleDriveMediaItem(item)) {
-      return normalizeImageReference(
+      return normalizePreviewImageAssetUrl(
         item.downloadUrl || item.src || item.webViewLink || item.thumbnailUrl || ""
       );
     }
 
-    return normalizeImageReference(
+    return normalizePreviewImageAssetUrl(
       item.src || item.downloadUrl || item.webViewLink || item.thumbnailUrl || ""
     );
   };
@@ -3687,6 +3697,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const media = previewItem
       ? createReferenceMediaPreviewButton(previewItem, "data-task-review-file-preview", 0, {
           compact: true,
+          buttonClassName: "task-detail-review-file-preview",
+          previewClassName: "task-detail-review-file-image",
+          imageAlt: file.name || "Arquivo para revisao",
         })
       : document.createElement("div");
 
@@ -3694,8 +3707,6 @@ window.addEventListener("DOMContentLoaded", () => {
       media.className = "task-detail-review-file-placeholder";
       media.setAttribute("aria-hidden", "true");
       media.textContent = "Arquivo";
-    } else {
-      media.classList.add("task-detail-review-file-preview");
     }
 
     const body = document.createElement("div");
@@ -3763,6 +3774,21 @@ window.addEventListener("DOMContentLoaded", () => {
     return card;
   };
 
+  const createTaskReviewFileEmptyState = (message = "Nenhum arquivo de revisao anexado.") => {
+    const emptyState = document.createElement("div");
+    emptyState.className = "task-detail-review-file-empty";
+    emptyState.textContent = message;
+    return emptyState;
+  };
+
+  const taskDetailReviewFileStatusKind = ({ editing = false } = {}) => {
+    if (editing && taskDetailEditStatus instanceof HTMLSelectElement) {
+      return getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus));
+    }
+
+    return getStatusOptionKind(getSelectedStatusOption(taskDetailContext?.statusSelect));
+  };
+
   const taskDetailCanCurrentUserEditReviewFile = (context = taskDetailContext, { editing = false } = {}) => {
     if (!context || Boolean(context.readOnly)) return false;
     if (editing && taskDetailEditAssigneesMenu instanceof HTMLElement) {
@@ -3774,10 +3800,39 @@ window.addEventListener("DOMContentLoaded", () => {
     return currentUserIsCheckedTaskAssignee(context.rowAssigneePicker);
   };
 
+  const syncTaskDetailViewReviewFileActions = (reviewFile) => {
+    if (!(taskDetailViewReviewFileActions instanceof HTMLElement)) return;
+
+    const file =
+      typeof reviewFile === "undefined"
+        ? readTaskReviewFileField(taskDetailContext?.reviewFileField)
+        : normalizeTaskReviewFileItem(reviewFile);
+    const canEdit = taskDetailCanCurrentUserEditReviewFile(taskDetailContext);
+    const statusKind = taskDetailReviewFileStatusKind();
+    const canManage = canEdit && (statusKind === "review" || Boolean(file));
+
+    taskDetailViewReviewFileActions.hidden = !canManage;
+
+    if (taskDetailViewReviewFileAddButton instanceof HTMLButtonElement) {
+      taskDetailViewReviewFileAddButton.hidden = !canManage;
+      taskDetailViewReviewFileAddButton.disabled = !canManage;
+      taskDetailViewReviewFileAddButton.textContent = file ? "Trocar arquivo" : "Adicionar arquivo";
+    }
+
+    if (taskDetailViewReviewFileRemoveButton instanceof HTMLButtonElement) {
+      taskDetailViewReviewFileRemoveButton.hidden = !canManage || !file;
+      taskDetailViewReviewFileRemoveButton.disabled = !canManage || !file;
+    }
+  };
+
   const renderTaskDetailReviewFileView = (reviewFile = null) => {
     const file = normalizeTaskReviewFileItem(reviewFile);
+    const canEdit = taskDetailCanCurrentUserEditReviewFile(taskDetailContext);
+    const statusKind = taskDetailReviewFileStatusKind();
+    const canManage = canEdit && (statusKind === "review" || Boolean(file));
+
     if (taskDetailViewReviewFileWrap instanceof HTMLElement) {
-      taskDetailViewReviewFileWrap.hidden = !file;
+      taskDetailViewReviewFileWrap.hidden = !file && !canManage;
     }
     if (!(taskDetailViewReviewFile instanceof HTMLElement)) return;
 
@@ -3785,7 +3840,10 @@ window.addEventListener("DOMContentLoaded", () => {
     const card = buildTaskReviewFileCard(file);
     if (card) {
       taskDetailViewReviewFile.append(card);
+    } else if (canManage) {
+      taskDetailViewReviewFile.append(createTaskReviewFileEmptyState());
     }
+    syncTaskDetailViewReviewFileActions(file);
   };
 
   const renderTaskDetailEditReviewFile = () => {
@@ -3794,17 +3852,18 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const file = normalizeTaskReviewFileItem(taskDetailEditReviewFileItem);
     const canEdit = taskDetailCanCurrentUserEditReviewFile(taskDetailContext, { editing: true });
-    const statusKind = getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus));
+    const statusKind = taskDetailReviewFileStatusKind({ editing: true });
+    const canManage = canEdit && (statusKind === "review" || Boolean(file));
     const willClearOnSave = Boolean(file) && statusKind === "done";
 
-    taskDetailEditReviewFileWrap.hidden = !file && !canEdit;
+    taskDetailEditReviewFileWrap.hidden = !file && !canManage;
     taskDetailEditReviewFile.innerHTML = "";
 
     if (taskDetailEditReviewFileActions instanceof HTMLElement) {
-      taskDetailEditReviewFileActions.hidden = !canEdit || willClearOnSave;
+      taskDetailEditReviewFileActions.hidden = !canManage || willClearOnSave;
     }
     if (taskDetailEditReviewFileAddButton instanceof HTMLButtonElement) {
-      taskDetailEditReviewFileAddButton.disabled = !canEdit || willClearOnSave;
+      taskDetailEditReviewFileAddButton.disabled = !canManage || willClearOnSave;
       const labelWrap = taskDetailEditReviewFileAddButton.querySelector(".task-image-add-button-label");
       const buttonLabel = file ? "Trocar arquivo" : "Adicionar arquivo";
       if (labelWrap instanceof HTMLElement) {
@@ -3814,8 +3873,8 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
     if (taskDetailEditReviewFileRemoveButton instanceof HTMLButtonElement) {
-      taskDetailEditReviewFileRemoveButton.hidden = !canEdit || !file || willClearOnSave;
-      taskDetailEditReviewFileRemoveButton.disabled = !canEdit || !file || willClearOnSave;
+      taskDetailEditReviewFileRemoveButton.hidden = !canManage || !file || willClearOnSave;
+      taskDetailEditReviewFileRemoveButton.disabled = !canManage || !file || willClearOnSave;
     }
     if (taskDetailEditReviewFileNote instanceof HTMLElement) {
       let note = "";
@@ -3836,14 +3895,11 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (!canEdit) {
+    if (!canManage) {
       return;
     }
 
-    const emptyState = document.createElement("div");
-    emptyState.className = "task-detail-edit-review-file-empty";
-    emptyState.textContent = "Nenhum arquivo de revisao anexado.";
-    taskDetailEditReviewFile.append(emptyState);
+    taskDetailEditReviewFile.append(createTaskReviewFileEmptyState());
   };
 
   const syncDueDateDisplay = (input) => {
@@ -9248,6 +9304,15 @@ window.addEventListener("DOMContentLoaded", () => {
   const taskDetailViewSubtasks = document.querySelector("[data-task-detail-view-subtasks]");
   const taskDetailViewReviewFileWrap = document.querySelector("[data-task-detail-view-review-file-wrap]");
   const taskDetailViewReviewFile = document.querySelector("[data-task-detail-view-review-file]");
+  const taskDetailViewReviewFileActions = document.querySelector(
+    "[data-task-detail-view-review-file-actions]"
+  );
+  const taskDetailViewReviewFileAddButton = document.querySelector(
+    "[data-task-detail-view-review-file-add]"
+  );
+  const taskDetailViewReviewFileRemoveButton = document.querySelector(
+    "[data-task-detail-view-review-file-remove]"
+  );
   const taskDetailViewReferences = document.querySelector("[data-task-detail-view-references]");
   const taskDetailViewLinksWrap = document.querySelector("[data-task-detail-view-links-wrap]");
   const taskDetailViewLinks = document.querySelector("[data-task-detail-view-links]");
@@ -11563,11 +11628,18 @@ window.addEventListener("DOMContentLoaded", () => {
     mediaItem,
     attrName,
     index,
-    { compact = false } = {}
+    {
+      compact = false,
+      buttonClassName = "",
+      previewClassName = "task-detail-edit-image-preview",
+      imageAlt = "Midia de referencia",
+    } = {}
   ) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `task-detail-edit-image-preview-button${compact ? " is-compact" : ""}`;
+    button.className = `task-detail-edit-image-preview-button${compact ? " is-compact" : ""}${
+      buttonClassName ? ` ${buttonClassName}` : ""
+    }`;
     button.setAttribute(attrName, String(index));
     button.setAttribute(
       "aria-label",
@@ -11576,7 +11648,10 @@ window.addEventListener("DOMContentLoaded", () => {
         : "Ampliar imagem de referência"
     );
 
-    const preview = createReferenceMediaThumbnailElement(mediaItem);
+    const preview = createReferenceMediaThumbnailElement(mediaItem, {
+      className: previewClassName,
+      imageAlt,
+    });
     button.append(preview, createReferenceMediaKindOverlay(mediaItem, { compact }));
     return button;
   };
@@ -13543,6 +13618,40 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (taskDetailViewReviewFileAddButton instanceof HTMLButtonElement) {
+    taskDetailViewReviewFileAddButton.addEventListener("click", () => {
+      if (!taskDetailCanCurrentUserEditReviewFile(taskDetailContext)) {
+        showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
+        return;
+      }
+
+      void (async () => {
+        const currentFile = readTaskReviewFileField(taskDetailContext?.reviewFileField);
+        const reviewFile = await chooseTaskReviewFile();
+        if (!reviewFile) return;
+
+        await saveTaskDetailViewReviewFileChange(reviewFile, {
+          successMessage: currentFile
+            ? "Arquivo de revisao atualizado."
+            : "Arquivo de revisao adicionado.",
+        });
+      })();
+    });
+  }
+
+  if (taskDetailViewReviewFileRemoveButton instanceof HTMLButtonElement) {
+    taskDetailViewReviewFileRemoveButton.addEventListener("click", () => {
+      if (!taskDetailCanCurrentUserEditReviewFile(taskDetailContext)) {
+        showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
+        return;
+      }
+
+      void saveTaskDetailViewReviewFileChange(null, {
+        successMessage: "Arquivo de revisao removido.",
+      });
+    });
+  }
+
   if (createTaskDriveAddButton instanceof HTMLButtonElement) {
     createTaskDriveAddButton.addEventListener("click", () => {
       createTaskImagePickerExpanded = true;
@@ -14892,6 +15001,43 @@ window.addEventListener("DOMContentLoaded", () => {
       await new Promise((resolve) => window.setTimeout(resolve, 70));
     }
 
+    return true;
+  };
+
+  const saveTaskDetailViewReviewFileChange = async (nextFile, { successMessage = "" } = {}) => {
+    if (!(taskDetailContext?.form instanceof HTMLFormElement)) return false;
+    if (Boolean(taskDetailContext.readOnly) || !taskDetailCanCurrentUserEditReviewFile(taskDetailContext)) {
+      showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
+      return false;
+    }
+
+    const idle = await waitForFormAutosaveIdle(taskDetailContext.form);
+    if (!idle) {
+      showClientFlash("error", "A tarefa ainda esta salvando. Tente novamente em instantes.");
+      return false;
+    }
+
+    const reviewFileField = ensureTaskReviewFileField(taskDetailContext.form, { withName: false });
+    if (!(reviewFileField instanceof HTMLInputElement)) return false;
+
+    const previousFile = readTaskReviewFileField(reviewFileField);
+    writeTaskReviewFileField(reviewFileField, nextFile, { withName: false });
+    syncTaskReviewFileBadge(taskDetailContext.form);
+    setTaskDetailEditReviewFile(nextFile);
+    renderTaskDetailReviewFileView(nextFile);
+
+    const success = await submitTaskAutosave(taskDetailContext.form);
+    if (!success) {
+      writeTaskReviewFileField(reviewFileField, previousFile, { withName: false });
+      syncTaskReviewFileBadge(taskDetailContext.form);
+      setTaskDetailEditReviewFile(previousFile);
+      renderTaskDetailReviewFileView(previousFile);
+      return false;
+    }
+
+    if (successMessage) {
+      showClientFlash("success", successMessage);
+    }
     return true;
   };
 

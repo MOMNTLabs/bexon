@@ -2617,7 +2617,22 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         </div>
 
                         <div class="task-detail-view-block" data-task-detail-view-review-file-wrap hidden>
-                            <div class="task-detail-view-label">Arquivo para revisao</div>
+                            <div class="task-detail-view-label-row">
+                                <div class="task-detail-view-label">Arquivo para revisao</div>
+                                <div class="task-detail-view-inline-actions" data-task-detail-view-review-file-actions hidden>
+                                    <button
+                                        type="button"
+                                        class="btn btn-mini btn-ghost"
+                                        data-task-detail-view-review-file-add
+                                    >Adicionar arquivo</button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-mini btn-ghost"
+                                        data-task-detail-view-review-file-remove
+                                        hidden
+                                    >Remover</button>
+                                </div>
+                            </div>
                             <div class="task-detail-review-file" data-task-detail-view-review-file></div>
                         </div>
 
