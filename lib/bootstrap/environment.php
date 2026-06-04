@@ -131,6 +131,10 @@ function productionConfigDiagnostics(): array
 {
     $errors = [];
     $warnings = [];
+    $rawConfiguredAppUrl = normalizedUrlBase((string) envValue('APP_URL', ''));
+    $rawConfiguredSiteUrl = normalizedUrlBase((string) envValue('SITE_URL', ''));
+    $rawConfiguredAppHost = bootstrapUrlHostName($rawConfiguredAppUrl);
+    $rawConfiguredSiteHost = bootstrapUrlHostName($rawConfiguredSiteUrl);
 
     if (configuredAppUrl() === '') {
         $errors[] = 'APP_URL ausente ou inválida para este ambiente.';
@@ -142,6 +146,14 @@ function productionConfigDiagnostics(): array
 
     if (trim((string) envValue('COOKIE_DOMAIN', '')) === '') {
         $warnings[] = 'COOKIE_DOMAIN não definido; revise cookies compartilhados entre app e site.';
+    }
+
+    if (
+        $rawConfiguredAppHost !== ''
+        && !str_starts_with($rawConfiguredAppHost, 'app.')
+        && ($rawConfiguredSiteHost === '' || $rawConfiguredAppHost === $rawConfiguredSiteHost)
+    ) {
+        $warnings[] = 'APP_URL parece apontar para o host do site. Se a producao usa subdominio separado, defina APP_URL=https://app.seudominio e SITE_URL=https://seudominio.';
     }
 
     if (envFlag('APP_AUTO_MIGRATE', false)) {

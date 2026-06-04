@@ -96,9 +96,58 @@ function requestHostMatchesUrlHost(string $url): bool
     return requestHostName() === $urlHost;
 }
 
+function inferredCurrentRequestAppUrl(): string
+{
+    if (PHP_SAPI === 'cli') {
+        return '';
+    }
+
+    $requestHost = requestHostName();
+    if ($requestHost === '' || !str_starts_with($requestHost, 'app.')) {
+        return '';
+    }
+
+    $rawConfiguredAppUrl = normalizedUrlBase((string) envValue('APP_URL', ''));
+    $rawConfiguredSiteUrl = normalizedUrlBase((string) envValue('SITE_URL', ''));
+    $configuredAppHost = bootstrapUrlHostName($rawConfiguredAppUrl);
+    $configuredSiteHost = bootstrapUrlHostName($rawConfiguredSiteUrl);
+
+    if ($configuredSiteHost === '' && $configuredAppHost !== '' && !str_starts_with($configuredAppHost, 'app.')) {
+        $configuredSiteHost = $configuredAppHost;
+    }
+
+    if ($configuredSiteHost === '' || $requestHost !== 'app.' . $configuredSiteHost) {
+        return '';
+    }
+
+    if (
+        $configuredAppHost !== ''
+        && $configuredAppHost !== $configuredSiteHost
+        && $configuredAppHost !== $requestHost
+    ) {
+        return '';
+    }
+
+    static $hasLoggedFallback = false;
+    if (!$hasLoggedFallback) {
+        error_log(sprintf(
+            'Inferred APP_URL from request host [host=%s app_url=%s site_url=%s]',
+            $requestHost,
+            $rawConfiguredAppUrl !== '' ? $rawConfiguredAppUrl : '(empty)',
+            $rawConfiguredSiteUrl !== '' ? $rawConfiguredSiteUrl : '(empty)'
+        ));
+        $hasLoggedFallback = true;
+    }
+
+    $scheme = requestIsHttps() ? 'https' : 'http';
+    return $scheme . '://' . requestAuthority() . currentScriptBasePath();
+}
+
 function configuredAppUrl(): string
 {
-    return normalizedUrlBase((string) envValue('APP_URL', ''));
+    $configuredAppUrl = normalizedUrlBase((string) envValue('APP_URL', ''));
+    $inferredAppUrl = inferredCurrentRequestAppUrl();
+    return $inferredAppUrl !== '' ? $inferredAppUrl : $configuredAppUrl;
 }
 
 function configuredSiteUrl(): string
