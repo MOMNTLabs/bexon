@@ -801,6 +801,8 @@
                                     $accountingEntryTaskLinkRateInput = (string) ($accountingEntry['task_link_rate_input'] ?? $accountingEntryAmountInput);
                                     $accountingEntryTaskLinkSummaryLabel = (string) ($accountingEntry['task_link_summary_label'] ?? '');
                                     $accountingEntryTaskLinkScopeLabel = (string) ($accountingEntry['task_link_scope_label'] ?? '');
+                                    $accountingEntryTaskLinkCount = max(0, (int) ($accountingEntry['task_link_match_count'] ?? 0));
+                                    $accountingEntryTaskLinkBadgeLabel = $accountingEntryTaskLinkCount . ' x ' . str_replace('R$ ', 'R$', trim($accountingEntryTaskLinkRateInput));
                                     $accountingEntryTaskLinkAssigneeSummary = (string) ($accountingEntry['task_link_assignee_summary'] ?? 'Todos os responsáveis');
                                     $accountingEntryIsSettled = ((int) ($accountingEntry['is_settled'] ?? 0)) === 1;
                                     $accountingEntryIsInstallment = ((int) ($accountingEntry['is_installment'] ?? 0)) === 1;
@@ -827,12 +829,9 @@
                                                     <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
                                                         <span class="accounting-entry-summary-meta">
                                                             <?php if ($accountingEntryIsTaskLinked): ?>
-                                                                <span class="accounting-entry-badge is-monthly">Por conclu&iacute;das</span>
-                                                                <?php if ($accountingEntryTaskLinkSummaryLabel !== ''): ?>
-                                                                    <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkSummaryLabel) ?></span>
-                                                                <?php endif; ?>
-                                                                <?php if ($accountingEntryTaskLinkScopeLabel !== ''): ?>
-                                                                    <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryTaskLinkScopeLabel) ?></span>
+                                                                <span class="accounting-entry-badge is-monthly">Por tarefa</span>
+                                                                <?php if ($accountingEntryTaskLinkBadgeLabel !== ''): ?>
+                                                                    <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkBadgeLabel) ?></span>
                                                                 <?php endif; ?>
                                                             <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
@@ -910,12 +909,9 @@
                                             <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment): ?>
                                                 <div class="accounting-entry-meta">
                                                     <?php if ($accountingEntryIsTaskLinked): ?>
-                                                        <span class="accounting-entry-badge is-monthly">Por conclu&iacute;das</span>
-                                                        <?php if ($accountingEntryTaskLinkSummaryLabel !== ''): ?>
-                                                            <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkSummaryLabel) ?></span>
-                                                        <?php endif; ?>
-                                                        <?php if ($accountingEntryTaskLinkScopeLabel !== ''): ?>
-                                                            <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryTaskLinkScopeLabel) ?></span>
+                                                        <span class="accounting-entry-badge is-monthly">Por tarefa</span>
+                                                        <?php if ($accountingEntryTaskLinkBadgeLabel !== ''): ?>
+                                                            <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkBadgeLabel) ?></span>
                                                         <?php endif; ?>
                                                     <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
@@ -1015,7 +1011,7 @@
                                                 >
                                                     <option value="single">&Uacute;nica</option>
                                                     <option value="monthly">Mensal</option>
-                                                    <option value="completed_tasks">Por conclu&iacute;das</option>
+                                                    <option value="completed_tasks">Por tarefa</option>
                                                 </select>
                                                 <input
                                                     type="checkbox"

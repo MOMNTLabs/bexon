@@ -14964,13 +14964,20 @@ select option:checked,
     min-width: 0;
 }
 
-.accounting-task-link-fields .accounting-entry-goal-status {
+.accounting-task-link-fields .accounting-entry-goal-status,
+body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-fields .accounting-entry-goal-status {
     grid-column: 1 / -1;
     margin: 0;
+    color: #b9c3d0;
 }
 
 .accounting-task-link-picker-wrap {
     grid-column: 1 / -1;
+}
+
+.accounting-task-link-picker-wrap .assignee-picker-label,
+body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker-wrap .assignee-picker-label {
+    color: #858585;
 }
 
 .accounting-installment-fields[hidden] {
