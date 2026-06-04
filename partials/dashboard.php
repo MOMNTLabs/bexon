@@ -70,6 +70,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
     type="application/json"
     id="task-title-tag-options-data"
     data-workspace-id="<?= e((string) ($currentWorkspaceId ?? 0)) ?>"
+    data-current-user-id="<?= e((string) ((int) ($currentUser['id'] ?? 0))) ?>"
 ><?= json_encode(
     [
         'options' => $taskTitleTagOptionsPayload,
@@ -2983,6 +2984,29 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                 <div class="task-detail-edit-image-list" data-task-detail-image-list></div>
                             </div>
                             <textarea rows="1" data-task-detail-edit-images hidden></textarea>
+
+                            <div class="task-detail-edit-review-file-field" data-task-detail-edit-review-file-wrap>
+                                <div class="task-detail-edit-review-file-head">
+                                    <span>Arquivo para revis&atilde;o</span>
+                                    <div class="task-detail-edit-review-file-actions" data-task-detail-edit-review-file-actions>
+                                        <button
+                                            type="button"
+                                            class="btn btn-mini btn-ghost task-image-add-button"
+                                            data-task-detail-review-file-add
+                                        >
+                                            <span class="task-image-add-button-label">Adicionar arquivo</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-mini btn-ghost"
+                                            data-task-detail-review-file-remove
+                                            hidden
+                                        >Remover</button>
+                                    </div>
+                                </div>
+                                <p class="task-detail-edit-review-file-note" data-task-detail-edit-review-file-note hidden></p>
+                                <div class="task-detail-review-file task-detail-edit-review-file" data-task-detail-edit-review-file></div>
+                            </div>
                         </div>
                     </div>
 
@@ -3241,7 +3265,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         </div>
 
         <div class="modal-actions">
-            <button type="button" class="btn btn-mini btn-ghost" data-close-confirm-modal>Cancelar</button>
+            <button type="button" class="btn btn-mini btn-ghost" data-close-confirm-modal data-confirm-modal-cancel>Cancelar</button>
             <button type="button" class="btn btn-mini btn-danger" data-confirm-modal-submit>Confirmar</button>
         </div>
     </section>

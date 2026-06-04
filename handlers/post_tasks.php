@@ -146,6 +146,9 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     $subtasksDependencyEnabled ??= 0;
                     $subtasks ??= [];
                     $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
+                    if (taskStatusKind($status, $workspaceId) === 'done') {
+                        $reviewFile = null;
+                    }
                     $stmt = $pdo->prepare(
                         'INSERT INTO tasks (workspace_id, title, title_tag, description, status, priority, due_date, overdue_flag, overdue_since_date, created_by, assigned_to, assignee_ids_json, reference_links_json, reference_images_json, review_file_json, subtasks_json, subtasks_dependency_enabled, group_name, created_at, updated_at)
                          VALUES (:workspace_id, :t, :tt, :d, :s, :p, :dd, :of, :osd, :cb, :at, :aj, :rl, :ri, :rf, :sj, :sde, :g, :c, :u)'
@@ -283,6 +286,11 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 if (!$reviewFilePosted) {
                     $reviewFile = decodeTaskReviewFile($existingTaskRow['review_file_json'] ?? null);
                 }
+                $existingReviewFile = decodeTaskReviewFile($existingTaskRow['review_file_json'] ?? null);
+                $existingAssigneeIds = normalizeAssigneeIds(
+                    decodeAssigneeIds($existingTaskRow['assignee_ids_json'] ?? null),
+                    $usersById
+                );
                 if ($subtasksDependencyEnabled === null) {
                     $subtasksDependencyEnabled = normalizePermissionFlag(
                         $existingTaskRow['subtasks_dependency_enabled'] ?? 0
@@ -318,6 +326,18 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $overdueSinceDate = $normalized['overdue_since_date'];
                 $overdueDays = (int) ($normalized['overdue_days'] ?? 0);
                 $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
+                $nextStatusKind = taskStatusKind($status, $workspaceId);
+                if ($nextStatusKind === 'done') {
+                    $reviewFile = null;
+                }
+
+                $reviewFileChanged =
+                    encodeTaskReviewFile($existingReviewFile) !== encodeTaskReviewFile($reviewFile);
+                $canEditReviewFile = in_array($actorUserId, $assigneeIds, true)
+                    || in_array($actorUserId, $existingAssigneeIds, true);
+                if ($reviewFileChanged && $nextStatusKind !== 'done' && !$canEditReviewFile) {
+                    throw new RuntimeException('Apenas o responsável pode alterar o arquivo de revisão.');
+                }
 
                 $stmt = $pdo->prepare(
                     'UPDATE tasks
@@ -420,7 +440,6 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingAssigneeIds = decodeAssigneeIds($existingTaskRow['assignee_ids_json'] ?? null);
                 $existingReferenceLinks = decodeReferenceUrlList($existingTaskRow['reference_links_json'] ?? null);
                 $existingReferenceImages = decodeReferenceImageList($existingTaskRow['reference_images_json'] ?? null);
-                $existingReviewFile = decodeTaskReviewFile($existingTaskRow['review_file_json'] ?? null);
                 $existingSubtasksDependencyEnabled = normalizePermissionFlag(
                     $existingTaskRow['subtasks_dependency_enabled'] ?? 0
                 );

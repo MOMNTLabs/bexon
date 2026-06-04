@@ -3164,6 +3164,34 @@ window.addEventListener("DOMContentLoaded", () => {
     form.closest("[data-task-item]")?.classList?.add("has-review-file");
   };
 
+  const currentUserIsCheckedTaskAssignee = (scope) => {
+    if (!(scope instanceof HTMLElement) || !(currentUserId > 0)) return false;
+    return Array.from(scope.querySelectorAll('input[type="checkbox"]:checked')).some((input) => {
+      if (!(input instanceof HTMLInputElement)) return false;
+      return (
+        Math.max(0, Number.parseInt(String(input.value || "0"), 10) || 0) === currentUserId
+      );
+    });
+  };
+
+  const taskStatusKindFromForm = (form) => {
+    if (!(form instanceof HTMLFormElement)) return "";
+    const statusSelect = form.querySelector('select[name="status"]');
+    return getStatusOptionKind(getSelectedStatusOption(statusSelect));
+  };
+
+  const prepareTaskReviewFileFieldForSubmit = (form) => {
+    if (!(form instanceof HTMLFormElement)) return null;
+    const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
+    if (!(reviewFileField instanceof HTMLInputElement)) return null;
+
+    const nextReviewFile =
+      taskStatusKindFromForm(form) === "done" ? null : readTaskReviewFileField(reviewFileField);
+    writeTaskReviewFileField(reviewFileField, nextReviewFile, { withName: true });
+    syncTaskReviewFileBadge(form);
+    return nextReviewFile;
+  };
+
   const readJsonUrlListField = (field, parser = parseReferenceUrlLines) => {
     if (!(field instanceof HTMLInputElement)) return [];
     const raw = (field.value || "").trim();
@@ -3648,15 +3676,9 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const renderTaskDetailReviewFileView = (reviewFile = null) => {
+  const buildTaskReviewFileCard = (reviewFile = null) => {
     const file = normalizeTaskReviewFileItem(reviewFile);
-    if (taskDetailViewReviewFileWrap instanceof HTMLElement) {
-      taskDetailViewReviewFileWrap.hidden = !file;
-    }
-    if (!(taskDetailViewReviewFile instanceof HTMLElement)) return;
-
-    taskDetailViewReviewFile.innerHTML = "";
-    if (!file) return;
+    if (!file) return null;
 
     const card = document.createElement("div");
     card.className = "task-detail-review-file-card";
@@ -3738,7 +3760,90 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     card.append(media, body, actions);
-    taskDetailViewReviewFile.append(card);
+    return card;
+  };
+
+  const taskDetailCanCurrentUserEditReviewFile = (context = taskDetailContext, { editing = false } = {}) => {
+    if (!context || Boolean(context.readOnly)) return false;
+    if (editing && taskDetailEditAssigneesMenu instanceof HTMLElement) {
+      return (
+        currentUserIsCheckedTaskAssignee(taskDetailEditAssigneesMenu) ||
+        currentUserIsCheckedTaskAssignee(context.rowAssigneePicker)
+      );
+    }
+    return currentUserIsCheckedTaskAssignee(context.rowAssigneePicker);
+  };
+
+  const renderTaskDetailReviewFileView = (reviewFile = null) => {
+    const file = normalizeTaskReviewFileItem(reviewFile);
+    if (taskDetailViewReviewFileWrap instanceof HTMLElement) {
+      taskDetailViewReviewFileWrap.hidden = !file;
+    }
+    if (!(taskDetailViewReviewFile instanceof HTMLElement)) return;
+
+    taskDetailViewReviewFile.innerHTML = "";
+    const card = buildTaskReviewFileCard(file);
+    if (card) {
+      taskDetailViewReviewFile.append(card);
+    }
+  };
+
+  const renderTaskDetailEditReviewFile = () => {
+    if (!(taskDetailEditReviewFileWrap instanceof HTMLElement)) return;
+    if (!(taskDetailEditReviewFile instanceof HTMLElement)) return;
+
+    const file = normalizeTaskReviewFileItem(taskDetailEditReviewFileItem);
+    const canEdit = taskDetailCanCurrentUserEditReviewFile(taskDetailContext, { editing: true });
+    const statusKind = getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus));
+    const willClearOnSave = Boolean(file) && statusKind === "done";
+
+    taskDetailEditReviewFileWrap.hidden = !file && !canEdit;
+    taskDetailEditReviewFile.innerHTML = "";
+
+    if (taskDetailEditReviewFileActions instanceof HTMLElement) {
+      taskDetailEditReviewFileActions.hidden = !canEdit || willClearOnSave;
+    }
+    if (taskDetailEditReviewFileAddButton instanceof HTMLButtonElement) {
+      taskDetailEditReviewFileAddButton.disabled = !canEdit || willClearOnSave;
+      const labelWrap = taskDetailEditReviewFileAddButton.querySelector(".task-image-add-button-label");
+      const buttonLabel = file ? "Trocar arquivo" : "Adicionar arquivo";
+      if (labelWrap instanceof HTMLElement) {
+        labelWrap.textContent = buttonLabel;
+      } else {
+        taskDetailEditReviewFileAddButton.textContent = buttonLabel;
+      }
+    }
+    if (taskDetailEditReviewFileRemoveButton instanceof HTMLButtonElement) {
+      taskDetailEditReviewFileRemoveButton.hidden = !canEdit || !file || willClearOnSave;
+      taskDetailEditReviewFileRemoveButton.disabled = !canEdit || !file || willClearOnSave;
+    }
+    if (taskDetailEditReviewFileNote instanceof HTMLElement) {
+      let note = "";
+      if (willClearOnSave) {
+        note = "O arquivo sera removido ao salvar a tarefa como Concluido.";
+      } else if (!canEdit && file) {
+        note = "Somente o responsavel pode alterar este arquivo.";
+      }
+      taskDetailEditReviewFileNote.textContent = note;
+      taskDetailEditReviewFileNote.hidden = note === "";
+    }
+
+    if (file) {
+      const card = buildTaskReviewFileCard(file);
+      if (card) {
+        taskDetailEditReviewFile.append(card);
+      }
+      return;
+    }
+
+    if (!canEdit) {
+      return;
+    }
+
+    const emptyState = document.createElement("div");
+    emptyState.className = "task-detail-edit-review-file-empty";
+    emptyState.textContent = "Nenhum arquivo de revisao anexado.";
+    taskDetailEditReviewFile.append(emptyState);
   };
 
   const syncDueDateDisplay = (input) => {
@@ -7151,6 +7256,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let shouldProcessPendingAutosave = true;
 
     try {
+      prepareTaskReviewFileFieldForSubmit(form);
       const data = await postFormJson(form);
       if (!form.isConnected) {
         success = true;
@@ -8991,6 +9097,13 @@ window.addEventListener("DOMContentLoaded", () => {
     "[data-create-task-title-tag-color-input]"
   );
   const taskTitleTagOptionsDataElement = document.querySelector("#task-title-tag-options-data");
+  const currentUserId = Math.max(
+    0,
+    Number.parseInt(
+      String(taskTitleTagOptionsDataElement?.dataset?.currentUserId || "0"),
+      10
+    ) || 0
+  );
   const createTaskForm = document.querySelector("[data-create-task-form]");
   const createTaskDescription = document.querySelector("[data-create-task-description]");
   const createTaskDescriptionWrap = document.querySelector("[data-create-task-description-wrap]");
@@ -9208,6 +9321,22 @@ window.addEventListener("DOMContentLoaded", () => {
   const taskDetailImageAddButton = document.querySelector("[data-task-detail-image-add]");
   const taskDetailDriveAddButton = document.querySelector("[data-task-detail-drive-add]");
   const taskDetailImageList = document.querySelector("[data-task-detail-image-list]");
+  const taskDetailEditReviewFileWrap = document.querySelector(
+    "[data-task-detail-edit-review-file-wrap]"
+  );
+  const taskDetailEditReviewFile = document.querySelector("[data-task-detail-edit-review-file]");
+  const taskDetailEditReviewFileActions = document.querySelector(
+    "[data-task-detail-edit-review-file-actions]"
+  );
+  const taskDetailEditReviewFileAddButton = document.querySelector(
+    "[data-task-detail-review-file-add]"
+  );
+  const taskDetailEditReviewFileRemoveButton = document.querySelector(
+    "[data-task-detail-review-file-remove]"
+  );
+  const taskDetailEditReviewFileNote = document.querySelector(
+    "[data-task-detail-edit-review-file-note]"
+  );
   const taskDetailOpenMediaButton = document.querySelector("[data-task-detail-open-media]");
   const taskDetailBackMainButton = document.querySelector("[data-task-detail-back-main]");
   const taskDetailImagesFieldWrap =
@@ -9242,6 +9371,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const confirmModal = document.querySelector("[data-confirm-modal]");
   const confirmModalTitle = document.querySelector("#confirm-modal-title");
   const confirmModalMessage = document.querySelector("[data-confirm-modal-message]");
+  const confirmModalCancel = document.querySelector("[data-confirm-modal-cancel]");
   const confirmModalSubmit = document.querySelector("[data-confirm-modal-submit]");
   const googleDriveBrowserModal = document.querySelector("[data-google-drive-browser-modal]");
   const googleDriveBrowserRoots = document.querySelector("[data-google-drive-browser-roots]");
@@ -9260,8 +9390,10 @@ window.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-group-permissions-modal]")
   );
   let confirmModalAction = null;
+  let confirmModalCloseAction = null;
   let taskDetailContext = null;
   let taskDetailEditImageItems = [];
+  let taskDetailEditReviewFileItem = null;
   let taskDetailEditReferenceLinks = [];
   let taskDetailEditSubtaskItems = [];
   let taskDetailEditSubtasksDependencyEnabled = false;
@@ -11581,6 +11713,11 @@ window.addEventListener("DOMContentLoaded", () => {
     renderCreateTaskImageList();
   };
 
+  const setTaskDetailEditReviewFile = (item) => {
+    taskDetailEditReviewFileItem = normalizeTaskReviewFileItem(item);
+    renderTaskDetailEditReviewFile();
+  };
+
   const mergeCreateTaskImageItems = (items) => {
     const merged = parseReferenceImageMediaItems([...(createTaskImageItems || []), ...(items || [])]);
     createTaskImageItems = merged;
@@ -11700,7 +11837,32 @@ window.addEventListener("DOMContentLoaded", () => {
     const currentReviewFile = readTaskReviewFileField(reviewFileField);
     if (currentReviewFile && !forcePrompt) return currentReviewFile;
 
-    const wantsFile = window.confirm("Deseja incluir um arquivo para revisao?");
+    const wantsFile = await new Promise((resolve) => {
+      if (!(confirmModal instanceof HTMLElement)) {
+        resolve(false);
+        return;
+      }
+
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
+      openConfirmModal({
+        title: "Adicionar arquivo de revisao?",
+        message: "Voce pode continuar sem ele e anexar depois, se quiser.",
+        confirmLabel: "Adicionar arquivo",
+        cancelLabel: "Agora nao",
+        onConfirm: () => {
+          finish(true);
+        },
+        onClose: () => {
+          finish(false);
+        },
+      });
+    });
     if (!wantsFile) return null;
 
     const reviewFile = await chooseTaskReviewFile();
@@ -13353,6 +13515,34 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (taskDetailEditReviewFileAddButton instanceof HTMLButtonElement) {
+    taskDetailEditReviewFileAddButton.addEventListener("click", () => {
+      if (!taskDetailCanCurrentUserEditReviewFile(taskDetailContext, { editing: true })) {
+        showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
+        return;
+      }
+      if (getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus)) === "done") {
+        showClientFlash("error", "Troque o status antes de alterar o arquivo de revisao.");
+        return;
+      }
+      void (async () => {
+        const reviewFile = await chooseTaskReviewFile();
+        if (!reviewFile) return;
+        setTaskDetailEditReviewFile(reviewFile);
+      })();
+    });
+  }
+
+  if (taskDetailEditReviewFileRemoveButton instanceof HTMLButtonElement) {
+    taskDetailEditReviewFileRemoveButton.addEventListener("click", () => {
+      if (!taskDetailCanCurrentUserEditReviewFile(taskDetailContext, { editing: true })) {
+        showClientFlash("error", "Somente o responsavel pode alterar o arquivo de revisao.");
+        return;
+      }
+      setTaskDetailEditReviewFile(null);
+    });
+  }
+
   if (createTaskDriveAddButton instanceof HTMLButtonElement) {
     createTaskDriveAddButton.addEventListener("click", () => {
       createTaskImagePickerExpanded = true;
@@ -13374,6 +13564,18 @@ window.addEventListener("DOMContentLoaded", () => {
       const files = Array.from(createTaskImageInput.files || []);
       createTaskImageInput.value = "";
       void addCreateTaskImagesFromFiles(files);
+    });
+  }
+
+  if (taskDetailEditStatus instanceof HTMLSelectElement) {
+    taskDetailEditStatus.addEventListener("change", () => {
+      renderTaskDetailEditReviewFile();
+    });
+  }
+
+  if (taskDetailEditAssigneesMenu instanceof HTMLElement) {
+    taskDetailEditAssigneesMenu.addEventListener("change", () => {
+      renderTaskDetailEditReviewFile();
     });
   }
 
@@ -14426,6 +14628,7 @@ window.addEventListener("DOMContentLoaded", () => {
     taskDetailImagePickerExpanded = false;
     setTaskDetailEditImageItems(referenceImages);
     copyAssigneesToTaskDetailModal(rowAssigneePicker);
+    setTaskDetailEditReviewFile(reviewFile);
     writeTaskRevisionStateField(revisionStateField, hasActiveRevision);
     syncTaskDetailRevisionActionButtons({
       isEditing: Boolean(taskDetailModal?.classList.contains("is-editing")),
@@ -14483,6 +14686,7 @@ window.addEventListener("DOMContentLoaded", () => {
     taskDetailContext = null;
     taskDetailImagePickerExpanded = false;
     setTaskDetailEditReferenceLinks([]);
+    setTaskDetailEditReviewFile(null);
     closeInlineAddForm(taskDetailEditLinkAddForm, taskDetailEditLinkInput);
     closeInlineAddForm(taskDetailEditSubtaskAddForm, taskDetailEditSubtaskInput);
     taskDetailEditSubtaskItems = [];
@@ -14610,6 +14814,17 @@ window.addEventListener("DOMContentLoaded", () => {
       const referenceImages = parseReferenceImageMediaItems(taskDetailEditImageItems);
       context.referenceImagesField.name = "reference_images_json";
       writeReferenceImageMediaField(context.referenceImagesField, referenceImages);
+    }
+    if (!(context.reviewFileField instanceof HTMLInputElement)) {
+      context.reviewFileField = ensureTaskReviewFileField(context.form, { withName: false });
+    }
+    if (context.reviewFileField instanceof HTMLInputElement) {
+      const nextReviewFile =
+        getStatusOptionKind(getSelectedStatusOption(taskDetailEditStatus)) === "done"
+          ? null
+          : taskDetailEditReviewFileItem;
+      writeTaskReviewFileField(context.reviewFileField, nextReviewFile, { withName: false });
+      syncTaskReviewFileBadge(context.form);
     }
     if (context.subtasksField instanceof HTMLInputElement) {
       if (!(context.subtasksDependencyField instanceof HTMLInputElement)) {
@@ -15127,29 +15342,42 @@ window.addEventListener("DOMContentLoaded", () => {
     document.body.classList.toggle("modal-open", hasOpenModal);
   };
 
-  const closeConfirmModal = () => {
+  const closeConfirmModal = ({ skipOnClose = false } = {}) => {
     if (!confirmModal) return;
     confirmModal.hidden = true;
+    const closeAction = !skipOnClose ? confirmModalCloseAction : null;
     confirmModalAction = null;
+    confirmModalCloseAction = null;
+    if (confirmModalCancel instanceof HTMLButtonElement) {
+      confirmModalCancel.textContent = "Cancelar";
+    }
     if (confirmModalSubmit instanceof HTMLButtonElement) {
       confirmModalSubmit.disabled = false;
       confirmModalSubmit.textContent = "Confirmar";
       confirmModalSubmit.classList.remove("is-loading");
     }
     syncBodyModalLock();
+    if (typeof closeAction === "function") {
+      closeAction();
+    }
   };
 
   const openConfirmModal = ({
     title = "Confirmar",
     message = "Tem certeza?",
     confirmLabel = "Confirmar",
+    cancelLabel = "Cancelar",
     confirmVariant = "default",
     onConfirm,
+    onClose,
   }) => {
     if (!confirmModal) return;
 
     if (confirmModalTitle) confirmModalTitle.textContent = title;
     if (confirmModalMessage) confirmModalMessage.textContent = message;
+    if (confirmModalCancel instanceof HTMLButtonElement) {
+      confirmModalCancel.textContent = cancelLabel;
+    }
     if (confirmModalSubmit instanceof HTMLButtonElement) {
       confirmModalSubmit.textContent = confirmLabel;
       confirmModalSubmit.disabled = false;
@@ -15160,6 +15388,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     confirmModalAction = typeof onConfirm === "function" ? onConfirm : null;
+    confirmModalCloseAction = typeof onClose === "function" ? onClose : null;
     confirmModal.hidden = false;
     syncBodyModalLock();
   };
@@ -16920,7 +17149,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const reviewFilePreviewTrigger = target.closest("[data-task-review-file-preview]");
     if (reviewFilePreviewTrigger instanceof HTMLElement) {
-      const reviewFile = readTaskReviewFileField(taskDetailContext?.reviewFileField);
+      const reviewFile =
+        taskDetailModal instanceof HTMLElement && taskDetailModal.classList.contains("is-editing")
+          ? taskDetailEditReviewFileItem
+          : readTaskReviewFileField(taskDetailContext?.reviewFileField);
       const previewItem = taskReviewFilePreviewMediaItem(reviewFile);
       if (previewItem) {
         openTaskImagePreview({
@@ -17182,7 +17414,7 @@ window.addEventListener("DOMContentLoaded", () => {
       Promise.resolve()
         .then(() => (confirmModalAction ? confirmModalAction() : null))
         .then(() => {
-          closeConfirmModal();
+          closeConfirmModal({ skipOnClose: true });
         })
         .catch(() => {
           if (confirmModalSubmit instanceof HTMLButtonElement) {
