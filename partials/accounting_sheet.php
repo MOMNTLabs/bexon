@@ -505,7 +505,7 @@
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>
                                         </form>
-                                        <form method="post" class="accounting-entry-form accounting-entry-editor-form<?= $accountingEntryIsTaskLinked ? ' has-task-link' : '' ?>" data-accounting-form hidden autocomplete="off">
+                                        <form method="post" class="accounting-entry-form accounting-entry-editor-form" data-accounting-form hidden autocomplete="off">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="update_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
