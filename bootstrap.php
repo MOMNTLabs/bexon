@@ -2462,6 +2462,9 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id')) {
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN carry_source_entry_id INTEGER DEFAULT NULL");
     }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key')) {
+        $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN carry_stop_period_key TEXT DEFAULT NULL");
+    }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'sort_order')) {
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
     }
@@ -2923,6 +2926,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         'due_date' => tableHasColumn($pdo, 'workspace_accounting_entries', 'due_date'),
         'source_due_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id'),
         'carry_source_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id'),
+        'carry_stop_period_key' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key'),
         'is_monthly' => tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly'),
         'monthly_mode' => tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode'),
         'paid_amount_cents' => tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents'),
@@ -2932,6 +2936,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         !$capabilities['due_date']
         || !$capabilities['source_due_entry_id']
         || !$capabilities['carry_source_entry_id']
+        || !$capabilities['carry_stop_period_key']
         || !$capabilities['is_monthly']
         || !$capabilities['monthly_mode']
         || !$capabilities['paid_amount_cents']
@@ -2945,6 +2950,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         $capabilities['due_date'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'due_date');
         $capabilities['source_due_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id');
         $capabilities['carry_source_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id');
+        $capabilities['carry_stop_period_key'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key');
         $capabilities['is_monthly'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly');
         $capabilities['monthly_mode'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode');
         $capabilities['paid_amount_cents'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents');
@@ -2968,6 +2974,11 @@ function workspaceAccountingHasDueSourceColumn(PDO $pdo): bool
 function workspaceAccountingHasCarrySourceColumn(PDO $pdo): bool
 {
     return !empty(workspaceAccountingSchemaCapabilities($pdo)['carry_source_entry_id']);
+}
+
+function workspaceAccountingHasCarryStopPeriodColumn(PDO $pdo): bool
+{
+    return !empty(workspaceAccountingSchemaCapabilities($pdo)['carry_stop_period_key']);
 }
 
 function workspaceAccountingSupportsDueLinking(PDO $pdo): bool
@@ -5977,6 +5988,11 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $carrySourceEntryId = isset($row['carry_source_entry_id']) ? (int) $row['carry_source_entry_id'] : 0;
     $row['carry_source_entry_id'] = $carrySourceEntryId > 0 ? $carrySourceEntryId : null;
     $row['is_carried'] = $row['carry_source_entry_id'] !== null ? 1 : 0;
+    $carryStopPeriodRaw = trim((string) ($row['carry_stop_period_key'] ?? ''));
+    $carryStopPeriodKey = $carryStopPeriodRaw !== ''
+        ? normalizeAccountingPeriodKey($carryStopPeriodRaw)
+        : '';
+    $row['carry_stop_period_key'] = $carryStopPeriodKey !== '' ? $carryStopPeriodKey : null;
 
     return $row;
 }
@@ -6119,6 +6135,9 @@ function workspaceAccountingEntriesListRaw(
     $carrySourceEntrySelect = !empty($accountingSchema['carry_source_entry_id'])
         ? 'ae.carry_source_entry_id'
         : 'NULL AS carry_source_entry_id';
+    $carryStopPeriodKeySelect = !empty($accountingSchema['carry_stop_period_key'])
+        ? 'ae.carry_stop_period_key'
+        : 'NULL AS carry_stop_period_key';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -6156,6 +6175,7 @@ function workspaceAccountingEntriesListRaw(
                 ' . $dueDateSelect . ',
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
+                ' . $carryStopPeriodKeySelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -6206,6 +6226,9 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     $carrySourceEntrySelect = !empty($accountingSchema['carry_source_entry_id'])
         ? 'ae.carry_source_entry_id'
         : 'NULL AS carry_source_entry_id';
+    $carryStopPeriodKeySelect = !empty($accountingSchema['carry_stop_period_key'])
+        ? 'ae.carry_stop_period_key'
+        : 'NULL AS carry_stop_period_key';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -6243,6 +6266,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
                 ' . $dueDateSelect . ',
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
+                ' . $carryStopPeriodKeySelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -7009,6 +7033,13 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
     }
 
     $targetPeriodKey = normalizeAccountingPeriodKey($targetPeriodKey);
+    $carryStopPeriodRaw = trim((string) ($sourceEntry['carry_stop_period_key'] ?? ''));
+    $carryStopPeriodKey = $carryStopPeriodRaw !== ''
+        ? normalizeAccountingPeriodKey($carryStopPeriodRaw)
+        : '';
+    if ($carryStopPeriodKey !== '' && strcmp($targetPeriodKey, $carryStopPeriodKey) >= 0) {
+        return null;
+    }
     $isMonthly = ((int) ($sourceEntry['is_monthly'] ?? 0)) === 1;
     $isSettled = ((int) ($sourceEntry['is_settled'] ?? 0)) === 1;
     $isInstallment = ((int) ($sourceEntry['is_installment'] ?? 0)) === 1;
@@ -7309,6 +7340,27 @@ function workspaceAccountingDescendantEntries(PDO $pdo, int $workspaceId, int $e
     );
 
     return $descendants;
+}
+
+function workspaceAccountingSetCarryStopPeriodKey(PDO $pdo, int $workspaceId, int $entryId, string $periodKey): void
+{
+    if ($workspaceId <= 0 || $entryId <= 0 || !workspaceAccountingHasCarryStopPeriodColumn($pdo)) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET carry_stop_period_key = :carry_stop_period_key,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :id'
+    );
+    $stmt->execute([
+        ':carry_stop_period_key' => normalizeAccountingPeriodKey($periodKey),
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':id' => $entryId,
+    ]);
 }
 
 function workspaceAccountingDeleteEntryChain(PDO $pdo, int $workspaceId, int $entryId, bool $includeRoot = false): void
@@ -8616,8 +8668,13 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
     }
 
     try {
+        $carrySourceEntryId = max(0, (int) ($existingEntry['carry_source_entry_id'] ?? 0));
         $sourceDueEntryId = max(0, (int) ($existingEntry['source_due_entry_id'] ?? 0));
-        if ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
+        if ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
+            $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
+            workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
+            workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, true);
+        } elseif ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
             $currentPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
             workspaceAccountingDetachDueLinkedEntriesBeforePeriod($pdo, $workspaceId, $sourceDueEntryId, $currentPeriodKey);
             workspaceAccountingDeleteDueLinkedEntriesFromPeriod($pdo, $workspaceId, $sourceDueEntryId, $currentPeriodKey);

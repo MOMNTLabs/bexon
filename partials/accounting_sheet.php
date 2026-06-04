@@ -81,6 +81,10 @@
                                             ? ('Mensal - ' . str_pad((string) $accountingEntryMonthlyDay, 2, '0', STR_PAD_LEFT))
                                             : '');
                                     $accountingEntryIsOverdue = ((int) ($accountingEntry['is_overdue'] ?? 0)) === 1;
+                                    $accountingEntryDueDateBadge = $accountingEntryDueDateDisplay !== ''
+                                        && ($accountingEntryIsCarried || $accountingEntryIsOverdue)
+                                        ? ('Venc. ' . $accountingEntryDueDateDisplay)
+                                        : '';
                                     $accountingEntryOverdueDays = max(0, (int) ($accountingEntry['overdue_days'] ?? 0));
                                     $accountingEntryShowPendingBadge = $accountingEntryIsCarried
                                         && !$accountingEntryIsSettled
@@ -127,6 +131,9 @@
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryShowPendingBadge): ?>
                                                                 <span class="accounting-entry-badge is-pending">Pendente</span>
+                                                            <?php endif; ?>
+                                                            <?php if ($accountingEntryDueDateBadge !== ''): ?>
+                                                                <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryDueDateBadge) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryIsOverdue): ?>
                                                                 <span
