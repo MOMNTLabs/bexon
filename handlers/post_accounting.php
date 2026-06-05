@@ -64,6 +64,32 @@ function accountingAutomationConfigFromRequest(PDO $pdo, int $userId, string $en
 function handleAccountingPostAction(PDO $pdo, string $action): bool
 {
     switch ($action) {
+            case 'set_accounting_balance_snapshot':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
+                setWorkspaceAccountingBalanceSnapshot(
+                    $pdo,
+                    $workspaceId,
+                    $periodKey,
+                    $_POST['opening_balance_value'] ?? null,
+                    (int) ($authUser['id'] ?? 0)
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Saldo conciliado atualizado.',
+                    ]);
+                }
+
+                flash('success', 'Saldo conciliado atualizado.');
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'set_accounting_opening_balance':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -382,6 +408,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
     }
 
     return in_array($action, [
+        'set_accounting_balance_snapshot',
         'set_accounting_opening_balance',
         'create_accounting_entry',
         'update_accounting_entry',

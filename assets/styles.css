@@ -14893,6 +14893,32 @@ select option:checked,
     min-width: 96px;
 }
 
+.accounting-entry-flow-note,
+.accounting-cashflow-legend {
+    margin: 0;
+    color: #6d7f94;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.accounting-entry-flow-note {
+    flex-basis: 100%;
+}
+
+.accounting-entry-form .accounting-entry-flow-note {
+    grid-column: 1 / -1;
+}
+
+.accounting-cashflow-legend {
+    margin-top: 8px;
+    max-width: 560px;
+}
+
+.accounting-cashflow-legend strong {
+    color: #41576f;
+    font-weight: 700;
+}
+
 .accounting-entry-options {
     display: flex;
     align-items: center;
@@ -15761,7 +15787,9 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
 .accounting-opening-balance-editor {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
     min-width: 0;
 }
 
@@ -15805,6 +15833,22 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-opening-balance-actions .btn-mini {
     min-width: auto;
     white-space: nowrap;
+}
+
+.accounting-balance-helper,
+.accounting-balance-form-note {
+    margin: 0;
+    color: #7f8c9b;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.accounting-balance-helper {
+    max-width: 560px;
+}
+
+.accounting-balance-form-note {
+    grid-column: 1 / -1;
 }
 
 .accounting-balance-values {

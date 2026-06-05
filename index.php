@@ -659,6 +659,7 @@ $inventoryEntriesByGroup = $currentUser ? inventoryEntriesByGroup($inventoryEntr
 $accountingPeriod = normalizeAccountingPeriodKey((string) ($_GET['accounting_period'] ?? ''));
 $accountingPeriodLabel = accountingMonthLabel($accountingPeriod);
 $accountingPeriodDate = DateTimeImmutable::createFromFormat('!Y-m', $accountingPeriod) ?: new DateTimeImmutable('first day of this month');
+$accountingCurrentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
 $accountingPreviousPeriod = $accountingPeriodDate->modify('-1 month')->format('Y-m');
 $accountingNextPeriod = $accountingPeriodDate->modify('+1 month')->format('Y-m');
 $accountingPreviousPeriodPath = accountingRedirectPathFromRequest(['accounting_period' => $accountingPreviousPeriod], []);
@@ -683,14 +684,21 @@ if ($currentUser) {
     }
 }
 $accountingOpeningBalanceCents = 0;
+$accountingBalanceSnapshot = null;
 if ($currentUser && $currentWorkspaceId !== null) {
     try {
         $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($currentWorkspaceId, $accountingPeriod);
+        $accountingBalanceSnapshot = workspaceAccountingBalanceSnapshot($currentWorkspaceId, $accountingPeriod);
     } catch (Throwable $e) {
         $appendDashboardLoadError('Não foi possível carregar o saldo inicial da contabilidade.', $e);
     }
 }
-$accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents);
+$accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents, [
+    'period_key' => $accountingPeriod,
+    'current_period_key' => $accountingCurrentPeriodKey,
+    'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
+    'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
+]);
 $accountingNextIncomeProjection = ['available' => false];
 if ($currentUser && $currentWorkspaceId !== null) {
     try {
@@ -698,7 +706,13 @@ if ($currentUser && $currentWorkspaceId !== null) {
             $pdo,
             $currentWorkspaceId,
             $accountingPeriod,
-            $accountingOpeningBalanceCents
+            $accountingOpeningBalanceCents,
+            [
+                'period_key' => $accountingPeriod,
+                'current_period_key' => $accountingCurrentPeriodKey,
+                'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
+                'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
+            ]
         );
     } catch (Throwable $e) {
         $appendDashboardLoadError('Nao foi possivel calcular a projecao de caixa da contabilidade.', $e);

@@ -403,7 +403,7 @@
                                                 <div class="accounting-entry-goal-payment-drawer-head">
                                                     <div class="accounting-entry-goal-payment-drawer-copy">
                                                         <strong>Lançamentos</strong>
-                                                        <span>Os lançamentos abaixo compõem o valor já pago.</span>
+                                                        <span>Os lançamentos abaixo compõem o valor já pago e são os únicos que mexem no caixa.</span>
                                                     </div>
                                                     <div class="accounting-entry-goal-payment-drawer-tools">
                                                         <div
@@ -563,6 +563,13 @@
                                                     </label>
                                                 <?php endif; ?>
                                             </div>
+                                            <p class="accounting-entry-flow-note">
+                                                <?php if ($accountingEntryIsMonthlyGoal): ?>
+                                                    Saldo a quitar: s&oacute; os pagamentos lan&ccedil;ados no bot&atilde;o + entram no caixa e na proje&ccedil;&atilde;o.
+                                                <?php else: ?>
+                                                    Despesa prevista: este valor continua na proje&ccedil;&atilde;o at&eacute; voc&ecirc; marcar como pago.
+                                                <?php endif; ?>
+                                            </p>
                                             <div class="accounting-entry-editor-actions">
                                                 <button type="submit" class="btn btn-mini">Salvar</button>
                                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-entry-cancel>Cancelar</button>
@@ -716,6 +723,12 @@
                                                         </select>
                                                     </div>
                                                 </div>
+                                                <p
+                                                    class="accounting-entry-flow-note"
+                                                    data-accounting-cashflow-note
+                                                    data-accounting-default-note="Despesa prevista: entra na projeção até você marcar como paga."
+                                                    data-accounting-goal-note="Saldo a quitar: use para compras pagas aos poucos. Só os pagamentos lançados no botão + mexem no caixa e na projeção."
+                                                >Despesa prevista: entra na projeção até você marcar como paga.</p>
                                             </div>
                                         </div>
                                         <div class="accounting-create-actions">
@@ -725,6 +738,10 @@
                                     </div>
                                 </form>
                             </details>
+                            <p class="accounting-cashflow-legend">
+                                Contas &uacute;nicas, mensais e parceladas entram na proje&ccedil;&atilde;o at&eacute; serem pagas.
+                                <strong>Saldo a quitar</strong> serve para compras pagas aos poucos e s&oacute; afeta o caixa pelos pagamentos lan&ccedil;ados.
+                            </p>
 
                             <?php
                             $accountingExpenseTotalCents = max(0, (int) ($accountingSummary['expense_total_cents'] ?? 0));
@@ -1124,9 +1141,30 @@
                 <section class="accounting-balance-card">
                     <?php
                     $accountingOpeningBalanceCents = (int) ($accountingSummary['opening_balance_cents'] ?? 0);
-                    $accountingOpeningBalanceActionLabel = $accountingOpeningBalanceCents !== 0
-                        ? 'Atualizar saldo atual'
-                        : 'Informar saldo atual';
+                    $accountingCurrentPeriodResolvedKey = isset($accountingCurrentPeriodKey)
+                        ? normalizeAccountingPeriodKey((string) $accountingCurrentPeriodKey)
+                        : normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+                    $accountingIsCurrentPeriodView = normalizeAccountingPeriodKey($accountingPeriod) === $accountingCurrentPeriodResolvedKey;
+                    $accountingBalanceSnapshotActive = ((int) ($accountingSummary['balance_snapshot_active'] ?? 0)) === 1;
+                    $accountingBalanceSnapshotDisplay = (string) ($accountingSummary['balance_snapshot_display'] ?? '');
+                    $accountingBalanceSnapshotAtDisplay = (string) ($accountingSummary['balance_snapshot_at_display'] ?? '');
+                    $accountingBalanceActionLabel = $accountingIsCurrentPeriodView
+                        ? ($accountingBalanceSnapshotActive ? 'Atualizar saldo conciliado' : 'Informar saldo conciliado')
+                        : ($accountingOpeningBalanceCents !== 0 ? 'Atualizar saldo inicial' : 'Informar saldo inicial');
+                    $accountingBalanceFieldLabel = $accountingIsCurrentPeriodView
+                        ? 'Saldo real da conta agora'
+                        : 'Saldo inicial do período';
+                    $accountingBalanceFormAction = $accountingIsCurrentPeriodView
+                        ? 'set_accounting_balance_snapshot'
+                        : 'set_accounting_opening_balance';
+                    $accountingBalanceInputValue = $accountingIsCurrentPeriodView
+                        ? ($accountingBalanceSnapshotActive
+                            ? $accountingBalanceSnapshotDisplay
+                            : (string) ($accountingSummary['current_balance_display'] ?? 'R$ 0,00'))
+                        : (string) ($accountingSummary['opening_balance_display'] ?? 'R$ 0,00');
+                    $accountingCurrentBalanceLabel = $accountingIsCurrentPeriodView
+                        ? ($accountingBalanceSnapshotActive ? 'Saldo atual' : 'Saldo estimado')
+                        : 'Saldo do per&iacute;odo';
                     $accountingCurrentBalanceCents = (int) ($accountingSummary['current_balance_cents'] ?? 0);
                     $accountingCurrentBalanceClass = $accountingCurrentBalanceCents < 0
                         ? ' is-negative'
@@ -1153,24 +1191,42 @@
                             data-accounting-opening-balance-toggle
                             aria-expanded="false"
                         >
-                            <?= e($accountingOpeningBalanceActionLabel) ?>
+                            <?= e($accountingBalanceActionLabel) ?>
                         </button>
+                        <p class="accounting-balance-helper">
+                            <?php if ($accountingIsCurrentPeriodView): ?>
+                                <?php if ($accountingBalanceSnapshotActive && $accountingBalanceSnapshotAtDisplay !== ''): ?>
+                                    Conciliado em <?= e($accountingBalanceSnapshotAtDisplay) ?>. Base do período: <?= e((string) ($accountingSummary['opening_balance_display'] ?? 'R$ 0,00')) ?>.
+                                <?php else: ?>
+                                    Sem conciliação neste mês. O card usa o saldo inicial do período até você informar o saldo real.
+                                <?php endif; ?>
+                            <?php else: ?>
+                                Esse valor serve como base histórica deste período.
+                            <?php endif; ?>
+                        </p>
                         <form method="post" class="accounting-opening-balance-form" data-accounting-form hidden>
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                            <input type="hidden" name="action" value="set_accounting_opening_balance">
+                            <input type="hidden" name="action" value="<?= e($accountingBalanceFormAction) ?>">
                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                             <label class="accounting-opening-balance-field">
-                                <span>Saldo atual da conta</span>
+                                <span><?= e($accountingBalanceFieldLabel) ?></span>
                                 <input
                                     type="text"
                                     name="opening_balance_value"
-                                    value="<?= e((string) ($accountingSummary['opening_balance_display'] ?? 'R$ 0,00')) ?>"
+                                    value="<?= e($accountingBalanceInputValue) ?>"
                                     class="accounting-input accounting-input-amount"
                                     inputmode="numeric"
                                     placeholder="0,00"
                                     data-accounting-allow-negative="1"
                                 >
                             </label>
+                            <p class="accounting-balance-form-note">
+                                <?php if ($accountingIsCurrentPeriodView): ?>
+                                    Informe quanto voc&ecirc; tem agora. A proje&ccedil;&atilde;o continua considerando s&oacute; o que ainda falta receber ou pagar.
+                                <?php else: ?>
+                                    Informe o saldo base deste per&iacute;odo para reconstruir o hist&oacute;rico corretamente.
+                                <?php endif; ?>
+                            </p>
                             <div class="accounting-opening-balance-actions">
                                 <button type="submit" class="btn btn-mini">Confirmar</button>
                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-opening-balance-cancel>Cancelar</button>
@@ -1179,7 +1235,7 @@
                     </div>
                     <dl class="accounting-balance-values">
                         <div class="is-current<?= e($accountingCurrentBalanceClass) ?>">
-                            <dt>Saldo atual</dt>
+                            <dt><?= $accountingCurrentBalanceLabel ?></dt>
                             <dd><?= $renderAccountingMoney((string) ($accountingSummary['current_balance_display'] ?? 'R$ 0,00')) ?></dd>
                         </div>
                         <div class="is-final is-projected<?= e($accountingFinalBalanceClass) ?>">

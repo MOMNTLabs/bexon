@@ -6908,6 +6908,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const settledCheck = form.querySelector("[data-accounting-settled-check]");
     const typeSelect = form.querySelector("[data-accounting-type-select]");
     const automationTypeField = form.querySelector("[data-accounting-automation-type]");
+    const cashflowNote = form.querySelector("[data-accounting-cashflow-note]");
 
     if (!(installmentToggle instanceof HTMLInputElement)) return;
     if (!(installmentFields instanceof HTMLElement)) return;
@@ -7019,6 +7020,11 @@ window.addEventListener("DOMContentLoaded", () => {
               ? "monthly"
               : "single";
       }
+    }
+    if (cashflowNote instanceof HTMLElement) {
+      const defaultNote = String(cashflowNote.dataset.accountingDefaultNote || "").trim();
+      const goalNote = String(cashflowNote.dataset.accountingGoalNote || "").trim();
+      cashflowNote.textContent = isMonthlyGoal && goalNote ? goalNote : defaultNote;
     }
 
     let installmentTotal = Number.parseInt(installmentTotalCountField.value, 10);
@@ -13000,9 +13006,17 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (payload.formKind === "opening-balance") {
+      const openingBalanceAction =
+        form.querySelector('input[name="action"]')?.value || "";
       void submitAccountingActionForm(form, {
-        successMessage: "Saldo atualizado.",
-        fallbackError: "Falha ao atualizar saldo.",
+        successMessage:
+          openingBalanceAction === "set_accounting_balance_snapshot"
+            ? "Saldo conciliado atualizado."
+            : "Saldo atualizado.",
+        fallbackError:
+          openingBalanceAction === "set_accounting_balance_snapshot"
+            ? "Falha ao atualizar saldo conciliado."
+            : "Falha ao atualizar saldo.",
         refresh: true,
       }).catch(() => {});
     }
@@ -19328,6 +19342,8 @@ window.addEventListener("DOMContentLoaded", () => {
     if (form.matches(".accounting-opening-balance-form")) {
       event.preventDefault();
       const openingBalanceField = form.querySelector('input[name="opening_balance_value"]');
+      const openingBalanceAction =
+        form.querySelector('input[name="action"]')?.value || "";
       if (openingBalanceField instanceof HTMLInputElement) {
         normalizeAccountingCurrencyInputField(openingBalanceField);
       }
@@ -19335,8 +19351,14 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
       void submitAccountingActionForm(form, {
-        successMessage: "Saldo atualizado.",
-        fallbackError: "Falha ao atualizar saldo.",
+        successMessage:
+          openingBalanceAction === "set_accounting_balance_snapshot"
+            ? "Saldo conciliado atualizado."
+            : "Saldo atualizado.",
+        fallbackError:
+          openingBalanceAction === "set_accounting_balance_snapshot"
+            ? "Falha ao atualizar saldo conciliado."
+            : "Falha ao atualizar saldo.",
         refresh: true,
       }).catch(() => {});
       return;

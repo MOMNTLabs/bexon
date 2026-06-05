@@ -186,18 +186,31 @@ function respondAccountingPanelSnapshot(): void
     $workspaceId = (int) $ctx['workspace_id'];
     $userId = (int) $ctx['user_id'];
     $accountingPeriod = normalizeAccountingPeriodKey((string) ($_GET['accounting_period'] ?? ''));
+    $accountingCurrentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
     $accountingEntries = workspaceAccountingEntriesList($workspaceId, $accountingPeriod);
     $accountingEntriesByType = workspaceAccountingEntriesByType($accountingEntries);
     $accountingExpenseEntries = $accountingEntriesByType['expense'] ?? [];
     $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];
     $accountingTaskLinkOptions = accountingTaskLinkOptionsForUser($userId);
     $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($workspaceId, $accountingPeriod);
-    $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents);
+    $accountingBalanceSnapshot = workspaceAccountingBalanceSnapshot($workspaceId, $accountingPeriod);
+    $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents, [
+        'period_key' => $accountingPeriod,
+        'current_period_key' => $accountingCurrentPeriodKey,
+        'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
+        'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
+    ]);
     $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(
         db(),
         $workspaceId,
         $accountingPeriod,
-        $accountingOpeningBalanceCents
+        $accountingOpeningBalanceCents,
+        [
+            'period_key' => $accountingPeriod,
+            'current_period_key' => $accountingCurrentPeriodKey,
+            'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
+            'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
+        ]
     );
 
     ob_start();

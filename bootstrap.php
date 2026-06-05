@@ -2335,6 +2335,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 installment_number INTEGER NOT NULL DEFAULT 0,
                 installment_total INTEGER NOT NULL DEFAULT 0,
                 is_settled SMALLINT NOT NULL DEFAULT 0,
+                settled_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 due_date DATE DEFAULT NULL,
                 automation_type VARCHAR(24) NOT NULL DEFAULT \'manual\',
                 task_link_workspace_id BIGINT DEFAULT NULL REFERENCES workspaces(id) ON DELETE SET NULL,
@@ -2355,6 +2356,8 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 period_key VARCHAR(7) NOT NULL,
                 opening_balance_cents BIGINT NOT NULL DEFAULT 0,
+                balance_snapshot_cents BIGINT DEFAULT NULL,
+                balance_snapshot_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 updated_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )'
@@ -2386,6 +2389,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 installment_number INTEGER NOT NULL DEFAULT 0,
                 installment_total INTEGER NOT NULL DEFAULT 0,
                 is_settled INTEGER NOT NULL DEFAULT 0,
+                settled_at TEXT DEFAULT NULL,
                 due_date TEXT DEFAULT NULL,
                 automation_type TEXT NOT NULL DEFAULT \'manual\',
                 task_link_workspace_id INTEGER DEFAULT NULL,
@@ -2410,6 +2414,8 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 workspace_id INTEGER NOT NULL,
                 period_key TEXT NOT NULL,
                 opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+                balance_snapshot_cents INTEGER DEFAULT NULL,
+                balance_snapshot_at TEXT DEFAULT NULL,
                 updated_by INTEGER DEFAULT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -2487,6 +2493,13 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'is_settled')) {
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN is_settled INTEGER NOT NULL DEFAULT 0");
     }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'settled_at')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN settled_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN settled_at TEXT DEFAULT NULL");
+        }
+    }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'due_date')) {
         if (dbDriverName($pdo) === 'pgsql') {
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN due_date DATE DEFAULT NULL");
@@ -2557,6 +2570,20 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN opening_balance_cents INTEGER NOT NULL DEFAULT 0");
         }
     }
+    if (!tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_cents')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN balance_snapshot_cents BIGINT DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN balance_snapshot_cents INTEGER DEFAULT NULL");
+        }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_at')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN balance_snapshot_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN balance_snapshot_at TEXT DEFAULT NULL");
+        }
+    }
     if (!tableHasColumn($pdo, 'workspace_accounting_periods', 'updated_by')) {
         $pdo->exec("ALTER TABLE workspace_accounting_periods ADD COLUMN updated_by INTEGER DEFAULT NULL");
     }
@@ -2604,7 +2631,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     $rows = $pdo->query(
         'SELECT id, period_key, entry_type, label, amount_cents, total_amount_cents, is_installment,
                 installment_number, installment_total, is_monthly, monthly_mode, paid_amount_cents,
-                is_settled, due_date, source_due_entry_id, carry_source_entry_id, sort_order, created_at, updated_at
+                is_settled, settled_at, due_date, source_due_entry_id, carry_source_entry_id, sort_order, created_at, updated_at
          FROM workspace_accounting_entries'
     )->fetchAll();
     if ($rows) {
@@ -2622,6 +2649,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                  installment_number = :installment_number,
                  installment_total = :installment_total,
                  is_settled = :is_settled,
+                 settled_at = :settled_at,
                  due_date = :due_date,
                  source_due_entry_id = :source_due_entry_id,
                  carry_source_entry_id = :carry_source_entry_id,
@@ -2681,6 +2709,14 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             $normalizedSettled = $normalizedMonthlyMode === 'goal'
                 ? ($normalizedAmount <= 0 ? 1 : 0)
                 : (((int) ($row['is_settled'] ?? 0)) === 1 ? 1 : 0);
+            $normalizedSettledAt = $normalizedSettled === 1
+                ? (
+                    accountingDateTimeForStorage($row['settled_at'] ?? null)
+                    ?? accountingDateTimeForStorage($row['updated_at'] ?? null)
+                    ?? accountingDateTimeForStorage($row['created_at'] ?? null)
+                    ?? nowIso()
+                )
+                : null;
             $normalizedDueDate = $normalizedMonthlyMode === 'goal'
                 ? null
                 : dueDateForStorage((string) ($row['due_date'] ?? ''));
@@ -2704,6 +2740,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 ':installment_number' => $installmentMeta['installment_number'],
                 ':installment_total' => $installmentMeta['installment_total'],
                 ':is_settled' => $normalizedSettled,
+                ':settled_at' => $normalizedSettledAt,
                 ':due_date' => $normalizedDueDate,
                 ':source_due_entry_id' => $sourceDueEntryId,
                 ':carry_source_entry_id' => $carrySourceEntryId,
@@ -2716,7 +2753,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     }
 
     $periodRows = $pdo->query(
-        'SELECT id, period_key, opening_balance_cents, updated_at
+        'SELECT id, period_key, opening_balance_cents, balance_snapshot_cents, balance_snapshot_at, updated_at
          FROM workspace_accounting_periods'
     )->fetchAll();
     if ($periodRows) {
@@ -2724,13 +2761,21 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             'UPDATE workspace_accounting_periods
              SET period_key = :period_key,
                  opening_balance_cents = :opening_balance_cents,
+                 balance_snapshot_cents = :balance_snapshot_cents,
+                 balance_snapshot_at = :balance_snapshot_at,
                  updated_at = :updated_at
              WHERE id = :id'
         );
         foreach ($periodRows as $periodRow) {
+            $normalizedBalanceSnapshotAt = accountingDateTimeForStorage($periodRow['balance_snapshot_at'] ?? null);
+            $normalizedBalanceSnapshotCents = $normalizedBalanceSnapshotAt !== null
+                ? (normalizeSignedDueAmountCents($periodRow['balance_snapshot_cents'] ?? null) ?? 0)
+                : null;
             $periodNormalizeStmt->execute([
                 ':period_key' => normalizeAccountingPeriodKey((string) ($periodRow['period_key'] ?? '')),
                 ':opening_balance_cents' => normalizeSignedDueAmountCents($periodRow['opening_balance_cents'] ?? null) ?? 0,
+                ':balance_snapshot_cents' => $normalizedBalanceSnapshotCents,
+                ':balance_snapshot_at' => $normalizedBalanceSnapshotAt,
                 ':updated_at' => trim((string) ($periodRow['updated_at'] ?? '')) !== ''
                     ? trim((string) ($periodRow['updated_at'] ?? ''))
                     : nowIso(),
@@ -3004,6 +3049,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         'is_monthly' => tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly'),
         'monthly_mode' => tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode'),
         'paid_amount_cents' => tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents'),
+        'settled_at' => tableHasColumn($pdo, 'workspace_accounting_entries', 'settled_at'),
     ];
 
     if (
@@ -3019,6 +3065,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         || !$capabilities['is_monthly']
         || !$capabilities['monthly_mode']
         || !$capabilities['paid_amount_cents']
+        || !$capabilities['settled_at']
     ) {
         try {
             ensureWorkspaceAccountingSchema($pdo);
@@ -3038,6 +3085,40 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         $capabilities['is_monthly'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly');
         $capabilities['monthly_mode'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode');
         $capabilities['paid_amount_cents'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents');
+        $capabilities['settled_at'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'settled_at');
+    }
+
+    $cache[$cacheKey] = $capabilities;
+
+    return $cache[$cacheKey];
+}
+
+function workspaceAccountingPeriodSchemaCapabilities(PDO $pdo): array
+{
+    static $cache = [];
+
+    $cacheKey = spl_object_id($pdo);
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $capabilities = [
+        'balance_snapshot_cents' => tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_cents'),
+        'balance_snapshot_at' => tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_at'),
+    ];
+
+    if (
+        !$capabilities['balance_snapshot_cents']
+        || !$capabilities['balance_snapshot_at']
+    ) {
+        try {
+            ensureWorkspaceAccountingSchema($pdo);
+        } catch (Throwable $_) {
+            // Keep accounting readable even when web requests cannot run DDL in production.
+        }
+
+        $capabilities['balance_snapshot_cents'] = tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_cents');
+        $capabilities['balance_snapshot_at'] = tableHasColumn($pdo, 'workspace_accounting_periods', 'balance_snapshot_at');
     }
 
     $cache[$cacheKey] = $capabilities;
@@ -5689,6 +5770,38 @@ function accountingDateTimeLabel(?string $dateTimeValue): string
     return $dateTime->format('d/m/Y H:i');
 }
 
+function accountingDateTimeForStorage($dateTimeValue): ?string
+{
+    $dateTimeValue = trim((string) $dateTimeValue);
+    if ($dateTimeValue === '') {
+        return null;
+    }
+
+    $dateOnlyValue = dueDateForStorage($dateTimeValue);
+    if ($dateOnlyValue !== null && strlen($dateTimeValue) <= 10) {
+        return $dateOnlyValue . ' 00:00:00';
+    }
+
+    try {
+        $dateTime = new DateTimeImmutable($dateTimeValue);
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    return $dateTime->format('Y-m-d H:i:s');
+}
+
+function accountingDateTimeIsAfter($candidateValue, $anchorValue): bool
+{
+    $candidate = accountingDateTimeForStorage($candidateValue);
+    $anchor = accountingDateTimeForStorage($anchorValue);
+    if ($candidate === null || $anchor === null) {
+        return false;
+    }
+
+    return strcmp($candidate, $anchor) > 0;
+}
+
 function parseAccountingInstallmentProgress(?string $value): ?array
 {
     $raw = trim((string) $value);
@@ -5875,6 +5988,20 @@ function resolveAccountingGoalMonthlyPaymentStateFromCents(int $startingAmountCe
     ];
 }
 
+function resolveAccountingSettledAtValue(int $settledFlag, $existingSettledAt = null, $fallbackTimestamp = null): ?string
+{
+    if ($settledFlag !== 1) {
+        return null;
+    }
+
+    $resolvedExistingSettledAt = accountingDateTimeForStorage($existingSettledAt);
+    if ($resolvedExistingSettledAt !== null) {
+        return $resolvedExistingSettledAt;
+    }
+
+    return accountingDateTimeForStorage($fallbackTimestamp) ?? nowIso();
+}
+
 function normalizeAccountingEntryType(string $value): string
 {
     $normalized = mb_strtolower(trim($value));
@@ -6007,7 +6134,10 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
         && $row['task_link_rate_cents'] > 0
     ) ? 1 : 0;
 
+    $row['created_at'] = accountingDateTimeForStorage($row['created_at'] ?? null) ?? '';
+    $row['updated_at'] = accountingDateTimeForStorage($row['updated_at'] ?? null) ?? '';
     $row['is_settled'] = ((int) ($row['is_settled'] ?? 0)) === 1 ? 1 : 0;
+    $row['settled_at'] = accountingDateTimeForStorage($row['settled_at'] ?? null);
     $row['due_date'] = dueDateForStorage((string) ($row['due_date'] ?? ''));
     $row['is_monthly'] = ((int) ($row['is_monthly'] ?? 0)) === 1 ? 1 : 0;
     $row['monthly_day'] = normalizeDueMonthlyDay($row['monthly_day'] ?? null);
@@ -6078,6 +6208,9 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     ) ? 1 : 0;
     if ($row['is_auto_received'] === 1) {
         $row['is_settled'] = 1;
+        if ($row['settled_at'] === null && $row['due_date'] !== null) {
+            $row['settled_at'] = accountingDateTimeForStorage($row['due_date']);
+        }
     }
     $row['is_overdue'] = (
         $row['entry_type'] === 'expense'
@@ -6549,6 +6682,9 @@ function workspaceAccountingEntriesListRaw(
     $paidAmountSelect = !empty($accountingSchema['paid_amount_cents'])
         ? 'ae.paid_amount_cents'
         : '0 AS paid_amount_cents';
+    $settledAtSelect = !empty($accountingSchema['settled_at'])
+        ? 'ae.settled_at'
+        : 'NULL AS settled_at';
     $automationTypeSelect = !empty($accountingSchema['automation_type'])
         ? 'ae.automation_type'
         : "'manual' AS automation_type";
@@ -6594,6 +6730,7 @@ function workspaceAccountingEntriesListRaw(
                 ae.installment_number,
                 ae.installment_total,
                 ae.is_settled,
+                ' . $settledAtSelect . ',
                 ' . $dueDateSelect . ',
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
@@ -6662,6 +6799,9 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     $paidAmountSelect = !empty($accountingSchema['paid_amount_cents'])
         ? 'ae.paid_amount_cents'
         : '0 AS paid_amount_cents';
+    $settledAtSelect = !empty($accountingSchema['settled_at'])
+        ? 'ae.settled_at'
+        : 'NULL AS settled_at';
     $automationTypeSelect = !empty($accountingSchema['automation_type'])
         ? 'ae.automation_type'
         : "'manual' AS automation_type";
@@ -6707,6 +6847,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
                 ae.installment_number,
                 ae.installment_total,
                 ae.is_settled,
+                ' . $settledAtSelect . ',
                 ' . $dueDateSelect . ',
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
@@ -6970,6 +7111,7 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
 
     $periodKey = normalizeAccountingPeriodKey((string) ($payload['period_key'] ?? ''));
     $createdAt = nowIso();
+    $settledAt = resolveAccountingSettledAtValue($isSettled === 1 ? 1 : 0, null, $createdAt);
     $nextSortOrder = workspaceAccountingNextSortOrder($pdo, $workspaceId, $periodKey, 'expense');
 
     if (dbDriverName($pdo) === 'pgsql') {
@@ -6988,6 +7130,7 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
                 installment_number,
                 installment_total,
                 is_settled,
+                settled_at,
                 due_date,
                 source_due_entry_id,
                 carry_source_entry_id,
@@ -7009,6 +7152,7 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
                 :installment_number,
                 :installment_total,
                 :is_settled,
+                :settled_at,
                 :due_date,
                 :source_due_entry_id,
                 :carry_source_entry_id,
@@ -7035,6 +7179,7 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
                 installment_number,
                 installment_total,
                 is_settled,
+                settled_at,
                 due_date,
                 source_due_entry_id,
                 carry_source_entry_id,
@@ -7056,6 +7201,7 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
                 :installment_number,
                 :installment_total,
                 :is_settled,
+                :settled_at,
                 :due_date,
                 :source_due_entry_id,
                 :carry_source_entry_id,
@@ -7080,6 +7226,11 @@ function workspaceAccountingCreateDueLinkedEntry(PDO $pdo, array $payload, int $
     $stmt->bindValue(':installment_number', 0, PDO::PARAM_INT);
     $stmt->bindValue(':installment_total', 0, PDO::PARAM_INT);
     $stmt->bindValue(':is_settled', $isSettled === 1 ? 1 : 0, PDO::PARAM_INT);
+    if ($settledAt !== null) {
+        $stmt->bindValue(':settled_at', $settledAt, PDO::PARAM_STR);
+    } else {
+        $stmt->bindValue(':settled_at', null, PDO::PARAM_NULL);
+    }
     $stmt->bindValue(':due_date', dueDateForStorage((string) ($payload['due_date'] ?? '')), PDO::PARAM_STR);
     $stmt->bindValue(':source_due_entry_id', $sourceDueEntryId, PDO::PARAM_INT);
     $stmt->bindValue(':carry_source_entry_id', null, PDO::PARAM_NULL);
@@ -7105,8 +7256,10 @@ function workspaceAccountingUpdateDueLinkedEntry(
     int $workspaceId,
     int $entryId,
     array $payload,
-    int $isSettled = 0
+    int $isSettled = 0,
+    ?string $existingSettledAt = null
 ): void {
+    $settledAt = resolveAccountingSettledAtValue($isSettled === 1 ? 1 : 0, $existingSettledAt);
     $stmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
          SET period_key = :period_key,
@@ -7121,6 +7274,7 @@ function workspaceAccountingUpdateDueLinkedEntry(
              installment_number = :installment_number,
              installment_total = :installment_total,
              is_settled = :is_settled,
+             settled_at = :settled_at,
              due_date = :due_date,
              source_due_entry_id = :source_due_entry_id,
              carry_source_entry_id = :carry_source_entry_id,
@@ -7141,6 +7295,7 @@ function workspaceAccountingUpdateDueLinkedEntry(
         ':installment_number' => 0,
         ':installment_total' => 0,
         ':is_settled' => $isSettled === 1 ? 1 : 0,
+        ':settled_at' => $settledAt,
         ':due_date' => dueDateForStorage((string) ($payload['due_date'] ?? '')),
         ':source_due_entry_id' => max(0, (int) ($payload['source_due_entry_id'] ?? 0)),
         ':carry_source_entry_id' => null,
@@ -7177,7 +7332,14 @@ function workspaceAccountingEnsureMonthlyDueEntry(
     $settledFlag = $forceSettled !== null
         ? ($forceSettled === 1 ? 1 : 0)
         : ((((int) ($existingEntry['is_settled'] ?? 0)) === 1) ? 1 : 0);
-    workspaceAccountingUpdateDueLinkedEntry($pdo, $workspaceId, (int) ($existingEntry['id'] ?? 0), $payload, $settledFlag);
+    workspaceAccountingUpdateDueLinkedEntry(
+        $pdo,
+        $workspaceId,
+        (int) ($existingEntry['id'] ?? 0),
+        $payload,
+        $settledFlag,
+        (string) ($existingEntry['settled_at'] ?? '')
+    );
 
     return workspaceAccountingEntryById($pdo, $workspaceId, (int) ($existingEntry['id'] ?? 0));
 }
@@ -8067,6 +8229,54 @@ function workspaceAccountingFirstRelevantPeriodKey(
     return normalizeAccountingPeriodKey($firstPeriodRaw);
 }
 
+function workspaceAccountingBalanceSnapshot(?int $workspaceId = null, ?string $periodKey = null): ?array
+{
+    $workspaceId = $workspaceId && $workspaceId > 0 ? $workspaceId : activeWorkspaceId();
+    if ($workspaceId === null) {
+        return null;
+    }
+
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $pdo = db();
+    $periodSchema = workspaceAccountingPeriodSchemaCapabilities($pdo);
+    if (
+        empty($periodSchema['balance_snapshot_cents'])
+        || empty($periodSchema['balance_snapshot_at'])
+    ) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT balance_snapshot_cents, balance_snapshot_at
+         FROM workspace_accounting_periods
+         WHERE workspace_id = :workspace_id
+           AND period_key = :period_key
+         LIMIT 1'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':period_key' => $periodKey,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        return null;
+    }
+
+    $snapshotAt = accountingDateTimeForStorage($row['balance_snapshot_at'] ?? null);
+    if ($snapshotAt === null) {
+        return null;
+    }
+
+    $snapshotCents = normalizeSignedDueAmountCents($row['balance_snapshot_cents'] ?? null) ?? 0;
+
+    return [
+        'amount_cents' => $snapshotCents,
+        'amount_display' => dueAmountLabelFromSignedCents($snapshotCents),
+        'snapshot_at' => $snapshotAt,
+        'snapshot_at_display' => accountingDateTimeLabel($snapshotAt),
+    ];
+}
+
 function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?string $periodKey = null): int
 {
     $workspaceId = $workspaceId && $workspaceId > 0 ? $workspaceId : activeWorkspaceId();
@@ -8084,6 +8294,10 @@ function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?strin
     }
 
     $openingOverrides = workspaceAccountingOpeningBalanceOverrides($pdo, $workspaceId, $periodKey);
+    $currentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+    $currentPeriodSnapshot = strcmp($currentPeriodKey, $periodKey) <= 0
+        ? workspaceAccountingBalanceSnapshot($workspaceId, $currentPeriodKey)
+        : null;
     $openingBalance = $openingOverrides[$firstPeriod] ?? 0;
     if ($firstPeriod === $periodKey) {
         return $openingBalance;
@@ -8092,7 +8306,18 @@ function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?strin
     $cursor = $firstPeriod;
     while ($cursor < $periodKey) {
         $periodEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $cursor);
-        $periodSummary = accountingSummary($periodEntries, $openingBalance);
+        $periodSummary = accountingSummary(
+            $periodEntries,
+            $openingBalance,
+            $cursor === $currentPeriodKey && $currentPeriodSnapshot !== null
+                ? [
+                    'period_key' => $cursor,
+                    'current_period_key' => $currentPeriodKey,
+                    'balance_snapshot_cents' => (int) ($currentPeriodSnapshot['amount_cents'] ?? 0),
+                    'balance_snapshot_at' => (string) ($currentPeriodSnapshot['snapshot_at'] ?? ''),
+                ]
+                : []
+        );
         $nextPeriod = accountingNextPeriodKey($cursor);
         $openingBalance = $openingOverrides[$nextPeriod] ?? (int) ($periodSummary['current_balance_cents'] ?? 0);
         $cursor = $nextPeriod;
@@ -8179,6 +8404,102 @@ function setWorkspaceAccountingOpeningBalance(
     $stmt->execute();
 
     return $amountCents;
+}
+
+function setWorkspaceAccountingBalanceSnapshot(
+    PDO $pdo,
+    int $workspaceId,
+    ?string $periodKey,
+    $amountInput,
+    ?int $updatedBy = null,
+    ?string $snapshotAt = null
+): array {
+    if ($workspaceId <= 0) {
+        throw new RuntimeException('Workspace invÃ¡lido.');
+    }
+
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    workspaceAccountingPeriodSchemaCapabilities($pdo);
+
+    $rawAmountInput = is_string($amountInput) ? trim($amountInput) : $amountInput;
+    $amountCents = ($rawAmountInput === '' || $rawAmountInput === null)
+        ? 0
+        : normalizeSignedDueAmountCents($amountInput);
+    if ($amountCents === null) {
+        throw new RuntimeException('Informe um saldo conciliado vÃ¡lido.');
+    }
+
+    $resolvedSnapshotAt = accountingDateTimeForStorage($snapshotAt) ?? nowIso();
+    $updatedAt = nowIso();
+
+    if (dbDriverName($pdo) === 'pgsql') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_periods (
+                workspace_id,
+                period_key,
+                balance_snapshot_cents,
+                balance_snapshot_at,
+                updated_by,
+                updated_at
+            ) VALUES (
+                :workspace_id,
+                :period_key,
+                :balance_snapshot_cents,
+                :balance_snapshot_at,
+                :updated_by,
+                :updated_at
+            )
+            ON CONFLICT (workspace_id, period_key)
+            DO UPDATE SET
+                balance_snapshot_cents = EXCLUDED.balance_snapshot_cents,
+                balance_snapshot_at = EXCLUDED.balance_snapshot_at,
+                updated_by = EXCLUDED.updated_by,
+                updated_at = EXCLUDED.updated_at'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_periods (
+                workspace_id,
+                period_key,
+                balance_snapshot_cents,
+                balance_snapshot_at,
+                updated_by,
+                updated_at
+            ) VALUES (
+                :workspace_id,
+                :period_key,
+                :balance_snapshot_cents,
+                :balance_snapshot_at,
+                :updated_by,
+                :updated_at
+            )
+            ON CONFLICT(workspace_id, period_key)
+            DO UPDATE SET
+                balance_snapshot_cents = excluded.balance_snapshot_cents,
+                balance_snapshot_at = excluded.balance_snapshot_at,
+                updated_by = excluded.updated_by,
+                updated_at = excluded.updated_at'
+        );
+    }
+
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':period_key', $periodKey, PDO::PARAM_STR);
+    $stmt->bindValue(':balance_snapshot_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':balance_snapshot_at', $resolvedSnapshotAt, PDO::PARAM_STR);
+    if ($updatedBy !== null && $updatedBy > 0) {
+        $stmt->bindValue(':updated_by', $updatedBy, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':updated_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':updated_at', $updatedAt, PDO::PARAM_STR);
+    $stmt->execute();
+
+    return [
+        'amount_cents' => $amountCents,
+        'amount_display' => dueAmountLabelFromSignedCents($amountCents),
+        'snapshot_at' => $resolvedSnapshotAt,
+        'snapshot_at_display' => accountingDateTimeLabel($resolvedSnapshotAt),
+    ];
 }
 
 function workspaceAccountingEntriesList(
@@ -8382,6 +8703,7 @@ function createWorkspaceAccountingEntry(
     ]);
     $nextSortOrder = ((int) $sortOrderStmt->fetchColumn()) + 1;
     $createdAt = nowIso();
+    $settledAt = resolveAccountingSettledAtValue($settledFlag, null, $createdAt);
 
     if (dbDriverName($pdo) === 'pgsql') {
         $stmt = $pdo->prepare(
@@ -8404,6 +8726,7 @@ function createWorkspaceAccountingEntry(
                 installment_number,
                 installment_total,
                 is_settled,
+                settled_at,
                 due_date,
                 sort_order,
                 created_by,
@@ -8428,6 +8751,7 @@ function createWorkspaceAccountingEntry(
                 :installment_number,
                 :installment_total,
                 :is_settled,
+                :settled_at,
                 :due_date,
                 :sort_order,
                 :created_by,
@@ -8457,6 +8781,7 @@ function createWorkspaceAccountingEntry(
                 installment_number,
                 installment_total,
                 is_settled,
+                settled_at,
                 due_date,
                 sort_order,
                 created_by,
@@ -8481,6 +8806,7 @@ function createWorkspaceAccountingEntry(
                 :installment_number,
                 :installment_total,
                 :is_settled,
+                :settled_at,
                 :due_date,
                 :sort_order,
                 :created_by,
@@ -8516,6 +8842,11 @@ function createWorkspaceAccountingEntry(
     $stmt->bindValue(':installment_number', (int) $amountPayload['installment_number'], PDO::PARAM_INT);
     $stmt->bindValue(':installment_total', (int) $amountPayload['installment_total'], PDO::PARAM_INT);
     $stmt->bindValue(':is_settled', $settledFlag, PDO::PARAM_INT);
+    if ($settledAt !== null) {
+        $stmt->bindValue(':settled_at', $settledAt, PDO::PARAM_STR);
+    } else {
+        $stmt->bindValue(':settled_at', null, PDO::PARAM_NULL);
+    }
     if ($dueDate !== null) {
         $stmt->bindValue(':due_date', $dueDate, PDO::PARAM_STR);
     } else {
@@ -8556,6 +8887,7 @@ function updateWorkspaceAccountingEntry(
     string $entryType = 'expense',
     ?string $monthlyMode = null,
     ?int $existingPaidAmountCents = null,
+    ?string $existingSettledAt = null,
     ?array $automationConfig = null
 ): void {
     if ($workspaceId <= 0 || $entryId <= 0) {
@@ -8636,6 +8968,8 @@ function updateWorkspaceAccountingEntry(
         }
     }
 
+    $settledAt = resolveAccountingSettledAtValue($settledFlag, $existingSettledAt);
+
     $stmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
          SET label = :label,
@@ -8653,6 +8987,7 @@ function updateWorkspaceAccountingEntry(
              installment_number = :installment_number,
              installment_total = :installment_total,
              is_settled = :is_settled,
+             settled_at = :settled_at,
              due_date = :due_date,
              updated_at = :updated_at
          WHERE id = :id
@@ -8676,6 +9011,7 @@ function updateWorkspaceAccountingEntry(
         ':installment_number' => (int) $amountPayload['installment_number'],
         ':installment_total' => (int) $amountPayload['installment_total'],
         ':is_settled' => $settledFlag,
+        ':settled_at' => $settledAt,
         ':due_date' => $dueDate,
         ':updated_at' => nowIso(),
         ':id' => $entryId,
@@ -9076,6 +9412,7 @@ function updateWorkspaceAccountingEntryWithCarrySync(
                 $monthlyMode === 'goal'
                     ? workspaceAccountingGoalPaymentTotalCents($pdo, $workspaceId, $entryId)
                     : null,
+                (string) ($existingEntry['settled_at'] ?? ''),
                 $automationConfig
             );
 
@@ -9228,7 +9565,65 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
     }
 }
 
-function accountingSummary(array $entries, int $openingBalanceCents): array
+function workspaceAccountingEntryMovementTimestamp(array $entry): ?string
+{
+    if (((int) ($entry['is_monthly_goal'] ?? 0)) === 1) {
+        return null;
+    }
+
+    if (((int) ($entry['is_auto_received'] ?? 0)) === 1) {
+        return accountingDateTimeForStorage((string) ($entry['due_date'] ?? ''));
+    }
+
+    if (((int) ($entry['is_settled'] ?? 0)) !== 1) {
+        return null;
+    }
+
+    return accountingDateTimeForStorage($entry['settled_at'] ?? null)
+        ?? accountingDateTimeForStorage($entry['updated_at'] ?? null)
+        ?? accountingDateTimeForStorage($entry['created_at'] ?? null);
+}
+
+function accountingSnapshotMovementDeltaCents(array $entries, string $snapshotAt): int
+{
+    $snapshotAt = accountingDateTimeForStorage($snapshotAt) ?? '';
+    if ($snapshotAt === '') {
+        return 0;
+    }
+
+    $deltaCents = 0;
+    foreach ($entries as $entry) {
+        $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+        if (((int) ($entry['is_monthly_goal'] ?? 0)) === 1) {
+            $goalPaymentHistory = is_array($entry['goal_payment_history'] ?? null)
+                ? $entry['goal_payment_history']
+                : [];
+            foreach ($goalPaymentHistory as $goalPaymentHistoryItem) {
+                if (!accountingDateTimeIsAfter($goalPaymentHistoryItem['created_at'] ?? null, $snapshotAt)) {
+                    continue;
+                }
+
+                $deltaCents -= max(0, normalizeDueAmountCents($goalPaymentHistoryItem['amount_cents'] ?? null) ?? 0);
+            }
+            continue;
+        }
+        if (((int) ($entry['is_settled'] ?? 0)) !== 1) {
+            continue;
+        }
+
+        $movementTimestamp = workspaceAccountingEntryMovementTimestamp($entry);
+        if ($movementTimestamp === null || !accountingDateTimeIsAfter($movementTimestamp, $snapshotAt)) {
+            continue;
+        }
+
+        $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        $deltaCents += $entryType === 'income' ? $amountCents : (-1 * $amountCents);
+    }
+
+    return $deltaCents;
+}
+
+function accountingSummary(array $entries, int $openingBalanceCents, array $options = []): array
 {
     $expenseTotal = 0;
     $expensePaid = 0;
@@ -9266,6 +9661,26 @@ function accountingSummary(array $entries, int $openingBalanceCents): array
     $projectedMovement = $incomeTotal - $expenseTotal;
     $currentBalance = $openingBalanceCents + $monthMovement;
     $finalBalance = $openingBalanceCents + $projectedMovement;
+    $summaryPeriodKey = trim((string) ($options['period_key'] ?? ''));
+    $summaryCurrentPeriodKey = trim((string) ($options['current_period_key'] ?? ''));
+    $balanceSnapshotAt = accountingDateTimeForStorage($options['balance_snapshot_at'] ?? null);
+    $hasBalanceSnapshot = (
+        $summaryPeriodKey !== ''
+        && $summaryCurrentPeriodKey !== ''
+        && $summaryPeriodKey === $summaryCurrentPeriodKey
+        && $balanceSnapshotAt !== null
+        && array_key_exists('balance_snapshot_cents', $options)
+    );
+    $balanceSnapshotCents = $hasBalanceSnapshot
+        ? (normalizeSignedDueAmountCents($options['balance_snapshot_cents'] ?? null) ?? 0)
+        : null;
+    $postSnapshotMovementCents = 0;
+
+    if ($hasBalanceSnapshot && $balanceSnapshotCents !== null) {
+        $postSnapshotMovementCents = accountingSnapshotMovementDeltaCents($entries, $balanceSnapshotAt);
+        $currentBalance = $balanceSnapshotCents + $postSnapshotMovementCents;
+        $finalBalance = $currentBalance + $incomeRemaining - $expenseRemaining;
+    }
 
     return [
         'expense_total_cents' => $expenseTotal,
@@ -9279,6 +9694,17 @@ function accountingSummary(array $entries, int $openingBalanceCents): array
         'current_balance_cents' => $currentBalance,
         'opening_balance_cents' => $openingBalanceCents,
         'final_balance_cents' => $finalBalance,
+        'balance_snapshot_active' => $hasBalanceSnapshot ? 1 : 0,
+        'balance_snapshot_cents' => $balanceSnapshotCents,
+        'balance_snapshot_at' => $hasBalanceSnapshot ? $balanceSnapshotAt : null,
+        'balance_snapshot_display' => $hasBalanceSnapshot && $balanceSnapshotCents !== null
+            ? dueAmountLabelFromSignedCents($balanceSnapshotCents)
+            : '',
+        'balance_snapshot_at_display' => $hasBalanceSnapshot && $balanceSnapshotAt !== null
+            ? accountingDateTimeLabel($balanceSnapshotAt)
+            : '',
+        'post_snapshot_movement_cents' => $postSnapshotMovementCents,
+        'post_snapshot_movement_display' => dueAmountLabelFromSignedCents($postSnapshotMovementCents),
         'expense_total_display' => dueAmountLabelFromCents($expenseTotal),
         'expense_paid_display' => dueAmountLabelFromCents($expensePaid),
         'expense_remaining_display' => dueAmountLabelFromCents($expenseRemaining),
@@ -9297,7 +9723,8 @@ function workspaceAccountingNextIncomeProjectionSummary(
     PDO $pdo,
     int $workspaceId,
     ?string $periodKey,
-    int $openingBalanceCents
+    int $openingBalanceCents,
+    array $summaryOptions = []
 ): array {
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     if ($workspaceId <= 0) {
@@ -9322,7 +9749,7 @@ function workspaceAccountingNextIncomeProjectionSummary(
     workspaceAccountingEnsureCarryoverUpTo($pdo, $workspaceId, $horizonPeriodKey);
 
     $currentPeriodEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $periodKey);
-    $currentSummary = accountingSummary($currentPeriodEntries, $openingBalanceCents);
+    $currentSummary = accountingSummary($currentPeriodEntries, $openingBalanceCents, $summaryOptions);
     $baseBalanceCents = (int) ($currentSummary['current_balance_cents'] ?? $openingBalanceCents);
 
     $pendingEvents = [];
