@@ -185,7 +185,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                 </div>
 
                 <div class="workspace-settings-grid account-settings-grid">
-                    <section class="workspace-settings-card">
+                    <section class="workspace-settings-card account-profile-card">
                         <h3>Perfil</h3>
                         <form method="post" class="workspace-settings-form account-profile-form" enctype="multipart/form-data">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -195,6 +195,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                                 <label class="account-profile-photo-field">
                                     <span>Foto de perfil</span>
                                     <input
+                                        class="account-profile-file-input"
                                         type="file"
                                         name="avatar"
                                         accept="image/png,image/jpeg,image/webp,image/gif"
@@ -223,7 +224,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                     unset($workspacePlanCardExtraClass, $workspacePlanCardHeading, $workspacePlanCardContextLabel);
                     ?>
 
-                    <section class="workspace-settings-card">
+                    <section class="workspace-settings-card account-password-card">
                         <h3>Senha</h3>
                         <form method="post" class="workspace-settings-form">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">

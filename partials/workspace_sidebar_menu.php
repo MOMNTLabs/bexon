@@ -13,30 +13,106 @@ $sidebarOptionalToolLabels = is_array($workspaceSidebarConfig['optional_labels']
     : workspaceSidebarOptionalToolLabels();
 $currentSidebarView = normalizeDashboardViewKey((string) ($_GET['view'] ?? ''));
 $sidebarToolAddRedirectPath = dashboardPath($currentSidebarView !== '' ? $currentSidebarView : 'overview');
+$sidebarTaskGroups = array_values(array_filter(
+    is_array($taskGroups ?? null) ? $taskGroups : [],
+    static fn ($groupName): bool => trim((string) $groupName) !== ''
+));
+$sidebarTaskScope = normalizeTaskPageMode((string) ($_GET['task_scope'] ?? ''));
+if ($sidebarTaskScope === '' || $sidebarTaskScope === 'select') {
+    $sidebarTaskScope = 'all';
+}
+$sidebarTaskCurrentGroup = isset($_GET['group']) && trim((string) $_GET['group']) !== ''
+    ? normalizeTaskGroupName((string) $_GET['group'])
+    : '';
+if ($sidebarTaskScope === 'project' && $sidebarTaskCurrentGroup === '') {
+    $sidebarTaskScope = 'all';
+}
+$sidebarTaskProjectsOpen = $currentSidebarView === 'tasks';
+$sidebarTaskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
+$sidebarTaskAllProjectsActive = $currentSidebarView === 'tasks' && $sidebarTaskScope !== 'project';
 ?>
 
 <nav class="sidebar-view-menu" id="workspace-sidebar-menu" aria-label="Menu do workspace">
     <?php foreach ($enabledSidebarTools as $sidebarToolView): ?>
         <?php if ($sidebarToolView === 'tasks'): ?>
-            <button
-                type="button"
-                class="sidebar-view-toggle"
-                data-dashboard-view-toggle
-                data-view="tasks"
-                aria-pressed="false"
+            <div
+                class="sidebar-view-branch sidebar-task-projects<?= $sidebarTaskProjectsOpen ? ' is-open' : '' ?>"
+                data-sidebar-task-projects
             >
-                <span class="sidebar-view-toggle-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" focusable="false">
-                        <path d="M8 7h11"></path>
-                        <path d="M8 12h11"></path>
-                        <path d="M8 17h11"></path>
-                        <path d="M4.5 7h.01"></path>
-                        <path d="M4.5 12h.01"></path>
-                        <path d="M4.5 17h.01"></path>
-                    </svg>
-                </span>
-                <span class="sidebar-view-toggle-label">Lista de tarefas</span>
-            </button>
+                <button
+                    type="button"
+                    class="sidebar-view-toggle sidebar-task-projects-toggle"
+                    data-dashboard-view-toggle
+                    data-sidebar-task-projects-toggle
+                    data-view="tasks"
+                    aria-pressed="false"
+                    aria-expanded="<?= $sidebarTaskProjectsOpen ? 'true' : 'false' ?>"
+                    aria-controls="workspace-sidebar-task-projects-panel"
+                >
+                    <span class="sidebar-view-toggle-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" focusable="false">
+                            <path d="M8 7h11"></path>
+                            <path d="M8 12h11"></path>
+                            <path d="M8 17h11"></path>
+                            <path d="M4.5 7h.01"></path>
+                            <path d="M4.5 12h.01"></path>
+                            <path d="M4.5 17h.01"></path>
+                        </svg>
+                    </span>
+                    <span class="sidebar-view-toggle-label">Lista de tarefas</span>
+                    <span class="sidebar-task-projects-toggle-chevron" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" focusable="false">
+                            <path d="m4 6 4 4 4-4"></path>
+                        </svg>
+                    </span>
+                </button>
+                <div
+                    class="sidebar-view-submenu sidebar-task-projects-panel"
+                    id="workspace-sidebar-task-projects-panel"
+                    data-sidebar-task-projects-panel
+                    <?= $sidebarTaskProjectsOpen ? '' : 'hidden' ?>
+                >
+                    <div class="sidebar-task-projects-header">
+                        <span class="sidebar-task-projects-title">Projetos</span>
+                        <?php if (!empty($canManageWorkspace)): ?>
+                            <button
+                                type="button"
+                                class="sidebar-task-projects-create"
+                                data-open-create-group-modal
+                                aria-label="Criar projeto"
+                                title="Criar projeto"
+                            >
+                                <span aria-hidden="true">+</span>
+                            </button>
+                        <?php endif; ?>
+                    </div>
+                    <a
+                        href="<?= e($sidebarTaskAllProjectsPath) ?>"
+                        class="sidebar-task-project-link<?= $sidebarTaskAllProjectsActive ? ' is-active' : '' ?>"
+                        data-sidebar-task-project-link
+                        data-task-scope="all"
+                    >Todos projetos</a>
+                    <?php foreach ($sidebarTaskGroups as $sidebarTaskProjectName): ?>
+                        <?php
+                        $sidebarTaskProjectPath = dashboardPath('tasks', [
+                            'task_scope' => 'project',
+                            'group' => $sidebarTaskProjectName,
+                        ]);
+                        $sidebarTaskProjectActive =
+                            $currentSidebarView === 'tasks'
+                            && $sidebarTaskScope === 'project'
+                            && mb_strtolower($sidebarTaskCurrentGroup) === mb_strtolower($sidebarTaskProjectName);
+                        ?>
+                        <a
+                            href="<?= e($sidebarTaskProjectPath) ?>"
+                            class="sidebar-task-project-link<?= $sidebarTaskProjectActive ? ' is-active' : '' ?>"
+                            data-sidebar-task-project-link
+                            data-task-scope="project"
+                            data-task-group-key="<?= e(mb_strtolower($sidebarTaskProjectName)) ?>"
+                        ><?= e($sidebarTaskProjectName) ?></a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         <?php elseif ($sidebarToolView === 'vault'): ?>
             <button
                 type="button"

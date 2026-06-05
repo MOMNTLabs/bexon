@@ -251,15 +251,9 @@ function buildGlobalDashboardOverview(?array $currentUser, array $userWorkspaces
             $workspaceOptionId,
             $overviewAccountingPeriod
         );
-        $workspaceAccountingBalanceSnapshot = workspaceAccountingBalanceSnapshot(
-            $workspaceOptionId,
-            $overviewAccountingPeriod
-        );
         $workspaceAccountingSummary = accountingSummary($workspaceAccountingEntries, $workspaceAccountingOpeningBalance, [
             'period_key' => $overviewAccountingPeriod,
             'current_period_key' => normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m')),
-            'balance_snapshot_cents' => $workspaceAccountingBalanceSnapshot['amount_cents'] ?? null,
-            'balance_snapshot_at' => $workspaceAccountingBalanceSnapshot['snapshot_at'] ?? null,
         ]);
         $workspaceMonthMovementCents = (int) ($workspaceAccountingSummary['month_movement_cents'] ?? 0);
         $workspaceCurrentBalanceCents = (int) ($workspaceAccountingSummary['current_balance_cents'] ?? 0);

@@ -684,11 +684,9 @@ if ($currentUser) {
     }
 }
 $accountingOpeningBalanceCents = 0;
-$accountingBalanceSnapshot = null;
 if ($currentUser && $currentWorkspaceId !== null) {
     try {
         $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($currentWorkspaceId, $accountingPeriod);
-        $accountingBalanceSnapshot = workspaceAccountingBalanceSnapshot($currentWorkspaceId, $accountingPeriod);
     } catch (Throwable $e) {
         $appendDashboardLoadError('Não foi possível carregar o saldo inicial da contabilidade.', $e);
     }
@@ -696,8 +694,6 @@ if ($currentUser && $currentWorkspaceId !== null) {
 $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents, [
     'period_key' => $accountingPeriod,
     'current_period_key' => $accountingCurrentPeriodKey,
-    'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
-    'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
 ]);
 $accountingNextIncomeProjection = ['available' => false];
 if ($currentUser && $currentWorkspaceId !== null) {
@@ -710,8 +706,6 @@ if ($currentUser && $currentWorkspaceId !== null) {
             [
                 'period_key' => $accountingPeriod,
                 'current_period_key' => $accountingCurrentPeriodKey,
-                'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
-                'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
             ]
         );
     } catch (Throwable $e) {
@@ -761,7 +755,7 @@ if ($taskCalendarMonth === '') {
     $taskCalendarMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
 }
 if ($taskPageMode === '') {
-    $taskPageMode = $taskQueryId > 0 ? 'all' : 'select';
+    $taskPageMode = 'all';
 }
 $workspaceUserIds = array_map(
     static fn (array $user): int => (int) ($user['id'] ?? 0),
@@ -774,9 +768,10 @@ if ($assigneeFilterId !== null && !in_array($assigneeFilterId, $workspaceUserIds
     $assigneeFilterId = null;
 }
 if ($taskPageMode === 'project' && $groupFilter === null) {
-    $taskPageMode = 'select';
+    $taskPageMode = 'all';
 }
 if ($taskPageMode === 'select') {
+    $taskPageMode = 'all';
     $groupFilter = null;
     $creatorFilterId = null;
     $assigneeFilterId = null;
@@ -789,7 +784,7 @@ foreach ($taskGroups as $taskGroupName) {
 $allTasks = [];
 $tasks = [];
 $showEmptyGroups = $currentUser
-    && $taskPageMode !== 'select'
+    && $taskPageMode === 'all'
     && $groupFilter === null
     && $creatorFilterId === null
     && $assigneeFilterId === null;
@@ -813,10 +808,8 @@ if ($currentUser && $currentWorkspaceId !== null) {
                 return isset($taskVisibleKeys[$groupKey]);
             }
         ));
-        if ($taskPageMode !== 'select') {
-            $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
-            $tasksGroupedByGroup = tasksByGroup($tasks, $groupingSource);
-        }
+        $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
+        $tasksGroupedByGroup = tasksByGroup($tasks, $groupingSource);
         $stats = dashboardStats($allTasks);
         $myOpenTasks = countMyAssignedTasks($allTasks, (int) $currentUser['id']);
         $completionRate = $stats['total'] > 0 ? (int) round(($stats['done'] / $stats['total']) * 100) : 0;

@@ -9661,26 +9661,7 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
     $projectedMovement = $incomeTotal - $expenseTotal;
     $currentBalance = $openingBalanceCents + $monthMovement;
     $finalBalance = $openingBalanceCents + $projectedMovement;
-    $summaryPeriodKey = trim((string) ($options['period_key'] ?? ''));
-    $summaryCurrentPeriodKey = trim((string) ($options['current_period_key'] ?? ''));
-    $balanceSnapshotAt = accountingDateTimeForStorage($options['balance_snapshot_at'] ?? null);
-    $hasBalanceSnapshot = (
-        $summaryPeriodKey !== ''
-        && $summaryCurrentPeriodKey !== ''
-        && $summaryPeriodKey === $summaryCurrentPeriodKey
-        && $balanceSnapshotAt !== null
-        && array_key_exists('balance_snapshot_cents', $options)
-    );
-    $balanceSnapshotCents = $hasBalanceSnapshot
-        ? (normalizeSignedDueAmountCents($options['balance_snapshot_cents'] ?? null) ?? 0)
-        : null;
     $postSnapshotMovementCents = 0;
-
-    if ($hasBalanceSnapshot && $balanceSnapshotCents !== null) {
-        $postSnapshotMovementCents = accountingSnapshotMovementDeltaCents($entries, $balanceSnapshotAt);
-        $currentBalance = $balanceSnapshotCents + $postSnapshotMovementCents;
-        $finalBalance = $currentBalance + $incomeRemaining - $expenseRemaining;
-    }
 
     return [
         'expense_total_cents' => $expenseTotal,
@@ -9694,15 +9675,11 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
         'current_balance_cents' => $currentBalance,
         'opening_balance_cents' => $openingBalanceCents,
         'final_balance_cents' => $finalBalance,
-        'balance_snapshot_active' => $hasBalanceSnapshot ? 1 : 0,
-        'balance_snapshot_cents' => $balanceSnapshotCents,
-        'balance_snapshot_at' => $hasBalanceSnapshot ? $balanceSnapshotAt : null,
-        'balance_snapshot_display' => $hasBalanceSnapshot && $balanceSnapshotCents !== null
-            ? dueAmountLabelFromSignedCents($balanceSnapshotCents)
-            : '',
-        'balance_snapshot_at_display' => $hasBalanceSnapshot && $balanceSnapshotAt !== null
-            ? accountingDateTimeLabel($balanceSnapshotAt)
-            : '',
+        'balance_snapshot_active' => 0,
+        'balance_snapshot_cents' => null,
+        'balance_snapshot_at' => null,
+        'balance_snapshot_display' => '',
+        'balance_snapshot_at_display' => '',
         'post_snapshot_movement_cents' => $postSnapshotMovementCents,
         'post_snapshot_movement_display' => dueAmountLabelFromSignedCents($postSnapshotMovementCents),
         'expense_total_display' => dueAmountLabelFromCents($expenseTotal),

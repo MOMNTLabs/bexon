@@ -1,7 +1,7 @@
 <?php
 $taskPageMode = normalizeTaskPageMode((string) ($taskPageMode ?? ''));
-if ($taskPageMode === '') {
-    $taskPageMode = 'select';
+if ($taskPageMode === '' || $taskPageMode === 'select') {
+    $taskPageMode = 'all';
 }
 $taskPageIsChooser = $taskPageMode === 'select';
 $taskPageIsProject = $taskPageMode === 'project' && trim((string) ($groupFilter ?? '')) !== '';
@@ -14,8 +14,9 @@ $taskCalendarMonth = normalizeTaskCalendarMonth((string) ($taskCalendarMonth ?? 
 if ($taskCalendarMonth === '') {
     $taskCalendarMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
 }
-$taskPageBackPath = dashboardPath('tasks');
 $taskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
+$taskPageBackPath = $taskAllProjectsPath;
+$taskShowBackButton = $taskPageIsProject;
 $taskCurrentProjectName = $taskPageIsProject ? normalizeTaskGroupName((string) ($groupFilter ?? '')) : '';
 $taskCurrentProjectPermission = $taskPageIsProject
     ? ($taskGroupPermissions[$taskCurrentProjectName] ?? ['can_view' => true, 'can_access' => true])
@@ -60,7 +61,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
 ?>
 <div class="panel-header board-header task-page-board-header<?= $taskPageIsChooser ? ' is-chooser' : '' ?>">
     <div class="task-page-heading">
-        <?php if (!$taskPageIsChooser): ?>
+        <?php if ($taskShowBackButton): ?>
             <a
                 href="<?= e($taskPageBackPath) ?>"
                 class="task-page-back-button"
@@ -78,6 +79,8 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                 <p>Escolha um projeto ou veja tudo na mesma página.</p>
             <?php elseif ($taskPageIsProject): ?>
                 <p><?= e($taskCurrentProjectName) ?></p>
+            <?php else: ?>
+                <p>Todos projetos</p>
             <?php endif; ?>
         </div>
     </div>
@@ -484,8 +487,14 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                         aria-label="<?= e($taskProjectDoneToggleLabel . ' do projeto ' . $taskCurrentProjectName) ?>"
                     >
                         <svg class="task-project-done-toggle-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                            <path d="M3.5 10c1.9-3 4.1-4.5 6.5-4.5s4.6 1.5 6.5 4.5c-1.9 3-4.1 4.5-6.5 4.5S5.4 13 3.5 10Z"></path>
-                            <circle cx="10" cy="10" r="1.9"></circle>
+                            <g class="task-project-done-toggle-icon-open">
+                                <path d="M3.5 10c1.9-3 4.1-4.5 6.5-4.5s4.6 1.5 6.5 4.5c-1.9 3-4.1 4.5-6.5 4.5S5.4 13 3.5 10Z"></path>
+                                <circle cx="10" cy="10" r="1.9"></circle>
+                            </g>
+                            <g class="task-project-done-toggle-icon-closed">
+                                <path d="M4.2 11.8c1.7 1.7 3.6 2.5 5.8 2.5s4.1-.8 5.8-2.5"></path>
+                                <path d="M3.8 4.4 16.2 15.6"></path>
+                            </g>
                         </svg>
                         <span class="task-project-done-toggle-label"><?= e($taskProjectDoneToggleShortLabel) ?></span>
                     </button>

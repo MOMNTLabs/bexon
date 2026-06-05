@@ -1167,6 +1167,10 @@ body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle .sideba
     stroke-width: 1.9;
 }
 
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-toggle-chevron {
+    color: rgba(255, 247, 220, 0.72);
+}
+
 body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle:hover,
 body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle:focus-visible {
     border-color: rgba(244, 230, 177, 0.12);
@@ -1188,6 +1192,34 @@ body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-acti
 body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-active .sidebar-view-toggle-label,
 body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-active .sidebar-view-toggle-icon {
     color: var(--ui-sidebar-text);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-active .sidebar-task-projects-toggle-chevron {
+    color: var(--ui-sidebar-text);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active {
+    border-color: transparent;
+    background: transparent;
+    color: rgba(244, 247, 252, 0.86);
+    box-shadow: none;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active::before,
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active::after {
+    display: none;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active .sidebar-view-toggle-label {
+    color: rgba(244, 247, 252, 0.86);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active .sidebar-view-toggle-icon {
+    color: inherit;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active .sidebar-task-projects-toggle-chevron {
+    color: rgba(244, 247, 252, 0.58);
 }
 
 body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-active::before {
@@ -1218,6 +1250,51 @@ body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle.is-acti
     filter: blur(11px);
     opacity: 0.9;
     pointer-events: none;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-panel {
+    padding-top: 0;
+    border-left: 1px solid rgba(255, 247, 220, 0.08);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-title {
+    color: rgba(255, 247, 220, 0.48);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-create {
+    border: none;
+    background: transparent;
+    color: rgba(255, 247, 220, 0.72);
+    box-shadow: none;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-create:hover,
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-projects-create:focus-visible {
+    border-color: transparent;
+    background: transparent;
+    color: #fff7dc;
+    outline: none;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link {
+    background: transparent;
+    border-color: transparent;
+    color: rgba(240, 244, 251, 0.72);
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link:hover,
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link:focus-visible {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.045);
+    color: #fff7dc;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link.is-active {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--ui-sidebar-text);
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 rgba(255, 247, 220, 0.78);
 }
 
 body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder {
@@ -1733,6 +1810,216 @@ body.is-dashboard.is-workspace-settings .workspace-settings-panel {
     border-color: rgba(162, 128, 74, 0.34);
     background: var(--bexon-card-surface-strong);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body.is-dashboard.is-account-settings {
+    background:
+        radial-gradient(circle at top left, rgba(255, 211, 153, 0.16), transparent 30%),
+        radial-gradient(circle at right 18%, rgba(146, 181, 255, 0.12), transparent 28%),
+        linear-gradient(180deg, #f7f4ee 0%, #f2ede4 100%);
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav {
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    padding: 10px 18px;
+    border: 1px solid rgba(170, 136, 81, 0.14);
+    border-radius: 22px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(251, 247, 240, 0.9));
+    box-shadow:
+        0 18px 38px rgba(79, 56, 24, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(14px);
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    right: 18px;
+    bottom: -10px;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(170, 136, 81, 0.16), rgba(170, 136, 81, 0));
+    pointer-events: none;
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav .brand {
+    display: none;
+}
+
+body.is-dashboard.is-account-settings .top-nav-leading {
+    gap: 0;
+}
+
+body.is-dashboard.is-account-settings .nav-back-button {
+    border-color: rgba(170, 136, 81, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: none;
+    color: #5b6472;
+}
+
+body.is-dashboard.is-account-settings .nav-back-button:hover,
+body.is-dashboard.is-account-settings .nav-back-button:focus-visible {
+    border-color: rgba(170, 136, 81, 0.3);
+    background: rgba(255, 255, 255, 0.92);
+    color: #2e3848;
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav .user-chip {
+    border-color: rgba(170, 136, 81, 0.14);
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: none;
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav .user-chip strong {
+    color: #2f3745;
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav .user-chip span {
+    color: #7a8698;
+}
+
+body.is-dashboard.is-account-settings .top-nav.dashboard-nav :is(.icon-gear-button, .header-notification-button, .workspace-mobile-menu-button) {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 8px 18px rgba(30, 43, 61, 0.12);
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-panel {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-header {
+    padding: 4px 2px 0;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-header::before {
+    content: "Conta";
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(170, 136, 81, 0.18);
+    background: rgba(255, 250, 240, 0.76);
+    color: rgba(124, 92, 46, 0.82);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-header h2 {
+    color: #283241;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-header p {
+    color: #6f7c90;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-card {
+    border: 1px solid rgba(170, 136, 81, 0.16);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(251, 247, 240, 0.97));
+    box-shadow:
+        0 18px 40px rgba(79, 56, 24, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-card h3 {
+    color: #2f3745;
+}
+
+body.is-dashboard.is-account-settings .account-profile-card,
+body.is-dashboard.is-account-settings .account-password-card {
+    position: relative;
+    overflow: hidden;
+}
+
+body.is-dashboard.is-account-settings .account-profile-card::before,
+body.is-dashboard.is-account-settings .account-password-card::before,
+body.is-dashboard.is-account-settings .account-workspaces-card::before,
+body.is-dashboard.is-account-settings .account-privacy-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, rgba(203, 154, 79, 0.7), rgba(203, 154, 79, 0));
+    pointer-events: none;
+}
+
+body.is-dashboard.is-account-settings .account-profile-card {
+    background:
+        radial-gradient(circle at top left, rgba(255, 205, 152, 0.16), transparent 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(252, 248, 242, 0.98));
+}
+
+body.is-dashboard.is-account-settings .account-password-card {
+    background:
+        radial-gradient(circle at top right, rgba(188, 208, 255, 0.16), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 250, 255, 0.98));
+}
+
+body.is-dashboard.is-account-settings .account-plan-card {
+    border-color: rgba(140, 167, 208, 0.24);
+    background:
+        radial-gradient(circle at top right, rgba(112, 161, 255, 0.18), transparent 40%),
+        radial-gradient(circle at left bottom, rgba(255, 207, 149, 0.14), transparent 42%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(244, 248, 253, 0.97));
+    box-shadow:
+        0 24px 46px rgba(50, 77, 118, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
+body.is-dashboard.is-account-settings .account-plan-card .workspace-sidebar-plan-button {
+    box-shadow: 0 8px 20px rgba(56, 87, 131, 0.08);
+}
+
+body.is-dashboard.is-account-settings .account-workspaces-card,
+body.is-dashboard.is-account-settings .account-privacy-card {
+    position: relative;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(250, 246, 239, 0.97));
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-form :is(input:not([type="hidden"]), .account-profile-file-input) {
+    border-color: rgba(185, 196, 214, 0.56);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    color: #324154;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-form :is(input:not([type="hidden"]), .account-profile-file-input):focus {
+    border-color: rgba(var(--color-accent-500-rgb), 0.42);
+    box-shadow:
+        0 0 0 4px rgba(var(--color-accent-500-rgb), 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-form label span,
+body.is-dashboard.is-account-settings .workspace-settings-member-empty {
+    color: #8090a4;
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-form .btn,
+body.is-dashboard.is-account-settings .account-privacy-links .btn {
+    border-color: rgba(170, 136, 81, 0.2);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 240, 230, 0.96));
+    color: #314050;
+    box-shadow: 0 6px 18px rgba(79, 56, 24, 0.05);
+}
+
+body.is-dashboard.is-account-settings .workspace-settings-form .btn:hover,
+body.is-dashboard.is-account-settings .workspace-settings-form .btn:focus-visible,
+body.is-dashboard.is-account-settings .account-privacy-links .btn:hover,
+body.is-dashboard.is-account-settings .account-privacy-links .btn:focus-visible {
+    border-color: rgba(170, 136, 81, 0.3);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(248, 243, 235, 0.98));
+    color: #243140;
 }
 
 /* Auth shell */
@@ -3330,6 +3617,18 @@ body.is-dashboard .task-project-done-toggle-icon {
     stroke-linecap: round;
     stroke-linejoin: round;
     opacity: 0.88;
+}
+
+body.is-dashboard .task-project-done-toggle-icon-closed {
+    display: none;
+}
+
+body.is-dashboard .task-project-done-toggle.is-active .task-project-done-toggle-icon-open {
+    display: none;
+}
+
+body.is-dashboard .task-project-done-toggle.is-active .task-project-done-toggle-icon-closed {
+    display: inline;
 }
 
 body.is-dashboard .task-project-done-toggle-label {
@@ -5566,10 +5865,39 @@ body.is-dashboard .accounting-entry-goal-progress.is-complete .accounting-entry-
     color: #6f4b1f;
 }
 
-body.is-dashboard .accounting-entry-goal-payment-drawer-copy span,
-body.is-dashboard .accounting-entry-goal-payment-empty,
-body.is-dashboard .accounting-entry-goal-status {
+body.is-dashboard .accounting-entry-goal-payment-drawer-copy > span,
+body.is-dashboard .accounting-entry-goal-payment-empty {
     color: var(--bexon-text-soft);
+}
+
+body.is-dashboard .accounting-help-tooltip-trigger {
+    border-color: rgba(32, 36, 43, 0.12);
+    background: linear-gradient(180deg, #ffffff 0%, #f6f8fa 100%);
+    color: var(--bexon-text-soft);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 2px 8px rgba(32, 36, 43, 0.06);
+}
+
+body.is-dashboard .accounting-help-tooltip-trigger:hover,
+body.is-dashboard .accounting-help-tooltip-trigger:focus-visible,
+body.is-dashboard .accounting-help-tooltip:hover .accounting-help-tooltip-trigger {
+    border-color: rgba(var(--color-accent-500-rgb), 0.28);
+    background: linear-gradient(180deg, #ffffff 0%, rgba(var(--color-accent-200-rgb), 0.26) 100%);
+    color: var(--bexon-text-strong);
+}
+
+body.is-dashboard .accounting-help-tooltip-bubble {
+    border-color: rgba(32, 36, 43, 0.14);
+    background: rgba(27, 38, 52, 0.96);
+    color: #f4f8fc;
+    box-shadow: 0 20px 36px rgba(16, 24, 33, 0.24);
+}
+
+body.is-dashboard .accounting-help-tooltip-bubble::after {
+    border-right-color: rgba(32, 36, 43, 0.14);
+    border-bottom-color: rgba(32, 36, 43, 0.14);
+    background: rgba(27, 38, 52, 0.96);
 }
 
 body.is-dashboard .accounting-entry-goal-payment-remaining {
@@ -6776,6 +7104,46 @@ body.is-dashboard .workspace-sidebar-tool-action:focus-visible {
         background: rgba(255, 232, 196, 0.88);
         color: #1f2a35;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active {
+        border-color: transparent;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-projects.is-open .sidebar-task-projects-toggle.is-active .sidebar-view-toggle-icon {
+        color: inherit;
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-projects-title {
+        color: rgba(37, 50, 65, 0.56);
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-projects-create {
+        border-color: transparent;
+        background: transparent;
+        color: var(--color-accent-700);
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-project-link {
+        background: transparent;
+        color: rgba(49, 65, 82, 0.86);
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-project-link:hover,
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-project-link:focus-visible {
+        border-color: transparent;
+        background: rgba(255, 238, 214, 0.46);
+        color: #1f2a35;
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-task-project-link.is-active {
+        border-color: transparent;
+        background: rgba(255, 232, 196, 0.72);
+        color: #1f2a35;
+        font-weight: 600;
+        box-shadow: inset 2px 0 0 rgba(var(--color-accent-500-rgb), 0.72);
     }
 
     body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu .sidebar-view-toggle:is(:hover, :focus-visible, .is-active) .sidebar-view-toggle-label {

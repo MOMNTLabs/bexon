@@ -193,12 +193,9 @@ function respondAccountingPanelSnapshot(): void
     $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];
     $accountingTaskLinkOptions = accountingTaskLinkOptionsForUser($userId);
     $accountingOpeningBalanceCents = workspaceAccountingOpeningBalanceCents($workspaceId, $accountingPeriod);
-    $accountingBalanceSnapshot = workspaceAccountingBalanceSnapshot($workspaceId, $accountingPeriod);
     $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBalanceCents, [
         'period_key' => $accountingPeriod,
         'current_period_key' => $accountingCurrentPeriodKey,
-        'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
-        'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
     ]);
     $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(
         db(),
@@ -208,8 +205,6 @@ function respondAccountingPanelSnapshot(): void
         [
             'period_key' => $accountingPeriod,
             'current_period_key' => $accountingCurrentPeriodKey,
-            'balance_snapshot_cents' => $accountingBalanceSnapshot['amount_cents'] ?? null,
-            'balance_snapshot_at' => $accountingBalanceSnapshot['snapshot_at'] ?? null,
         ]
     );
 

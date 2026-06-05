@@ -7024,7 +7024,19 @@ window.addEventListener("DOMContentLoaded", () => {
     if (cashflowNote instanceof HTMLElement) {
       const defaultNote = String(cashflowNote.dataset.accountingDefaultNote || "").trim();
       const goalNote = String(cashflowNote.dataset.accountingGoalNote || "").trim();
-      cashflowNote.textContent = isMonthlyGoal && goalNote ? goalNote : defaultNote;
+      const helpLabel = String(cashflowNote.dataset.accountingHelpLabel || "").trim();
+      const nextNote = isMonthlyGoal && goalNote ? goalNote : defaultNote;
+      const tooltipText = cashflowNote.querySelector("[data-accounting-tooltip-text]");
+      const tooltipTrigger = cashflowNote.querySelector(".accounting-help-tooltip-trigger");
+      if (tooltipText instanceof HTMLElement) {
+        tooltipText.textContent = nextNote;
+      }
+      if (tooltipTrigger instanceof HTMLButtonElement) {
+        tooltipTrigger.setAttribute(
+          "aria-label",
+          helpLabel !== "" ? `${helpLabel}: ${nextNote}` : nextNote
+        );
+      }
     }
 
     let installmentTotal = Number.parseInt(installmentTotalCountField.value, 10);
@@ -7527,46 +7539,6 @@ window.addEventListener("DOMContentLoaded", () => {
     if (amountField instanceof HTMLInputElement && !amountField.readOnly) {
       amountField.focus();
       amountField.select();
-    }
-  };
-
-  const closeAccountingOpeningBalanceEditor = ({ reset = true } = {}) => {
-    const editor = document.querySelector(".accounting-opening-balance-editor");
-    const toggle = editor?.querySelector("[data-accounting-opening-balance-toggle]");
-    const form = editor?.querySelector(".accounting-opening-balance-form");
-    if (!(editor instanceof HTMLElement)) return;
-    if (!(toggle instanceof HTMLButtonElement) || !(form instanceof HTMLFormElement)) return;
-
-    if (reset) {
-      form.reset();
-      const openingBalanceField = form.querySelector('input[name="opening_balance_value"]');
-      if (openingBalanceField instanceof HTMLInputElement) {
-        normalizeAccountingCurrencyInputField(openingBalanceField);
-      }
-    }
-
-    form.hidden = true;
-    toggle.hidden = false;
-    toggle.setAttribute("aria-expanded", "false");
-    editor.classList.remove("is-editing");
-  };
-
-  const openAccountingOpeningBalanceEditor = () => {
-    const editor = document.querySelector(".accounting-opening-balance-editor");
-    const toggle = editor?.querySelector("[data-accounting-opening-balance-toggle]");
-    const form = editor?.querySelector(".accounting-opening-balance-form");
-    if (!(editor instanceof HTMLElement)) return;
-    if (!(toggle instanceof HTMLButtonElement) || !(form instanceof HTMLFormElement)) return;
-
-    toggle.hidden = true;
-    toggle.setAttribute("aria-expanded", "true");
-    form.hidden = false;
-    editor.classList.add("is-editing");
-
-    const openingBalanceField = form.querySelector('input[name="opening_balance_value"]');
-    if (openingBalanceField instanceof HTMLInputElement) {
-      openingBalanceField.focus();
-      openingBalanceField.select();
     }
   };
 
@@ -9002,6 +8974,12 @@ window.addEventListener("DOMContentLoaded", () => {
   const dashboardViewToggleButtons = Array.from(
     document.querySelectorAll("[data-dashboard-view-toggle]")
   );
+  const sidebarTaskProjectsRoot = document.querySelector("[data-sidebar-task-projects]");
+  const sidebarTaskProjectsToggleButton = document.querySelector("[data-sidebar-task-projects-toggle]");
+  const sidebarTaskProjectsPanel = document.querySelector("[data-sidebar-task-projects-panel]");
+  const sidebarTaskProjectLinks = Array.from(
+    document.querySelectorAll("[data-sidebar-task-project-link]")
+  );
   dashboardViewToggleButtons.forEach((button) => {
     if (!(button instanceof HTMLElement) || !button.hasAttribute("data-dashboard-return-toggle")) {
       return;
@@ -9141,6 +9119,48 @@ window.addEventListener("DOMContentLoaded", () => {
     const bodyView =
       document.body instanceof HTMLBodyElement ? document.body.dataset.dashboardView || "" : "";
     return normalizeDashboardView(bodyView || dashboardViewFromUrl());
+  };
+
+  const readTaskSidebarStateFromUrl = () => {
+    const currentUrl = new URL(window.location.href);
+    const groupName = String(currentUrl.searchParams.get("group") || "").trim();
+    const groupKey = groupName.toLocaleLowerCase();
+    const rawScope = String(currentUrl.searchParams.get("task_scope") || "").trim().toLowerCase();
+    const taskScope = rawScope === "project" && groupKey !== "" ? "project" : "all";
+    return { taskScope, groupKey };
+  };
+
+  const setSidebarTaskProjectsOpen = (open) => {
+    const shouldOpen = Boolean(open);
+    if (sidebarTaskProjectsRoot instanceof HTMLElement) {
+      sidebarTaskProjectsRoot.classList.toggle("is-open", shouldOpen);
+    }
+    if (sidebarTaskProjectsToggleButton instanceof HTMLElement) {
+      sidebarTaskProjectsToggleButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+    }
+    if (sidebarTaskProjectsPanel instanceof HTMLElement) {
+      sidebarTaskProjectsPanel.hidden = !shouldOpen;
+    }
+  };
+
+  const syncSidebarTaskProjectLinks = (view = currentDashboardView()) => {
+    const isTasksView = normalizeDashboardView(view) === "tasks";
+    const { taskScope, groupKey } = readTaskSidebarStateFromUrl();
+    sidebarTaskProjectLinks.forEach((link) => {
+      if (!(link instanceof HTMLElement)) return;
+      const linkScope = String(link.dataset.taskScope || "").trim().toLowerCase();
+      const linkGroupKey = String(link.dataset.taskGroupKey || "").trim().toLocaleLowerCase();
+      const isActive =
+        isTasksView &&
+        ((linkScope === "project" && linkGroupKey !== "" && linkGroupKey === groupKey) ||
+          (linkScope !== "project" && taskScope !== "project"));
+      link.classList.toggle("is-active", isActive);
+      if (isActive) {
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    });
   };
 
   const readDashboardReturnState = (targetView = "") => {
@@ -9310,6 +9330,8 @@ window.addEventListener("DOMContentLoaded", () => {
       document.body.dataset.dashboardView = view;
     }
     syncDashboardNavStats(view);
+    setSidebarTaskProjectsOpen(view === "tasks");
+    syncSidebarTaskProjectLinks(view);
 
     if (updateUrl) {
       replaceDashboardStateUrl(view, { taskId });
@@ -12893,8 +12915,6 @@ window.addEventListener("DOMContentLoaded", () => {
       formKind = "create";
     } else if (form.matches(".accounting-entry-goal-payment-add-form")) {
       formKind = "goal-payment-add";
-    } else if (form.matches(".accounting-opening-balance-form")) {
-      formKind = "opening-balance";
     } else {
       return null;
     }
@@ -12954,11 +12974,6 @@ window.addEventListener("DOMContentLoaded", () => {
       return entryRow.querySelector(".accounting-entry-goal-payment-add-form");
     }
 
-    if (payload.formKind === "opening-balance") {
-      openAccountingOpeningBalanceEditor();
-      return document.querySelector(".accounting-opening-balance-form");
-    }
-
     if (payload.formKind === "create") {
       const card = document.querySelector(
         payload.cardType === "income" ? ".accounting-card.is-income-card" : ".accounting-card.is-expense-card"
@@ -13005,21 +13020,6 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (payload.formKind === "opening-balance") {
-      const openingBalanceAction =
-        form.querySelector('input[name="action"]')?.value || "";
-      void submitAccountingActionForm(form, {
-        successMessage:
-          openingBalanceAction === "set_accounting_balance_snapshot"
-            ? "Saldo conciliado atualizado."
-            : "Saldo atualizado.",
-        fallbackError:
-          openingBalanceAction === "set_accounting_balance_snapshot"
-            ? "Falha ao atualizar saldo conciliado."
-            : "Falha ao atualizar saldo.",
-        refresh: true,
-      }).catch(() => {});
-    }
   };
 
   const restoreAccountingResumePayload = async (payload) => {
@@ -13166,7 +13166,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (
       form.matches(
-        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-opening-balance-form"
+        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form"
       )
     ) {
       return buildAccountingResumePayload(form);
@@ -17354,6 +17354,15 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const sidebarTaskProjectsToggle = target.closest("[data-sidebar-task-projects-toggle]");
+    if (sidebarTaskProjectsToggle instanceof HTMLButtonElement) {
+      event.preventDefault();
+      const nextOpen = !(sidebarTaskProjectsRoot instanceof HTMLElement &&
+        sidebarTaskProjectsRoot.classList.contains("is-open"));
+      setSidebarTaskProjectsOpen(nextOpen);
+      return;
+    }
+
     const dashboardViewToggle = target.closest("[data-dashboard-view-toggle]");
     if (dashboardViewToggle instanceof HTMLElement) {
       const targetViewCandidate = normalizeDashboardViewCandidate(
@@ -19174,28 +19183,6 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLElement)) return;
 
-    const openingBalanceToggle = target.closest("[data-accounting-opening-balance-toggle]");
-    if (!(openingBalanceToggle instanceof HTMLButtonElement)) return;
-
-    event.preventDefault();
-    openAccountingOpeningBalanceEditor();
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = getEventTargetElement(event);
-    if (!(target instanceof HTMLElement)) return;
-
-    const cancelButton = target.closest("[data-accounting-opening-balance-cancel]");
-    if (!(cancelButton instanceof HTMLButtonElement)) return;
-
-    event.preventDefault();
-    closeAccountingOpeningBalanceEditor();
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = getEventTargetElement(event);
-    if (!(target instanceof HTMLElement)) return;
-
     const editButton = target.closest("[data-accounting-entry-toggle], [data-accounting-entry-edit]");
     if (!(editButton instanceof HTMLElement)) return;
 
@@ -19241,17 +19228,6 @@ window.addEventListener("DOMContentLoaded", () => {
       if (openRow.contains(target)) return;
       closeAccountingGoalPaymentForm(openRow);
     });
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = getEventTargetElement(event);
-    if (!(target instanceof HTMLElement)) return;
-
-    const openingBalanceEditor = document.querySelector(".accounting-opening-balance-editor.is-editing");
-    if (!(openingBalanceEditor instanceof HTMLElement)) return;
-    if (openingBalanceEditor.contains(target)) return;
-
-    closeAccountingOpeningBalanceEditor();
   });
 
   document.addEventListener("click", (event) => {
@@ -19339,31 +19315,6 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (form.matches(".accounting-opening-balance-form")) {
-      event.preventDefault();
-      const openingBalanceField = form.querySelector('input[name="opening_balance_value"]');
-      const openingBalanceAction =
-        form.querySelector('input[name="action"]')?.value || "";
-      if (openingBalanceField instanceof HTMLInputElement) {
-        normalizeAccountingCurrencyInputField(openingBalanceField);
-      }
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
-        return;
-      }
-      void submitAccountingActionForm(form, {
-        successMessage:
-          openingBalanceAction === "set_accounting_balance_snapshot"
-            ? "Saldo conciliado atualizado."
-            : "Saldo atualizado.",
-        fallbackError:
-          openingBalanceAction === "set_accounting_balance_snapshot"
-            ? "Falha ao atualizar saldo conciliado."
-            : "Falha ao atualizar saldo.",
-        refresh: true,
-      }).catch(() => {});
-      return;
-    }
-
   });
 
   const initializeAccountingEnhancements = (root = document) => {
@@ -19375,7 +19326,7 @@ window.addEventListener("DOMContentLoaded", () => {
       syncAccountingInstallmentForm(form);
       syncAccountingTaskLinkForm(form);
       form
-        .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="opening_balance_value"], input[name="paid_amount_value"], input[name="payment_amount_value"]')
+        .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="paid_amount_value"], input[name="payment_amount_value"]')
         .forEach((field) => {
           if (field instanceof HTMLInputElement) {
             normalizeAccountingCurrencyInputField(field);

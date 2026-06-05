@@ -72,7 +72,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
-                setWorkspaceAccountingBalanceSnapshot(
+                setWorkspaceAccountingOpeningBalance(
                     $pdo,
                     $workspaceId,
                     $periodKey,
@@ -83,11 +83,11 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 if (requestExpectsJson()) {
                     respondJson([
                         'ok' => true,
-                        'message' => 'Saldo conciliado atualizado.',
+                        'message' => 'Saldo atualizado.',
                     ]);
                 }
 
-                flash('success', 'Saldo conciliado atualizado.');
+                flash('success', 'Saldo atualizado.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'set_accounting_opening_balance':

@@ -24,6 +24,62 @@
 
                 return '<span class="' . e($className) . '">' . e($normalized) . '</span>';
             };
+            $renderAccountingAttributes = static function (array $attributes = []): string {
+                $chunks = [];
+                foreach ($attributes as $attributeName => $attributeValue) {
+                    if ($attributeValue === null || $attributeValue === false) {
+                        continue;
+                    }
+                    if ($attributeValue === true) {
+                        $chunks[] = e((string) $attributeName);
+                        continue;
+                    }
+
+                    $chunks[] = e((string) $attributeName) . '="' . e((string) $attributeValue) . '"';
+                }
+
+                return $chunks ? ' ' . implode(' ', $chunks) : '';
+            };
+            $renderAccountingHelpTooltip = static function (
+                string $message,
+                string $buttonLabel = 'Mostrar ajuda',
+                string $extraClass = '',
+                array $containerAttributes = [],
+                array $bubbleAttributes = []
+            ) use ($renderAccountingAttributes): string {
+                static $tooltipCounter = 0;
+
+                $normalizedMessage = trim($message);
+                if ($normalizedMessage === '') {
+                    return '';
+                }
+
+                $tooltipCounter += 1;
+                $tooltipId = 'accounting-help-tooltip-' . $tooltipCounter;
+                $className = trim('accounting-help-tooltip ' . $extraClass);
+
+                ob_start();
+                ?>
+                <span class="<?= e($className) ?>"<?= $renderAccountingAttributes($containerAttributes) ?>>
+                    <button
+                        type="button"
+                        class="accounting-help-tooltip-trigger"
+                        aria-label="<?= e($buttonLabel . ': ' . $normalizedMessage) ?>"
+                        aria-describedby="<?= e($tooltipId) ?>"
+                    >
+                        <span aria-hidden="true">?</span>
+                    </button>
+                    <span
+                        class="accounting-help-tooltip-bubble"
+                        id="<?= e($tooltipId) ?>"
+                        role="tooltip"
+                        <?= $renderAccountingAttributes($bubbleAttributes) ?>
+                    ><?= e($normalizedMessage) ?></span>
+                </span>
+                <?php
+
+                return (string) ob_get_clean();
+            };
             $accountingTaskLinkOptions = is_array($accountingTaskLinkOptions ?? null)
                 ? $accountingTaskLinkOptions
                 : ['workspaces' => [], 'groups_by_workspace' => [], 'users_by_workspace' => []];
@@ -195,7 +251,8 @@
             ) use (
                 $renderAccountingTaskLinkWorkspaceOptions,
                 $renderAccountingTaskLinkGroupOptions,
-                $renderAccountingTaskLinkAssigneePicker
+                $renderAccountingTaskLinkAssigneePicker,
+                $renderAccountingHelpTooltip
             ): string {
                 ob_start();
                 ?>
@@ -225,9 +282,13 @@
                         </select>
                     </label>
                     <?= $renderAccountingTaskLinkAssigneePicker($workspaceId, $selectedAssigneeIds, $disabled) ?>
-                    <span class="accounting-entry-goal-status" data-accounting-task-link-rate-note>
-                        O valor informado acima passa a ser o ganho por tarefa. O total desta entrada se atualiza sozinho conforme as conclu&iacute;das do per&iacute;odo.
-                    </span>
+                    <div class="accounting-help-row">
+                        <?= $renderAccountingHelpTooltip(
+                            'O valor informado acima passa a ser o ganho por tarefa. O total desta entrada se atualiza sozinho conforme as concluídas do período.',
+                            'Entender entrada por tarefa',
+                            'is-left'
+                        ) ?>
+                    </div>
                 </div>
                 <?php
                 return (string) ob_get_clean();
@@ -402,8 +463,14 @@
                                             <div class="accounting-entry-goal-payment-drawer" data-accounting-goal-payment-drawer hidden>
                                                 <div class="accounting-entry-goal-payment-drawer-head">
                                                     <div class="accounting-entry-goal-payment-drawer-copy">
-                                                        <strong>Lançamentos</strong>
-                                                        <span>Os lançamentos abaixo compõem o valor já pago e são os únicos que mexem no caixa.</span>
+                                                        <div class="accounting-heading-with-help">
+                                                            <strong>Lançamentos</strong>
+                                                            <?= $renderAccountingHelpTooltip(
+                                                                'Os lançamentos abaixo compõem o valor já pago e são os únicos que mexem no caixa.',
+                                                                'Entender lançamentos do saldo a quitar',
+                                                                'is-left'
+                                                            ) ?>
+                                                        </div>
                                                     </div>
                                                     <div class="accounting-entry-goal-payment-drawer-tools">
                                                         <div
@@ -534,9 +601,7 @@
                                             >
                                             <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge): ?>
                                                 <div class="accounting-entry-meta">
-                                                    <?php if ($accountingEntryIsMonthlyGoal): ?>
-                                                        <span class="accounting-entry-goal-status">Os pagamentos parciais são lançados no botão +.</span>
-                                                    <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
+                                                    <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
                                                             <span>Mensal -</span>
                                                             <select name="monthly_day" class="accounting-installment-select" aria-label="Dia do vencimento mensal">
@@ -563,13 +628,17 @@
                                                     </label>
                                                 <?php endif; ?>
                                             </div>
-                                            <p class="accounting-entry-flow-note">
-                                                <?php if ($accountingEntryIsMonthlyGoal): ?>
-                                                    Saldo a quitar: s&oacute; os pagamentos lan&ccedil;ados no bot&atilde;o + entram no caixa e na proje&ccedil;&atilde;o.
-                                                <?php else: ?>
-                                                    Despesa prevista: este valor continua na proje&ccedil;&atilde;o at&eacute; voc&ecirc; marcar como pago.
-                                                <?php endif; ?>
-                                            </p>
+                                            <div class="accounting-entry-flow-note">
+                                                <?= $renderAccountingHelpTooltip(
+                                                    $accountingEntryIsMonthlyGoal
+                                                        ? 'Saldo a quitar: os pagamentos parciais são lançados no botão + e só eles entram no caixa e na projeção.'
+                                                        : 'Despesa prevista: este valor continua na projeção até você marcar como pago.',
+                                                    $accountingEntryIsMonthlyGoal
+                                                        ? 'Entender saldo a quitar'
+                                                        : 'Entender projeção desta conta',
+                                                    'is-left'
+                                                ) ?>
+                                            </div>
                                             <div class="accounting-entry-editor-actions">
                                                 <button type="submit" class="btn btn-mini">Salvar</button>
                                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-entry-cancel>Cancelar</button>
@@ -723,12 +792,20 @@
                                                         </select>
                                                     </div>
                                                 </div>
-                                                <p
-                                                    class="accounting-entry-flow-note"
-                                                    data-accounting-cashflow-note
-                                                    data-accounting-default-note="Despesa prevista: entra na projeção até você marcar como paga."
-                                                    data-accounting-goal-note="Saldo a quitar: use para compras pagas aos poucos. Só os pagamentos lançados no botão + mexem no caixa e na projeção."
-                                                >Despesa prevista: entra na projeção até você marcar como paga.</p>
+                                                <?= $renderAccountingHelpTooltip(
+                                                    'Contas únicas, mensais e parceladas entram na projeção até serem pagas.',
+                                                    'Entender como esta conta entra no caixa e na projeção',
+                                                    'is-left',
+                                                    [
+                                                        'data-accounting-cashflow-note' => '1',
+                                                        'data-accounting-default-note' => 'Contas únicas, mensais e parceladas entram na projeção até serem pagas.',
+                                                        'data-accounting-goal-note' => 'Saldo a quitar: use para compras pagas aos poucos. Só os pagamentos lançados no botão + mexem no caixa e na projeção.',
+                                                        'data-accounting-help-label' => 'Entender como esta conta entra no caixa e na projeção',
+                                                    ],
+                                                    [
+                                                        'data-accounting-tooltip-text' => '1',
+                                                    ]
+                                                ) ?>
                                             </div>
                                         </div>
                                         <div class="accounting-create-actions">
@@ -738,11 +815,6 @@
                                     </div>
                                 </form>
                             </details>
-                            <p class="accounting-cashflow-legend">
-                                Contas &uacute;nicas, mensais e parceladas entram na proje&ccedil;&atilde;o at&eacute; serem pagas.
-                                <strong>Saldo a quitar</strong> serve para compras pagas aos poucos e s&oacute; afeta o caixa pelos pagamentos lan&ccedil;ados.
-                            </p>
-
                             <?php
                             $accountingExpenseTotalCents = max(0, (int) ($accountingSummary['expense_total_cents'] ?? 0));
                             $accountingExpensePaidCents = max(0, (int) ($accountingSummary['expense_paid_cents'] ?? 0));
@@ -818,8 +890,6 @@
                                     $accountingEntryTaskLinkRateInput = (string) ($accountingEntry['task_link_rate_input'] ?? $accountingEntryAmountInput);
                                     $accountingEntryTaskLinkSummaryLabel = (string) ($accountingEntry['task_link_summary_label'] ?? '');
                                     $accountingEntryTaskLinkScopeLabel = (string) ($accountingEntry['task_link_scope_label'] ?? '');
-                                    $accountingEntryTaskLinkCount = max(0, (int) ($accountingEntry['task_link_match_count'] ?? 0));
-                                    $accountingEntryTaskLinkBadgeLabel = $accountingEntryTaskLinkCount . ' x ' . str_replace('R$ ', 'R$', trim($accountingEntryTaskLinkRateInput));
                                     $accountingEntryTaskLinkAssigneeSummary = (string) ($accountingEntry['task_link_assignee_summary'] ?? 'Todos os responsáveis');
                                     $accountingEntryIsSettled = ((int) ($accountingEntry['is_settled'] ?? 0)) === 1;
                                     $accountingEntryIsInstallment = ((int) ($accountingEntry['is_installment'] ?? 0)) === 1;
@@ -847,9 +917,6 @@
                                                         <span class="accounting-entry-summary-meta">
                                                             <?php if ($accountingEntryIsTaskLinked): ?>
                                                                 <span class="accounting-entry-badge is-monthly">Por tarefa</span>
-                                                                <?php if ($accountingEntryTaskLinkBadgeLabel !== ''): ?>
-                                                                    <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkBadgeLabel) ?></span>
-                                                                <?php endif; ?>
                                                             <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
                                                             <?php elseif ($accountingEntryIsInstallment): ?>
@@ -927,9 +994,6 @@
                                                 <div class="accounting-entry-meta">
                                                     <?php if ($accountingEntryIsTaskLinked): ?>
                                                         <span class="accounting-entry-badge is-monthly">Por tarefa</span>
-                                                        <?php if ($accountingEntryTaskLinkBadgeLabel !== ''): ?>
-                                                            <span class="accounting-entry-badge is-installment"><?= e($accountingEntryTaskLinkBadgeLabel) ?></span>
-                                                        <?php endif; ?>
                                                     <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
                                                             <span>Mensal -</span>
@@ -1140,30 +1204,12 @@
 
                 <section class="accounting-balance-card">
                     <?php
-                    $accountingOpeningBalanceCents = (int) ($accountingSummary['opening_balance_cents'] ?? 0);
                     $accountingCurrentPeriodResolvedKey = isset($accountingCurrentPeriodKey)
                         ? normalizeAccountingPeriodKey((string) $accountingCurrentPeriodKey)
                         : normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
                     $accountingIsCurrentPeriodView = normalizeAccountingPeriodKey($accountingPeriod) === $accountingCurrentPeriodResolvedKey;
-                    $accountingBalanceSnapshotActive = ((int) ($accountingSummary['balance_snapshot_active'] ?? 0)) === 1;
-                    $accountingBalanceSnapshotDisplay = (string) ($accountingSummary['balance_snapshot_display'] ?? '');
-                    $accountingBalanceSnapshotAtDisplay = (string) ($accountingSummary['balance_snapshot_at_display'] ?? '');
-                    $accountingBalanceActionLabel = $accountingIsCurrentPeriodView
-                        ? ($accountingBalanceSnapshotActive ? 'Atualizar saldo conciliado' : 'Informar saldo conciliado')
-                        : ($accountingOpeningBalanceCents !== 0 ? 'Atualizar saldo inicial' : 'Informar saldo inicial');
-                    $accountingBalanceFieldLabel = $accountingIsCurrentPeriodView
-                        ? 'Saldo real da conta agora'
-                        : 'Saldo inicial do período';
-                    $accountingBalanceFormAction = $accountingIsCurrentPeriodView
-                        ? 'set_accounting_balance_snapshot'
-                        : 'set_accounting_opening_balance';
-                    $accountingBalanceInputValue = $accountingIsCurrentPeriodView
-                        ? ($accountingBalanceSnapshotActive
-                            ? $accountingBalanceSnapshotDisplay
-                            : (string) ($accountingSummary['current_balance_display'] ?? 'R$ 0,00'))
-                        : (string) ($accountingSummary['opening_balance_display'] ?? 'R$ 0,00');
                     $accountingCurrentBalanceLabel = $accountingIsCurrentPeriodView
-                        ? ($accountingBalanceSnapshotActive ? 'Saldo atual' : 'Saldo estimado')
+                        ? 'Saldo atual'
                         : 'Saldo do per&iacute;odo';
                     $accountingCurrentBalanceCents = (int) ($accountingSummary['current_balance_cents'] ?? 0);
                     $accountingCurrentBalanceClass = $accountingCurrentBalanceCents < 0
@@ -1184,55 +1230,6 @@
                         ? max(0, (int) ($accountingNextIncomeProjection['shortfall_cents'] ?? 0))
                         : 0;
                     ?>
-                    <div class="accounting-opening-balance-editor">
-                        <button
-                            type="button"
-                            class="accounting-create-trigger accounting-opening-balance-trigger"
-                            data-accounting-opening-balance-toggle
-                            aria-expanded="false"
-                        >
-                            <?= e($accountingBalanceActionLabel) ?>
-                        </button>
-                        <p class="accounting-balance-helper">
-                            <?php if ($accountingIsCurrentPeriodView): ?>
-                                <?php if ($accountingBalanceSnapshotActive && $accountingBalanceSnapshotAtDisplay !== ''): ?>
-                                    Conciliado em <?= e($accountingBalanceSnapshotAtDisplay) ?>. Base do período: <?= e((string) ($accountingSummary['opening_balance_display'] ?? 'R$ 0,00')) ?>.
-                                <?php else: ?>
-                                    Sem conciliação neste mês. O card usa o saldo inicial do período até você informar o saldo real.
-                                <?php endif; ?>
-                            <?php else: ?>
-                                Esse valor serve como base histórica deste período.
-                            <?php endif; ?>
-                        </p>
-                        <form method="post" class="accounting-opening-balance-form" data-accounting-form hidden>
-                            <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                            <input type="hidden" name="action" value="<?= e($accountingBalanceFormAction) ?>">
-                            <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
-                            <label class="accounting-opening-balance-field">
-                                <span><?= e($accountingBalanceFieldLabel) ?></span>
-                                <input
-                                    type="text"
-                                    name="opening_balance_value"
-                                    value="<?= e($accountingBalanceInputValue) ?>"
-                                    class="accounting-input accounting-input-amount"
-                                    inputmode="numeric"
-                                    placeholder="0,00"
-                                    data-accounting-allow-negative="1"
-                                >
-                            </label>
-                            <p class="accounting-balance-form-note">
-                                <?php if ($accountingIsCurrentPeriodView): ?>
-                                    Informe quanto voc&ecirc; tem agora. A proje&ccedil;&atilde;o continua considerando s&oacute; o que ainda falta receber ou pagar.
-                                <?php else: ?>
-                                    Informe o saldo base deste per&iacute;odo para reconstruir o hist&oacute;rico corretamente.
-                                <?php endif; ?>
-                            </p>
-                            <div class="accounting-opening-balance-actions">
-                                <button type="submit" class="btn btn-mini">Confirmar</button>
-                                <button type="button" class="btn btn-mini btn-ghost" data-accounting-opening-balance-cancel>Cancelar</button>
-                            </div>
-                        </form>
-                    </div>
                     <dl class="accounting-balance-values">
                         <div class="is-current<?= e($accountingCurrentBalanceClass) ?>">
                             <dt><?= $accountingCurrentBalanceLabel ?></dt>

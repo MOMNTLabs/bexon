@@ -243,7 +243,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     ><?= e((string) $stats['total']) ?></strong>
                 </div>
                 <div class="stat-cell">
-                    <span>ConcluÃ­das</span>
+                    <span>Concluídas</span>
                     <strong
                         data-dashboard-stat-done
                         data-dashboard-stat-value
@@ -905,9 +905,14 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     const rawGroupName = String(groupSection.dataset.groupName || "Geral").trim() || "Geral";
                     if (toggleButton instanceof HTMLButtonElement) {
                         const nextLabel = shouldHideDone
-                            ? String(toggleButton.dataset.labelShow || "").trim() || "Exibir concluÃ­das"
-                            : String(toggleButton.dataset.labelHide || "").trim() || "Ocultar concluÃ­das";
-                        toggleButton.textContent = nextLabel;
+                            ? String(toggleButton.dataset.labelShow || "").trim() || "Exibir concluídas"
+                            : String(toggleButton.dataset.labelHide || "").trim() || "Ocultar concluídas";
+                        const labelNode = toggleButton.querySelector(".task-project-done-toggle-label");
+                        if (labelNode instanceof HTMLElement) {
+                            labelNode.textContent = String(toggleButton.dataset.labelShort || "").trim() || nextLabel;
+                        } else {
+                            toggleButton.textContent = nextLabel;
+                        }
                         toggleButton.classList.toggle("is-active", shouldHideDone);
                         toggleButton.setAttribute("aria-pressed", shouldHideDone ? "true" : "false");
                         toggleButton.setAttribute("aria-label", `${nextLabel} do grupo ${rawGroupName}`);
@@ -933,8 +938,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     if (groupHiddenDoneCount > 0 && groupVisibleTaskCount === 0) {
                         const hiddenLabel =
                             groupHiddenDoneCount === 1
-                                ? "1 tarefa concluÃ­da oculta."
-                                : `${groupHiddenDoneCount} tarefas concluÃ­das ocultas.`;
+                                ? "1 tarefa concluída oculta."
+                                : `${groupHiddenDoneCount} tarefas concluídas ocultas.`;
                         if (hiddenDoneRow instanceof HTMLElement) {
                             hiddenDoneRow.textContent = hiddenLabel;
                         } else {

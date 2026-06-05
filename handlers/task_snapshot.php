@@ -96,7 +96,7 @@ function respondTaskPanelSnapshot(): void
         $taskCalendarMonth = (new DateTimeImmutable('first day of this month'))->format('Y-m');
     }
     if ($taskPageMode === '') {
-        $taskPageMode = $taskQueryId > 0 ? 'all' : 'select';
+        $taskPageMode = 'all';
     }
     $workspaceUserIds = array_map(
         static fn (array $user): int => (int) ($user['id'] ?? 0),
@@ -109,9 +109,10 @@ function respondTaskPanelSnapshot(): void
         $assigneeFilterId = null;
     }
     if ($taskPageMode === 'project' && $groupFilter === null) {
-        $taskPageMode = 'select';
+        $taskPageMode = 'all';
     }
     if ($taskPageMode === 'select') {
+        $taskPageMode = 'all';
         $groupFilter = null;
         $creatorFilterId = null;
         $assigneeFilterId = null;
@@ -130,10 +131,8 @@ function respondTaskPanelSnapshot(): void
             return isset($taskVisibleKeys[$groupKey]);
         }
     ));
-    $tasks = $taskPageMode === 'select'
-        ? []
-        : filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
-    $showEmptyGroups = $taskPageMode !== 'select'
+    $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
+    $showEmptyGroups = $taskPageMode === 'all'
         && $groupFilter === null
         && $creatorFilterId === null
         && $assigneeFilterId === null;
