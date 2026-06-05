@@ -1105,6 +1105,7 @@ function ensureWorkspaceSchema(PDO $pdo): void
                  task_statuses_json TEXT NOT NULL DEFAULT \'[]\',
                  task_review_status_key TEXT DEFAULT NULL,
                  sidebar_tools_json TEXT NOT NULL DEFAULT \'[]\',
+                 accounting_cycle_close_day INTEGER NOT NULL DEFAULT 0,
                  created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
@@ -1135,6 +1136,7 @@ function ensureWorkspaceSchema(PDO $pdo): void
                  task_statuses_json TEXT NOT NULL DEFAULT \'[]\',
                  task_review_status_key TEXT DEFAULT NULL,
                  sidebar_tools_json TEXT NOT NULL DEFAULT \'[]\',
+                 accounting_cycle_close_day INTEGER NOT NULL DEFAULT 0,
                  created_by INTEGER DEFAULT NULL,
                  created_at TEXT NOT NULL,
                  updated_at TEXT NOT NULL,
@@ -1176,6 +1178,9 @@ function ensureWorkspaceSchema(PDO $pdo): void
     }
     if (!tableHasColumn($pdo, 'workspaces', 'sidebar_tools_json')) {
         $pdo->exec("ALTER TABLE workspaces ADD COLUMN sidebar_tools_json TEXT NOT NULL DEFAULT '[]'");
+    }
+    if (!tableHasColumn($pdo, 'workspaces', 'accounting_cycle_close_day')) {
+        $pdo->exec('ALTER TABLE workspaces ADD COLUMN accounting_cycle_close_day INTEGER NOT NULL DEFAULT 0');
     }
 
     if (!tableHasColumn($pdo, 'tasks', 'workspace_id')) {
@@ -4905,7 +4910,7 @@ function workspaceDueEntryById(PDO $pdo, int $workspaceId, int $entryId): ?array
     return $row;
 }
 
-function accountingDueDateForPeriod(string $periodKey, $monthlyDay): ?string
+function accountingDueDateForPeriod(string $periodKey, $monthlyDay, $cycleCloseDay = 0): ?string
 {
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     $monthlyDay = normalizeDueMonthlyDay($monthlyDay);
@@ -4913,9 +4918,14 @@ function accountingDueDateForPeriod(string $periodKey, $monthlyDay): ?string
         return null;
     }
 
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($cycleCloseDay);
     $anchorDate = DateTimeImmutable::createFromFormat('Y-m-d', $periodKey . '-01');
     if (!$anchorDate) {
         return null;
+    }
+
+    if ($cycleCloseDay > 0 && $monthlyDay <= $cycleCloseDay) {
+        $anchorDate = $anchorDate->modify('+1 month');
     }
 
     $targetDay = min($monthlyDay, (int) $anchorDate->format('t'));
@@ -4934,6 +4944,30 @@ function accountingPeriodKeyFromDate(?string $dateValue): ?string
     }
 
     return substr($dateValue, 0, 7);
+}
+
+function accountingPeriodKeyFromDateWithCycleCloseDay(?string $dateValue, $cycleCloseDay = 0): ?string
+{
+    $dateValue = dueDateForStorage($dateValue);
+    if ($dateValue === null) {
+        return null;
+    }
+
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($cycleCloseDay);
+    if ($cycleCloseDay <= 0) {
+        return accountingPeriodKeyFromDate($dateValue);
+    }
+
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateValue);
+    if (!$date) {
+        return accountingPeriodKeyFromDate($dateValue);
+    }
+
+    if ((int) $date->format('j') <= $cycleCloseDay) {
+        $date = $date->modify('first day of previous month');
+    }
+
+    return $date->format('Y-m');
 }
 
 function createWorkspaceDueEntryFromAccounting(
@@ -4961,7 +4995,7 @@ function createWorkspaceDueEntryFromAccounting(
         throw new RuntimeException('Informe um dia válido para a conta mensal.');
     }
 
-    $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay);
+    $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay, workspaceAccountingCycleCloseDay($workspaceId));
     if ($dueDate === null) {
         throw new RuntimeException('Não foi possível definir a data da conta mensal.');
     }
@@ -5039,9 +5073,10 @@ function updateWorkspaceDueEntryFromAccounting(
         throw new RuntimeException('Informe um dia válido para a conta mensal.');
     }
 
-    $anchorPeriodKey = accountingPeriodKeyFromDate((string) ($dueEntry['due_date'] ?? ''))
+    $cycleCloseDay = workspaceAccountingCycleCloseDay($workspaceId);
+    $anchorPeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay((string) ($dueEntry['due_date'] ?? ''), $cycleCloseDay)
         ?? normalizeAccountingPeriodKey($currentPeriodKey);
-    $dueDate = accountingDueDateForPeriod($anchorPeriodKey, $monthlyDay);
+    $dueDate = accountingDueDateForPeriod($anchorPeriodKey, $monthlyDay, $cycleCloseDay);
     if ($dueDate === null) {
         throw new RuntimeException('Não foi possível definir a data da conta mensal.');
     }
@@ -5717,6 +5752,66 @@ function accountingPeriodStartDate(string $periodKey): string
     $normalized = normalizeAccountingPeriodKey($periodKey);
     $date = DateTimeImmutable::createFromFormat('!Y-m', $normalized) ?: new DateTimeImmutable('first day of this month');
     return $date->format('Y-m-01');
+}
+
+function accountingCycleCurrentPeriodKey($cycleCloseDay = 0, ?string $referenceDate = null): string
+{
+    $resolvedDate = $referenceDate !== null && trim($referenceDate) !== ''
+        ? (dueDateForStorage($referenceDate) ?? (new DateTimeImmutable('today'))->format('Y-m-d'))
+        : (new DateTimeImmutable('today'))->format('Y-m-d');
+
+    return accountingPeriodKeyFromDateWithCycleCloseDay($resolvedDate, $cycleCloseDay)
+        ?? normalizeAccountingPeriodKey(substr($resolvedDate, 0, 7));
+}
+
+function accountingPeriodStartDateForCycleCloseDay(string $periodKey, $cycleCloseDay = 0): string
+{
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($cycleCloseDay);
+    if ($cycleCloseDay <= 0) {
+        return accountingPeriodStartDate($periodKey);
+    }
+
+    $startDate = DateTimeImmutable::createFromFormat('!Y-m-d', $periodKey . '-' . str_pad((string) ($cycleCloseDay + 1), 2, '0', STR_PAD_LEFT));
+    if (!$startDate) {
+        return accountingPeriodStartDate($periodKey);
+    }
+
+    return $startDate->format('Y-m-d');
+}
+
+function accountingPeriodEndDateForCycleCloseDay(string $periodKey, $cycleCloseDay = 0): string
+{
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($cycleCloseDay);
+    if ($cycleCloseDay <= 0) {
+        $startDate = DateTimeImmutable::createFromFormat('!Y-m-d', accountingPeriodStartDate($periodKey));
+        return $startDate
+            ? $startDate->modify('last day of this month')->format('Y-m-d')
+            : accountingPeriodStartDate($periodKey);
+    }
+
+    $nextPeriodDate = DateTimeImmutable::createFromFormat('!Y-m-d', accountingNextPeriodKey($periodKey) . '-01');
+    if (!$nextPeriodDate) {
+        return accountingPeriodStartDate($periodKey);
+    }
+
+    return $nextPeriodDate
+        ->setDate((int) $nextPeriodDate->format('Y'), (int) $nextPeriodDate->format('m'), $cycleCloseDay)
+        ->format('Y-m-d');
+}
+
+function accountingPeriodRangeForCycleCloseDay(string $periodKey, $cycleCloseDay = 0): array
+{
+    $startDate = accountingPeriodStartDateForCycleCloseDay($periodKey, $cycleCloseDay);
+    $endDate = accountingPeriodEndDateForCycleCloseDay($periodKey, $cycleCloseDay);
+
+    return [
+        'start_date' => $startDate,
+        'end_date' => $endDate,
+        'start_display' => accountingDateCompactLabel($startDate),
+        'end_display' => accountingDateCompactLabel($endDate),
+    ];
 }
 
 function accountingDateCompactLabel(?string $dateValue): string
@@ -6956,7 +7051,11 @@ function workspaceAccountingRecurringDueEntries(PDO $pdo, int $workspaceId): arr
 
 function workspaceAccountingDueAnchorPeriodKey(array $dueEntry): ?string
 {
-    return accountingPeriodKeyFromDate((string) ($dueEntry['due_date'] ?? ''));
+    $workspaceId = (int) ($dueEntry['workspace_id'] ?? 0);
+    return accountingPeriodKeyFromDateWithCycleCloseDay(
+        (string) ($dueEntry['due_date'] ?? ''),
+        $workspaceId > 0 ? workspaceAccountingCycleCloseDay($workspaceId) : 0
+    );
 }
 
 function workspaceAccountingDueLinkedEntryForPeriod(
@@ -7071,7 +7170,7 @@ function workspaceAccountingBuildDueLinkedPayload(array $dueEntry, string $perio
         return null;
     }
 
-    $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay);
+    $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay, workspaceAccountingCycleCloseDay($workspaceId));
     if ($dueDate === null) {
         return null;
     }
@@ -8236,7 +8335,9 @@ function workspaceAccountingBalanceSnapshot(?int $workspaceId = null, ?string $p
         return null;
     }
 
-    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $periodKey = $periodKey !== null && trim((string) $periodKey) !== ''
+        ? normalizeAccountingPeriodKey($periodKey)
+        : accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
     $pdo = db();
     $periodSchema = workspaceAccountingPeriodSchemaCapabilities($pdo);
     if (
@@ -8284,7 +8385,9 @@ function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?strin
         return 0;
     }
 
-    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $periodKey = $periodKey !== null && trim((string) $periodKey) !== ''
+        ? normalizeAccountingPeriodKey($periodKey)
+        : accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
     $pdo = db();
     workspaceAccountingEnsureCarryoverUpTo($pdo, $workspaceId, $periodKey);
 
@@ -8294,7 +8397,7 @@ function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?strin
     }
 
     $openingOverrides = workspaceAccountingOpeningBalanceOverrides($pdo, $workspaceId, $periodKey);
-    $currentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+    $currentPeriodKey = accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
     $currentPeriodSnapshot = strcmp($currentPeriodKey, $periodKey) <= 0
         ? workspaceAccountingBalanceSnapshot($workspaceId, $currentPeriodKey)
         : null;
@@ -8512,7 +8615,9 @@ function workspaceAccountingEntriesList(
         return [];
     }
 
-    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $periodKey = $periodKey !== null && trim((string) $periodKey) !== ''
+        ? normalizeAccountingPeriodKey($periodKey)
+        : accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
     $pdo = db();
     workspaceAccountingEnsureCarryoverUpTo($pdo, $workspaceId, $periodKey);
     return workspaceAccountingEntriesListRaw(
@@ -8683,7 +8788,7 @@ function createWorkspaceAccountingEntry(
         if ($monthlyDay === null) {
             $monthlyDay = (int) (new DateTimeImmutable('today'))->format('j');
         }
-        $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay);
+        $dueDate = accountingDueDateForPeriod($periodKey, $monthlyDay, workspaceAccountingCycleCloseDay($workspaceId));
         if ($dueDate === null) {
             throw new RuntimeException('Dia mensal inválido.');
         }
@@ -8962,7 +9067,11 @@ function updateWorkspaceAccountingEntry(
         if ($monthlyDay === null) {
             $monthlyDay = (int) (new DateTimeImmutable('today'))->format('j');
         }
-        $dueDate = accountingDueDateForPeriod(normalizeAccountingPeriodKey($periodKey), $monthlyDay);
+        $dueDate = accountingDueDateForPeriod(
+            normalizeAccountingPeriodKey($periodKey),
+            $monthlyDay,
+            workspaceAccountingCycleCloseDay($workspaceId)
+        );
         if ($dueDate === null) {
             throw new RuntimeException('Dia mensal inválido.');
         }
@@ -9708,14 +9817,15 @@ function workspaceAccountingNextIncomeProjectionSummary(
         return ['available' => false];
     }
 
+    $cycleCloseDay = workspaceAccountingCycleCloseDay($workspaceId);
     $today = (new DateTimeImmutable('today'))->format('Y-m-d');
-    $currentPeriodKey = normalizeAccountingPeriodKey($today);
+    $currentPeriodKey = accountingCycleCurrentPeriodKey($cycleCloseDay, $today);
     if (strcmp($periodKey, $currentPeriodKey) < 0) {
         return ['available' => false];
     }
 
     $anchorDate = strcmp($periodKey, $currentPeriodKey) > 0
-        ? accountingPeriodStartDate($periodKey)
+        ? accountingPeriodStartDateForCycleCloseDay($periodKey, $cycleCloseDay)
         : $today;
 
     $horizonPeriodKey = $periodKey;
@@ -9755,7 +9865,7 @@ function workspaceAccountingNextIncomeProjectionSummary(
                 continue;
             }
 
-            if ($cursor !== $periodKey && accountingPeriodKeyFromDate($dueDate) !== $cursor) {
+            if ($cursor !== $periodKey && accountingPeriodKeyFromDateWithCycleCloseDay($dueDate, $cycleCloseDay) !== $cursor) {
                 continue;
             }
 
@@ -10707,6 +10817,99 @@ function workspaceUpdateSidebarToolsConfiguration(PDO $pdo, int $workspaceId, ar
     }
 
     return workspaceSidebarToolsConfig($workspaceId, $workspace);
+}
+
+function workspaceReassignAccountingMonthlyEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
+{
+    if ($workspaceId <= 0) {
+        return;
+    }
+
+    workspaceAccountingSchemaCapabilities($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT id, period_key, due_date
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND is_monthly = 1
+           AND due_date IS NOT NULL
+         ORDER BY id ASC'
+    );
+    $stmt->execute([':workspace_id' => $workspaceId]);
+    $rows = $stmt->fetchAll() ?: [];
+    if (!$rows) {
+        return;
+    }
+
+    $updateStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET period_key = :period_key,
+             updated_at = :updated_at
+         WHERE id = :id
+           AND workspace_id = :workspace_id'
+    );
+    $updatedAt = nowIso();
+    foreach ($rows as $row) {
+        $entryId = (int) ($row['id'] ?? 0);
+        if ($entryId <= 0) {
+            continue;
+        }
+
+        $currentPeriodKey = normalizeAccountingPeriodKey((string) ($row['period_key'] ?? ''));
+        $nextPeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay((string) ($row['due_date'] ?? ''), $cycleCloseDay);
+        if ($nextPeriodKey === null || $nextPeriodKey === $currentPeriodKey) {
+            continue;
+        }
+
+        $updateStmt->execute([
+            ':period_key' => $nextPeriodKey,
+            ':updated_at' => $updatedAt,
+            ':id' => $entryId,
+            ':workspace_id' => $workspaceId,
+        ]);
+    }
+}
+
+function workspaceUpdateAccountingCycleCloseDay(PDO $pdo, int $workspaceId, $cycleCloseDay): int
+{
+    if ($workspaceId <= 0) {
+        throw new RuntimeException('Workspace invÃ¡lido.');
+    }
+
+    ensureWorkspaceTaskStatusSchema($pdo);
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($cycleCloseDay);
+    $startedTransaction = !$pdo->inTransaction();
+    if ($startedTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $updateStmt = $pdo->prepare(
+            'UPDATE workspaces
+             SET accounting_cycle_close_day = :accounting_cycle_close_day,
+                 updated_at = :updated_at
+             WHERE id = :workspace_id'
+        );
+        $updateStmt->execute([
+            ':accounting_cycle_close_day' => $cycleCloseDay,
+            ':updated_at' => nowIso(),
+            ':workspace_id' => $workspaceId,
+        ]);
+
+        workspaceReassignAccountingMonthlyEntriesForCycleCloseDay($pdo, $workspaceId, $cycleCloseDay);
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $e;
+    }
+
+    clearWorkspaceAccountingCycleCloseDayCache($workspaceId);
+    return $cycleCloseDay;
 }
 
 function taskStatuses(?int $workspaceId = null, ?array $workspace = null): array

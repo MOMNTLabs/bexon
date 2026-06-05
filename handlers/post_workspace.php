@@ -214,6 +214,36 @@ function handleWorkspacePostAction(PDO $pdo, string $action): bool
                 flash('success', $workspaceSidebarMessage);
                 redirectTo(dashboardPath('users'));
 
+            case 'workspace_update_accounting_cycle_close_day':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+                if (!userCanManageWorkspace((int) $authUser['id'], $workspaceId)) {
+                    throw new RuntimeException('Somente administradores podem alterar o fechamento da contabilidade.');
+                }
+
+                $closeDay = workspaceUpdateAccountingCycleCloseDay(
+                    $pdo,
+                    $workspaceId,
+                    $_POST['accounting_cycle_close_day'] ?? 0
+                );
+                $workspaceAccountingCycleMessage = $closeDay > 0
+                    ? ('Fechamento financeiro ajustado para o dia ' . str_pad((string) $closeDay, 2, '0', STR_PAD_LEFT) . '.')
+                    : 'Fechamento financeiro voltou para o mÃªs de calendÃ¡rio.';
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => $workspaceAccountingCycleMessage,
+                        'accounting_cycle_close_day' => $closeDay,
+                    ]);
+                }
+
+                flash('success', $workspaceAccountingCycleMessage);
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'workspace_add_sidebar_tool':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -554,6 +584,7 @@ function handleWorkspacePostAction(PDO $pdo, string $action): bool
         'workspace_update_name',
         'workspace_update_task_statuses',
         'workspace_update_sidebar_tools',
+        'workspace_update_accounting_cycle_close_day',
         'workspace_add_sidebar_tool',
         'workspace_add_member',
         'add_workspace_member',

@@ -225,9 +225,42 @@
             <div class="panel-header board-header accounting-header">
                 <div>
                     <h2>Contabilidade</h2>
-                    <p class="accounting-period-label"><?= e($accountingPeriodLabel) ?></p>
+                    <p class="accounting-period-label">
+                        <span><?= e($accountingPeriodLabel) ?></span>
+                        <?php if (!empty($accountingPeriodRangeLabel)): ?>
+                            <span class="accounting-period-range"><?= e((string) $accountingPeriodRangeLabel) ?></span>
+                        <?php endif; ?>
+                    </p>
                 </div>
                 <div class="board-summary accounting-board-summary">
+                    <?php if (!empty($canManageWorkspace)): ?>
+                        <details class="accounting-cycle-settings">
+                            <summary class="accounting-cycle-settings-trigger">
+                                <span><?= $accountingCycleCloseDay > 0 ? ('Fecha ' . str_pad((string) $accountingCycleCloseDay, 2, '0', STR_PAD_LEFT)) : 'CalendÃ¡rio' ?></span>
+                            </summary>
+                            <form method="post" class="accounting-cycle-settings-panel">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                <input type="hidden" name="action" value="workspace_update_accounting_cycle_close_day">
+                                <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                <select
+                                    name="accounting_cycle_close_day"
+                                    class="accounting-installment-select accounting-cycle-settings-select"
+                                    aria-label="Dia de fechamento financeiro"
+                                >
+                                    <option value="0" <?= (int) ($accountingCycleCloseDay ?? 0) === 0 ? 'selected' : '' ?>>CalendÃ¡rio</option>
+                                    <?php for ($accountingCloseDayOption = 1; $accountingCloseDayOption <= 28; $accountingCloseDayOption++): ?>
+                                        <option
+                                            value="<?= e((string) $accountingCloseDayOption) ?>"
+                                            <?= $accountingCloseDayOption === (int) ($accountingCycleCloseDay ?? 0) ? 'selected' : '' ?>
+                                        >
+                                            Fecha <?= e(str_pad((string) $accountingCloseDayOption, 2, '0', STR_PAD_LEFT)) ?>
+                                        </option>
+                                    <?php endfor; ?>
+                                </select>
+                                <button type="submit" class="btn btn-mini">Salvar</button>
+                            </form>
+                        </details>
+                    <?php endif; ?>
                     <form method="get" action="<?= e(appPath('#accounting')) ?>" class="accounting-period-form">
                         <a
                             href="<?= e($accountingPreviousPeriodPath) ?>"

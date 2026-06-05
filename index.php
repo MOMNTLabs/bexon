@@ -656,10 +656,20 @@ if ($currentUser && $currentWorkspaceId !== null) {
     }
 }
 $inventoryEntriesByGroup = $currentUser ? inventoryEntriesByGroup($inventoryEntries, $inventoryGroups) : [];
-$accountingPeriod = normalizeAccountingPeriodKey((string) ($_GET['accounting_period'] ?? ''));
+$accountingCycleCloseDay = ($currentUser && $currentWorkspaceId !== null)
+    ? workspaceAccountingCycleCloseDay($currentWorkspaceId, $currentWorkspace)
+    : 0;
+$accountingRequestedPeriodRaw = trim((string) ($_GET['accounting_period'] ?? ''));
+$accountingPeriod = $accountingRequestedPeriodRaw !== ''
+    ? normalizeAccountingPeriodKey($accountingRequestedPeriodRaw)
+    : accountingCycleCurrentPeriodKey($accountingCycleCloseDay);
 $accountingPeriodLabel = accountingMonthLabel($accountingPeriod);
+$accountingPeriodRange = accountingPeriodRangeForCycleCloseDay($accountingPeriod, $accountingCycleCloseDay);
+$accountingPeriodRangeLabel = $accountingCycleCloseDay > 0
+    ? (($accountingPeriodRange['start_display'] ?? '') . ' - ' . ($accountingPeriodRange['end_display'] ?? ''))
+    : '';
 $accountingPeriodDate = DateTimeImmutable::createFromFormat('!Y-m', $accountingPeriod) ?: new DateTimeImmutable('first day of this month');
-$accountingCurrentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+$accountingCurrentPeriodKey = accountingCycleCurrentPeriodKey($accountingCycleCloseDay);
 $accountingPreviousPeriod = $accountingPeriodDate->modify('-1 month')->format('Y-m');
 $accountingNextPeriod = $accountingPeriodDate->modify('+1 month')->format('Y-m');
 $accountingPreviousPeriodPath = accountingRedirectPathFromRequest(['accounting_period' => $accountingPreviousPeriod], []);

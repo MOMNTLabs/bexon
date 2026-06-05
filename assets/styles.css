@@ -14721,12 +14721,76 @@ select option:checked,
     line-height: 1.2;
     color: #395777;
     letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.accounting-period-range {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #6a7f98;
+    letter-spacing: 0;
 }
 
 .accounting-board-summary {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.accounting-cycle-settings {
+    position: relative;
+}
+
+.accounting-cycle-settings-trigger {
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(120, 171, 225, 0.82);
+    background: #edf4ff;
+    color: #456589;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.accounting-cycle-settings-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.accounting-cycle-settings-trigger:hover,
+.accounting-cycle-settings-trigger:focus-visible {
+    background: #e5f0ff;
+    border-color: rgba(91, 144, 204, 0.92);
+    color: #2f5174;
+    transform: translateY(-1px);
+}
+
+.accounting-cycle-settings-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 5;
+    min-width: 188px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(120, 171, 225, 0.3);
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(34, 59, 87, 0.12);
+    display: grid;
+    gap: 8px;
+}
+
+.accounting-cycle-settings-select {
+    min-width: 0;
 }
 
 .accounting-period-form {
@@ -16924,6 +16988,21 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     .accounting-board-summary {
         width: 100%;
         justify-content: center;
+        gap: 10px;
+    }
+
+    .accounting-cycle-settings {
+        width: min(100%, 360px);
+    }
+
+    .accounting-cycle-settings-trigger {
+        width: 100%;
+    }
+
+    .accounting-cycle-settings-panel {
+        position: static;
+        min-width: 0;
+        margin-top: 8px;
     }
 
     .accounting-period-form {

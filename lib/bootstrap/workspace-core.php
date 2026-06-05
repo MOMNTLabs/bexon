@@ -121,6 +121,7 @@ function ensureWorkspaceTaskStatusSchema(PDO $pdo): void
         'task_statuses_json' => "ALTER TABLE workspaces ADD COLUMN task_statuses_json TEXT NOT NULL DEFAULT '[]'",
         'task_review_status_key' => 'ALTER TABLE workspaces ADD COLUMN task_review_status_key TEXT DEFAULT NULL',
         'sidebar_tools_json' => "ALTER TABLE workspaces ADD COLUMN sidebar_tools_json TEXT NOT NULL DEFAULT '[]'",
+        'accounting_cycle_close_day' => 'ALTER TABLE workspaces ADD COLUMN accounting_cycle_close_day INTEGER NOT NULL DEFAULT 0',
     ];
 
     foreach ($columns as $column => $statement) {
@@ -163,6 +164,7 @@ function workspaceById(int $workspaceId): ?array
              w.task_statuses_json,
              w.task_review_status_key,
              w.sidebar_tools_json,
+             w.accounting_cycle_close_day,
              w.created_at,
              w.updated_at
          FROM workspaces w
@@ -179,6 +181,58 @@ function workspaceById(int $workspaceId): ?array
 
     $workspace['is_personal'] = ((int) ($workspace['is_personal'] ?? 0)) === 1;
     return $workspace;
+}
+
+function normalizeWorkspaceAccountingCycleCloseDay($value): int
+{
+    $day = (int) $value;
+    if ($day < 1) {
+        return 0;
+    }
+
+    return min(28, $day);
+}
+
+function clearWorkspaceAccountingCycleCloseDayCache(?int $workspaceId = null): void
+{
+    if (!isset($GLOBALS['workspace_accounting_cycle_close_day_cache']) || !is_array($GLOBALS['workspace_accounting_cycle_close_day_cache'])) {
+        return;
+    }
+
+    if ($workspaceId !== null && $workspaceId > 0) {
+        unset($GLOBALS['workspace_accounting_cycle_close_day_cache'][$workspaceId]);
+        return;
+    }
+
+    $GLOBALS['workspace_accounting_cycle_close_day_cache'] = [];
+}
+
+function workspaceAccountingCycleCloseDay(?int $workspaceId = null, ?array $workspace = null): int
+{
+    $workspaceId = $workspaceId && $workspaceId > 0
+        ? $workspaceId
+        : (int) ($workspace['id'] ?? activeWorkspaceId() ?? 0);
+
+    if ($workspaceId <= 0) {
+        return 0;
+    }
+
+    if (!isset($GLOBALS['workspace_accounting_cycle_close_day_cache']) || !is_array($GLOBALS['workspace_accounting_cycle_close_day_cache'])) {
+        $GLOBALS['workspace_accounting_cycle_close_day_cache'] = [];
+    }
+
+    if ($workspace === null && array_key_exists($workspaceId, $GLOBALS['workspace_accounting_cycle_close_day_cache'])) {
+        return (int) $GLOBALS['workspace_accounting_cycle_close_day_cache'][$workspaceId];
+    }
+
+    if (!$workspace || (int) ($workspace['id'] ?? 0) !== $workspaceId) {
+        $workspace = workspaceById($workspaceId);
+    }
+
+    $closeDay = normalizeWorkspaceAccountingCycleCloseDay($workspace['accounting_cycle_close_day'] ?? 0);
+    $GLOBALS['workspace_accounting_cycle_close_day_cache'][$workspaceId] = $closeDay;
+
+    return $closeDay;
 }
 
 function workspaceIsPersonal(int $workspaceId): bool

@@ -1206,7 +1206,7 @@
                     <?php
                     $accountingCurrentPeriodResolvedKey = isset($accountingCurrentPeriodKey)
                         ? normalizeAccountingPeriodKey((string) $accountingCurrentPeriodKey)
-                        : normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+                        : accountingCycleCurrentPeriodKey((int) ($accountingCycleCloseDay ?? 0));
                     $accountingIsCurrentPeriodView = normalizeAccountingPeriodKey($accountingPeriod) === $accountingCurrentPeriodResolvedKey;
                     $accountingCurrentBalanceLabel = $accountingIsCurrentPeriodView
                         ? 'Saldo atual'

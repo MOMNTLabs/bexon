@@ -158,7 +158,11 @@ function accountingRedirectPathFromRequest(?array $get = null, ?array $post = nu
         $periodRaw = (string) $post['period_key'];
     }
 
-    $periodKey = normalizeAccountingPeriodKey($periodRaw);
+    $periodKey = $periodRaw !== null
+        ? normalizeAccountingPeriodKey($periodRaw)
+        : accountingCycleCurrentPeriodKey(
+            workspaceAccountingCycleCloseDay(activeWorkspaceId())
+        );
     $query = http_build_query([
         'accounting_period' => $periodKey,
     ]);
