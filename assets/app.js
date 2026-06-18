@@ -1428,6 +1428,37 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  document.addEventListener("paste", (event) => {
+    if (event.defaultPrevented) return;
+
+    const target = event.target;
+    const taskDetailDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-task-detail-edit-description-editor]"
+    );
+    if (taskDetailDescriptionEditorTarget instanceof HTMLElement) {
+      handleDescriptionEditorPaste(
+        event,
+        taskDetailEditDescriptionEditor,
+        taskDetailEditDescription,
+        syncTaskDetailDescriptionToolbar
+      );
+      return;
+    }
+
+    const createTaskDescriptionEditorTarget = getClosestFromEventTarget(
+      target,
+      "[data-create-task-description-editor]"
+    );
+    if (createTaskDescriptionEditorTarget instanceof HTMLElement) {
+      handleDescriptionEditorPaste(
+        event,
+        createTaskDescriptionEditor,
+        createTaskDescription
+      );
+    }
+  });
+
   document.addEventListener("focusin", (event) => {
     const target = event.target;
     const taskDetailDescriptionEditorTarget = getClosestFromEventTarget(
@@ -1818,7 +1849,6 @@ window.addEventListener("DOMContentLoaded", () => {
       const line = rawLine.trim();
       if (!line) {
         flushList();
-        paragraphLines.push("");
         paragraphLines.push("");
         return;
       }
@@ -2396,6 +2426,88 @@ window.addEventListener("DOMContentLoaded", () => {
   const syncDescriptionTextareaFromEditor = (textarea, editor) => {
     if (!(textarea instanceof HTMLTextAreaElement)) return;
     textarea.value = descriptionTextFromEditor(editor);
+  };
+
+  const normalizeDescriptionClipboardText = (value) =>
+    String(value || "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[\u2028\u2029]/g, "\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "");
+
+  const insertPlainDescriptionText = (editor, textarea, value) => {
+    if (!(editor instanceof HTMLElement)) return false;
+
+    const text = normalizeDescriptionClipboardText(value);
+    if (!text) return false;
+
+    editor.focus();
+    let inserted = false;
+    try {
+      inserted = document.execCommand("insertText", false, text);
+    } catch (_error) {
+      inserted = false;
+    }
+
+    if (!inserted) {
+      let range = getDescriptionSelectionRange(editor);
+      if (!range) {
+        setSelectionAtElementEnd(editor);
+        range = getDescriptionSelectionRange(editor);
+      }
+      if (!range) {
+        editor.append(document.createTextNode(text));
+        normalizeDescriptionEditorMarkup(editor);
+        syncDescriptionTextareaFromEditor(textarea, editor);
+        return true;
+      }
+
+      const fragment = document.createDocumentFragment();
+      const lines = text.split("\n");
+      lines.forEach((line, index) => {
+        if (index > 0) {
+          fragment.append(document.createElement("br"));
+        }
+        if (line) {
+          fragment.append(document.createTextNode(line));
+        }
+      });
+
+      const caretNode = document.createTextNode("");
+      fragment.append(caretNode);
+      range.deleteContents();
+      range.insertNode(fragment);
+
+      const selection = window.getSelection();
+      const nextRange = document.createRange();
+      nextRange.setStart(caretNode, 0);
+      nextRange.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(nextRange);
+    }
+
+    normalizeDescriptionEditorMarkup(editor);
+    syncDescriptionTextareaFromEditor(textarea, editor);
+    return true;
+  };
+
+  const handleDescriptionEditorPaste = (event, editor, textarea, afterSync) => {
+    if (!(editor instanceof HTMLElement) || !(textarea instanceof HTMLTextAreaElement)) {
+      return false;
+    }
+
+    const pastedText =
+      event.clipboardData?.getData("text/plain") ||
+      event.clipboardData?.getData("text") ||
+      "";
+    if (!pastedText) return false;
+
+    event.preventDefault();
+    const inserted = insertPlainDescriptionText(editor, textarea, pastedText);
+    if (inserted && typeof afterSync === "function") {
+      afterSync();
+    }
+    return inserted;
   };
 
   const isDescriptionSelectionInsideListItem = (editor) => {
