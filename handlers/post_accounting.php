@@ -370,6 +370,94 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 flash('success', 'Pagamento removido.');
                 redirectTo(accountingRedirectPathFromRequest());
 
+            case 'create_accounting_subitem':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                if ($entryId <= 0) {
+                    throw new RuntimeException('Registro invÃ¡lido.');
+                }
+
+                createWorkspaceAccountingSubitem(
+                    $pdo,
+                    $workspaceId,
+                    $entryId,
+                    (string) ($_POST['subitem_label'] ?? ''),
+                    $_POST['subitem_amount_value'] ?? null,
+                    (int) ($authUser['id'] ?? 0)
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Subitem adicionado.',
+                    ]);
+                }
+
+                flash('success', 'Subitem adicionado.');
+                redirectTo(accountingRedirectPathFromRequest());
+
+            case 'update_accounting_subitem':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                $subitemId = (int) ($_POST['subitem_id'] ?? 0);
+                if ($entryId <= 0 || $subitemId <= 0) {
+                    throw new RuntimeException('Subitem invÃ¡lido.');
+                }
+
+                updateWorkspaceAccountingSubitem(
+                    $pdo,
+                    $workspaceId,
+                    $entryId,
+                    $subitemId,
+                    (string) ($_POST['subitem_label'] ?? ''),
+                    $_POST['subitem_amount_value'] ?? null
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Subitem atualizado.',
+                    ]);
+                }
+
+                flash('success', 'Subitem atualizado.');
+                redirectTo(accountingRedirectPathFromRequest());
+
+            case 'delete_accounting_subitem':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                $subitemId = (int) ($_POST['subitem_id'] ?? 0);
+                if ($entryId <= 0 || $subitemId <= 0) {
+                    throw new RuntimeException('Subitem invÃ¡lido.');
+                }
+
+                deleteWorkspaceAccountingSubitem($pdo, $workspaceId, $entryId, $subitemId);
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Subitem removido.',
+                    ]);
+                }
+
+                flash('success', 'Subitem removido.');
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'delete_accounting_entry':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -415,6 +503,9 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
         'update_accounting_goal_payment',
         'add_accounting_goal_payment',
         'delete_accounting_goal_payment',
+        'create_accounting_subitem',
+        'update_accounting_subitem',
+        'delete_accounting_subitem',
         'delete_accounting_entry',
     ], true);
 }

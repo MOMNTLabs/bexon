@@ -382,6 +382,15 @@
                                         && !$accountingEntryIsSettled
                                         && !$accountingEntryIsInstallment
                                         && !$accountingEntryIsMonthlyGoal;
+                                    $accountingEntrySubitems = is_array($accountingEntry['subitems'] ?? null)
+                                        ? $accountingEntry['subitems']
+                                        : [];
+                                    $accountingEntryHasSubitems = !empty($accountingEntrySubitems);
+                                    $accountingEntrySupportsSubitems = ((int) ($accountingEntry['supports_subitems'] ?? 0)) === 1;
+                                    $accountingEntrySubitemCount = count($accountingEntrySubitems);
+                                    $accountingEntrySubitemBadge = $accountingEntrySubitemCount > 0
+                                        ? ($accountingEntrySubitemCount . ' sub' . ($accountingEntrySubitemCount === 1 ? '' : 's'))
+                                        : '';
                                     ?>
                                     <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?>">
                                         <button
@@ -414,12 +423,15 @@
                                                                 </span>
                                                             </span>
                                                         </span>
-                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryIsOverdue): ?>
+                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryIsOverdue || $accountingEntrySubitemBadge !== ''): ?>
                                                         <span class="accounting-entry-summary-meta">
                                                             <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
                                                             <?php elseif ($accountingEntryIsInstallment): ?>
                                                                 <span class="accounting-entry-badge is-installment"><?= e($accountingEntryInstallmentBadge) ?></span>
+                                                            <?php endif; ?>
+                                                            <?php if ($accountingEntrySubitemBadge !== ''): ?>
+                                                                <span class="accounting-entry-badge is-subitems"><?= e($accountingEntrySubitemBadge) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryShowPendingBadge): ?>
                                                                 <span class="accounting-entry-badge is-pending">Pendente</span>
@@ -597,9 +609,9 @@
                                                 autocomplete="off"
                                                 required
                                                 data-accounting-primary-amount
-                                                <?= $accountingEntryIsInstallment ? 'readonly' : '' ?>
+                                                <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge): ?>
+                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntrySubitemBadge !== ''): ?>
                                                 <div class="accounting-entry-meta">
                                                     <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
@@ -617,6 +629,9 @@
                                                     <?php endif; ?>
                                                     <?php if ($accountingEntryShowPendingBadge): ?>
                                                         <span class="accounting-entry-badge is-pending">Pendente</span>
+                                                    <?php endif; ?>
+                                                    <?php if ($accountingEntrySubitemBadge !== ''): ?>
+                                                        <span class="accounting-entry-badge is-subitems"><?= e($accountingEntrySubitemBadge) ?></span>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
@@ -664,6 +679,88 @@
                                                 <input type="hidden" name="monthly_day" value="">
                                             <?php endif; ?>
                                         </form>
+                                        <?php if ($accountingEntrySupportsSubitems): ?>
+                                            <div class="accounting-entry-subitems-panel">
+                                                <div class="accounting-entry-subitems-head">
+                                                    <strong>Subitens</strong>
+                                                    <span><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
+                                                </div>
+                                                <?php if ($accountingEntrySubitems): ?>
+                                                    <div class="accounting-entry-subitems-list">
+                                                        <?php foreach ($accountingEntrySubitems as $accountingSubitem): ?>
+                                                            <?php
+                                                            $accountingSubitemId = (int) ($accountingSubitem['id'] ?? 0);
+                                                            $accountingSubitemLabel = (string) ($accountingSubitem['label'] ?? '');
+                                                            $accountingSubitemAmountInput = (string) ($accountingSubitem['amount_input'] ?? 'R$ 0,00');
+                                                            ?>
+                                                            <div class="accounting-entry-subitem-row">
+                                                                <form method="post" class="accounting-entry-subitem-form" data-accounting-subitem-form autocomplete="off">
+                                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                                    <input type="hidden" name="action" value="update_accounting_subitem">
+                                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                                    <input type="hidden" name="subitem_id" value="<?= e((string) $accountingSubitemId) ?>">
+                                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                                    <input
+                                                                        type="text"
+                                                                        name="subitem_label"
+                                                                        value="<?= e($accountingSubitemLabel) ?>"
+                                                                        maxlength="120"
+                                                                        class="accounting-input accounting-input-label"
+                                                                        autocomplete="off"
+                                                                        required
+                                                                    >
+                                                                    <input
+                                                                        type="text"
+                                                                        name="subitem_amount_value"
+                                                                        value="<?= e($accountingSubitemAmountInput) ?>"
+                                                                        class="accounting-input accounting-input-amount"
+                                                                        inputmode="numeric"
+                                                                        autocomplete="off"
+                                                                        required
+                                                                    >
+                                                                    <button type="submit" class="btn btn-mini">Salvar</button>
+                                                                </form>
+                                                                <form method="post" class="accounting-entry-subitem-delete-form" data-accounting-subitem-delete-form>
+                                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                                    <input type="hidden" name="action" value="delete_accounting_subitem">
+                                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                                    <input type="hidden" name="subitem_id" value="<?= e((string) $accountingSubitemId) ?>">
+                                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                                    <button type="submit" class="accounting-entry-subitem-delete" aria-label="Remover subitem">
+                                                                        <span aria-hidden="true">&times;</span>
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                                <form method="post" class="accounting-entry-subitem-add-form" data-accounting-subitem-form autocomplete="off">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                    <input type="hidden" name="action" value="create_accounting_subitem">
+                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                    <input
+                                                        type="text"
+                                                        name="subitem_label"
+                                                        maxlength="120"
+                                                        class="accounting-input accounting-input-label"
+                                                        placeholder="Subitem"
+                                                        autocomplete="off"
+                                                        required
+                                                    >
+                                                    <input
+                                                        type="text"
+                                                        name="subitem_amount_value"
+                                                        class="accounting-input accounting-input-amount"
+                                                        inputmode="numeric"
+                                                        placeholder="0,00"
+                                                        autocomplete="off"
+                                                        required
+                                                    >
+                                                    <button type="submit" class="btn btn-mini">+</button>
+                                                </form>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>

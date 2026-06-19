@@ -67,6 +67,7 @@ function migrate(PDO $pdo): void
     ensureWorkspaceDueSchema($pdo);
     ensureWorkspaceInventorySchema($pdo);
     ensureWorkspaceAccountingSchema($pdo);
+    ensureWorkspaceAccountingSubitemSchema($pdo);
     ensureTaskExtendedSchema($pdo);
     ensureTaskGroupsSchema($pdo);
     ensureTaskHistorySchema($pdo);
@@ -2851,6 +2852,47 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             $existingGoalPaymentEntryIds[$entryId] = true;
         }
     }
+}
+
+function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
+{
+    if (dbDriverName($pdo) === 'pgsql') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_entry_subitems (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
+                label TEXT NOT NULL,
+                amount_cents BIGINT NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )'
+        );
+    } else {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_entry_subitems (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                entry_id INTEGER NOT NULL,
+                label TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_by INTEGER DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (entry_id) REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            )'
+        );
+    }
+
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_subitems_workspace_entry
+         ON workspace_accounting_entry_subitems(workspace_id, entry_id, sort_order, id)'
+    );
 }
 
 function ensureGroupPermissionSchema(PDO $pdo): void
@@ -6747,6 +6789,314 @@ function workspaceAccountingGoalPaymentTotalCents(PDO $pdo, int $workspaceId, in
     return max(0, (int) $stmt->fetchColumn());
 }
 
+function normalizeAccountingSubitemLabel(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+    if (mb_strlen($value) > 120) {
+        $value = mb_substr($value, 0, 120);
+    }
+
+    return uppercaseFirstCharacter($value);
+}
+
+function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array $entryIds): array
+{
+    if ($workspaceId <= 0) {
+        return [];
+    }
+
+    $entryIds = array_values(array_unique(array_filter(array_map('intval', $entryIds), static fn (int $entryId): bool => $entryId > 0)));
+    if (!$entryIds) {
+        return [];
+    }
+
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $placeholders = implode(', ', array_fill(0, count($entryIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT id,
+                workspace_id,
+                entry_id,
+                label,
+                amount_cents,
+                sort_order,
+                created_by,
+                created_at,
+                updated_at
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = ?
+           AND entry_id IN ({$placeholders})
+         ORDER BY entry_id ASC, sort_order ASC, id ASC"
+    );
+    $stmt->execute(array_merge([$workspaceId], $entryIds));
+    $rows = $stmt->fetchAll() ?: [];
+
+    $subitemsByEntryId = [];
+    foreach ($rows as $row) {
+        $entryId = (int) ($row['entry_id'] ?? 0);
+        if ($entryId <= 0) {
+            continue;
+        }
+
+        $amountCents = normalizeDueAmountCents($row['amount_cents'] ?? null) ?? 0;
+        $subitemsByEntryId[$entryId][] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'workspace_id' => (int) ($row['workspace_id'] ?? 0),
+            'entry_id' => $entryId,
+            'label' => normalizeAccountingSubitemLabel((string) ($row['label'] ?? '')),
+            'amount_cents' => $amountCents,
+            'amount_display' => dueAmountLabelFromCents($amountCents),
+            'amount_input' => dueAmountLabelFromCents($amountCents),
+            'sort_order' => max(0, (int) ($row['sort_order'] ?? 0)),
+            'created_by' => isset($row['created_by']) ? (int) $row['created_by'] : null,
+            'created_at' => accountingDateTimeForStorage($row['created_at'] ?? null) ?? '',
+            'updated_at' => accountingDateTimeForStorage($row['updated_at'] ?? null) ?? '',
+        ];
+    }
+
+    return $subitemsByEntryId;
+}
+
+function workspaceAccountingEntrySupportsSubitems(array $entry): bool
+{
+    return normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
+        && ((int) ($entry['is_installment'] ?? 0)) !== 1
+        && ((int) ($entry['is_monthly'] ?? 0)) !== 1
+        && ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1
+        && max(0, (int) ($entry['source_due_entry_id'] ?? 0)) <= 0;
+}
+
+function workspaceAccountingAttachSubitems(PDO $pdo, int $workspaceId, array $entries): array
+{
+    if ($workspaceId <= 0 || !$entries) {
+        return $entries;
+    }
+
+    $entryIds = [];
+    foreach ($entries as $entry) {
+        $entryId = (int) ($entry['id'] ?? 0);
+        if ($entryId > 0) {
+            $entryIds[] = $entryId;
+        }
+    }
+    if (!$entryIds) {
+        return $entries;
+    }
+
+    $subitemsByEntryId = workspaceAccountingSubitemsByEntryIds($pdo, $workspaceId, $entryIds);
+    foreach ($entries as &$entry) {
+        $entryId = (int) ($entry['id'] ?? 0);
+        $subitems = $subitemsByEntryId[$entryId] ?? [];
+        $entry['subitems'] = $subitems;
+        $entry['subitem_count'] = count($subitems);
+        $entry['has_subitems'] = $subitems ? 1 : 0;
+        $entry['supports_subitems'] = workspaceAccountingEntrySupportsSubitems($entry) ? 1 : 0;
+        if ($subitems) {
+            $subitemTotalCents = array_sum(array_map(static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0), $subitems));
+            $entry['amount_cents'] = $subitemTotalCents;
+            $entry['total_amount_cents'] = $subitemTotalCents;
+            $entry['amount_display'] = dueAmountLabelFromCents($subitemTotalCents);
+            $entry['amount_input'] = dueAmountLabelFromCents($subitemTotalCents);
+            $entry['total_amount_display'] = dueAmountLabelFromCents($subitemTotalCents);
+            $entry['total_amount_input'] = dueAmountLabelFromCents($subitemTotalCents);
+        }
+    }
+    unset($entry);
+
+    return $entries;
+}
+
+function workspaceAccountingSubitemTotalCents(PDO $pdo, int $workspaceId, int $entryId): ?int
+{
+    if ($workspaceId <= 0 || $entryId <= 0) {
+        return null;
+    }
+
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) AS subitem_count,
+                COALESCE(SUM(amount_cents), 0) AS total_cents
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    if ((int) ($row['subitem_count'] ?? 0) <= 0) {
+        return null;
+    }
+
+    return max(0, (int) ($row['total_cents'] ?? 0));
+}
+
+function workspaceAccountingRecalculateEntryAmountFromSubitems(PDO $pdo, int $workspaceId, int $entryId, bool $zeroWhenEmpty = false): void
+{
+    $totalCents = workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId);
+    if ($totalCents === null && !$zeroWhenEmpty) {
+        return;
+    }
+
+    $totalCents ??= 0;
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET amount_cents = :amount_cents,
+             total_amount_cents = :total_amount_cents,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :entry_id'
+    );
+    $stmt->execute([
+        ':amount_cents' => $totalCents,
+        ':total_amount_cents' => $totalCents,
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+}
+
+function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int $entryId): array
+{
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry === null) {
+        throw new RuntimeException('Registro não encontrado.');
+    }
+    if (!workspaceAccountingEntrySupportsSubitems($entry)) {
+        throw new RuntimeException('Este registro não aceita subitens.');
+    }
+
+    return $entry;
+}
+
+function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null): int
+{
+    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
+    $label = normalizeAccountingSubitemLabel($label);
+    if ($label === '') {
+        throw new RuntimeException('Informe um nome para o subitem.');
+    }
+    $amountCents = normalizeDueAmountCents($amountInput);
+    if ($amountCents === null) {
+        throw new RuntimeException('Informe um valor válido.');
+    }
+
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $sortStmt = $pdo->prepare(
+        'SELECT COALESCE(MAX(sort_order), 0)
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id'
+    );
+    $sortStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+    $sortOrder = ((int) $sortStmt->fetchColumn()) + 1;
+    $createdAt = nowIso();
+
+    if (dbDriverName($pdo) === 'pgsql') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_entry_subitems (
+                workspace_id, entry_id, label, amount_cents, sort_order, created_by, created_at, updated_at
+            ) VALUES (
+                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :created_by, :created_at, :updated_at
+            )
+            RETURNING id'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_entry_subitems (
+                workspace_id, entry_id, label, amount_cents, sort_order, created_by, created_at, updated_at
+            ) VALUES (
+                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :created_by, :created_at, :updated_at
+            )'
+        );
+    }
+
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':entry_id', $entryId, PDO::PARAM_INT);
+    $stmt->bindValue(':label', $label, PDO::PARAM_STR);
+    $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':sort_order', $sortOrder, PDO::PARAM_INT);
+    if ($createdBy !== null && $createdBy > 0) {
+        $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':created_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':created_at', $createdAt, PDO::PARAM_STR);
+    $stmt->bindValue(':updated_at', $createdAt, PDO::PARAM_STR);
+    $stmt->execute();
+    $subitemId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
+
+    workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+    return $subitemId;
+}
+
+function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput): void
+{
+    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
+    $label = normalizeAccountingSubitemLabel($label);
+    if ($label === '') {
+        throw new RuntimeException('Informe um nome para o subitem.');
+    }
+    $amountCents = normalizeDueAmountCents($amountInput);
+    if ($amountCents === null) {
+        throw new RuntimeException('Informe um valor válido.');
+    }
+
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entry_subitems
+         SET label = :label,
+             amount_cents = :amount_cents,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id
+           AND id = :subitem_id'
+    );
+    $stmt->execute([
+        ':label' => $label,
+        ':amount_cents' => $amountCents,
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+        ':subitem_id' => $subitemId,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        throw new RuntimeException('Subitem não encontrado.');
+    }
+
+    workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+}
+
+function deleteWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId): void
+{
+    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $stmt = $pdo->prepare(
+        'DELETE FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id
+           AND id = :subitem_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+        ':subitem_id' => $subitemId,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        throw new RuntimeException('Subitem não encontrado.');
+    }
+
+    workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+}
+
 function workspaceAccountingEntriesListRaw(
     PDO $pdo,
     int $workspaceId,
@@ -6866,6 +7216,7 @@ function workspaceAccountingEntriesListRaw(
     unset($row);
 
     $rows = workspaceAccountingApplyAutomations($pdo, $rows);
+    $rows = workspaceAccountingAttachSubitems($pdo, $workspaceId, $rows);
 
     return workspaceAccountingAttachGoalPaymentHistory($pdo, $workspaceId, $rows);
 }
@@ -6976,6 +7327,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
         normalizeAccountingPeriodKey((string) ($row['period_key'] ?? ''))
     );
     $entry = workspaceAccountingApplyCompletedTaskAutomation($pdo, $entry);
+    $entry = workspaceAccountingAttachSubitems($pdo, $workspaceId, [$entry])[0] ?? $entry;
     $entry['goal_payment_history'] = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1
         ? workspaceAccountingGoalPaymentHistory($pdo, $workspaceId, $entryId)
         : [];
@@ -9615,6 +9967,14 @@ function updateWorkspaceAccountingEntryWithCarrySync(
                 if ($updatedEntry === null) {
                     throw new RuntimeException('Registro não encontrado.');
                 }
+            }
+        }
+
+        if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
+            workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+            $updatedEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+            if ($updatedEntry === null) {
+                throw new RuntimeException('Registro não encontrado.');
             }
         }
 
