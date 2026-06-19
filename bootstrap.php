@@ -7069,9 +7069,43 @@ function workspaceAccountingDueLinkedEntryForPeriod(
     }
 
     $periodKey = normalizeAccountingPeriodKey($periodKey);
-    $dueDateSelect = workspaceAccountingHasDueDateColumn($pdo)
+    $accountingSchema = workspaceAccountingSchemaCapabilities($pdo);
+    $dueDateSelect = !empty($accountingSchema['due_date'])
         ? 'ae.due_date'
         : 'NULL AS due_date';
+    $carrySourceEntrySelect = !empty($accountingSchema['carry_source_entry_id'])
+        ? 'ae.carry_source_entry_id'
+        : 'NULL AS carry_source_entry_id';
+    $carryStopPeriodKeySelect = !empty($accountingSchema['carry_stop_period_key'])
+        ? 'ae.carry_stop_period_key'
+        : 'NULL AS carry_stop_period_key';
+    $isMonthlySelect = !empty($accountingSchema['is_monthly'])
+        ? 'ae.is_monthly'
+        : '0 AS is_monthly';
+    $monthlyModeSelect = !empty($accountingSchema['monthly_mode'])
+        ? 'ae.monthly_mode'
+        : "'uniform' AS monthly_mode";
+    $paidAmountSelect = !empty($accountingSchema['paid_amount_cents'])
+        ? 'ae.paid_amount_cents'
+        : '0 AS paid_amount_cents';
+    $settledAtSelect = !empty($accountingSchema['settled_at'])
+        ? 'ae.settled_at'
+        : 'NULL AS settled_at';
+    $automationTypeSelect = !empty($accountingSchema['automation_type'])
+        ? 'ae.automation_type'
+        : "'manual' AS automation_type";
+    $taskLinkWorkspaceSelect = !empty($accountingSchema['task_link_workspace_id'])
+        ? 'ae.task_link_workspace_id'
+        : 'NULL AS task_link_workspace_id';
+    $taskLinkGroupSelect = !empty($accountingSchema['task_link_group_name'])
+        ? 'ae.task_link_group_name'
+        : 'NULL AS task_link_group_name';
+    $taskLinkAssigneeIdsSelect = !empty($accountingSchema['task_link_assignee_ids_json'])
+        ? 'ae.task_link_assignee_ids_json'
+        : "'[]' AS task_link_assignee_ids_json";
+    $taskLinkRateSelect = !empty($accountingSchema['task_link_rate_cents'])
+        ? 'ae.task_link_rate_cents'
+        : '0 AS task_link_rate_cents';
     $stmt = $pdo->prepare(
         'SELECT ae.id,
                 ae.workspace_id,
@@ -7081,12 +7115,22 @@ function workspaceAccountingDueLinkedEntryForPeriod(
                 ae.amount_cents,
                 ae.total_amount_cents,
                 ae.is_installment,
+                ' . $isMonthlySelect . ',
+                ' . $monthlyModeSelect . ',
+                ' . $paidAmountSelect . ',
+                ' . $automationTypeSelect . ',
+                ' . $taskLinkWorkspaceSelect . ',
+                ' . $taskLinkGroupSelect . ',
+                ' . $taskLinkAssigneeIdsSelect . ',
+                ' . $taskLinkRateSelect . ',
                 ae.installment_number,
                 ae.installment_total,
                 ae.is_settled,
+                ' . $settledAtSelect . ',
                 ' . $dueDateSelect . ',
                 ae.source_due_entry_id,
-                ae.carry_source_entry_id,
+                ' . $carrySourceEntrySelect . ',
+                ' . $carryStopPeriodKeySelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,

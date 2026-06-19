@@ -6027,8 +6027,18 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   };
 
-  const fetchPanelSnapshot = async (action, fallbackErrorMessage) => runWithAppLoading(async () => {
+  const fetchPanelSnapshot = async (action, fallbackErrorMessage, extraParams = {}) => runWithAppLoading(async () => {
     const params = new URLSearchParams(window.location.search || "");
+    Object.entries(extraParams || {}).forEach(([key, value]) => {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      if (!normalizedKey) return;
+      if (normalizedValue === "") {
+        params.delete(normalizedKey);
+        return;
+      }
+      params.set(normalizedKey, normalizedValue);
+    });
     params.set("action", String(action || "").trim());
     const url = `${window.location.pathname}?${params.toString()}`;
     const response = await fetch(url, {
@@ -6059,8 +6069,20 @@ window.addEventListener("DOMContentLoaded", () => {
   const fetchTaskPanelSnapshot = async () =>
     fetchPanelSnapshot("task_panel_snapshot", "Não foi possível atualizar tarefas.");
 
-  const fetchDashboardDocumentLegacy = async (fallbackErrorMessage) => runWithAppLoading(async () => {
-    const url = `${window.location.pathname}${window.location.search}`;
+  const fetchDashboardDocumentLegacy = async (fallbackErrorMessage, extraParams = {}) => runWithAppLoading(async () => {
+    const params = new URLSearchParams(window.location.search || "");
+    Object.entries(extraParams || {}).forEach(([key, value]) => {
+      const normalizedKey = String(key || "").trim();
+      const normalizedValue = String(value || "").trim();
+      if (!normalizedKey) return;
+      if (normalizedValue === "") {
+        params.delete(normalizedKey);
+        return;
+      }
+      params.set(normalizedKey, normalizedValue);
+    });
+    const query = params.toString();
+    const url = `${window.location.pathname}${query ? `?${query}` : ""}`;
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -7414,14 +7436,20 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const refreshAccountingSectionFromServer = async () => {
+  const refreshAccountingSectionFromServer = async ({ accountingPeriod = "" } = {}) => {
     let snapshotData = null;
     let nextDoc = null;
+    const snapshotParams = {};
+    const normalizedAccountingPeriod = String(accountingPeriod || "").trim();
+    if (normalizedAccountingPeriod !== "") {
+      snapshotParams.accounting_period = normalizedAccountingPeriod;
+    }
 
     try {
       snapshotData = await fetchPanelSnapshot(
         "accounting_panel_snapshot",
-        "Não foi possível atualizar a contabilidade."
+        "Não foi possível atualizar a contabilidade.",
+        snapshotParams
       );
       const sheetHtml = String(snapshotData.accounting_sheet_html || "").trim();
       if (!sheetHtml) {
@@ -7432,7 +7460,8 @@ window.addEventListener("DOMContentLoaded", () => {
     } catch (_snapshotError) {
       snapshotData = null;
       nextDoc = await fetchDashboardDocumentLegacy(
-        "Não foi possível atualizar a contabilidade."
+        "Não foi possível atualizar a contabilidade.",
+        snapshotParams
       );
     }
 
@@ -7460,6 +7489,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(form instanceof HTMLFormElement)) return false;
     if (form.dataset.submitting === "1") return false;
 
+    const periodField = form.querySelector('input[name="period_key"]');
+    const accountingPeriod =
+      periodField instanceof HTMLInputElement ? String(periodField.value || "").trim() : "";
+
     normalizeAccountingLabelField(form);
     syncAccountingInstallmentForm(form);
     syncAccountingTaskLinkForm(form);
@@ -7470,7 +7503,7 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       const data = await postFormJson(form);
       if (refresh) {
-        await refreshAccountingSectionFromServer();
+        await refreshAccountingSectionFromServer({ accountingPeriod });
       }
 
       if (showSuccess) {
