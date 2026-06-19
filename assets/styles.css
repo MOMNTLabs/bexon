@@ -17409,6 +17409,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
     body.is-dashboard[data-dashboard-view="accounting"] .accounting-card-footer {
         justify-items: center;
+        flex: 0 0 auto;
     }
 
     body.is-dashboard[data-dashboard-view="accounting"] .accounting-card-footer .accounting-totals.is-single {
@@ -17443,9 +17444,27 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     }
 
     .accounting-entries {
+        max-height: min(52dvh, 430px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding-right: 4px;
+        padding-bottom: 8px;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-card {
+        max-height: calc(100dvh - 188px);
+        min-height: 0;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-card.is-empty {
         max-height: none;
-        overflow: visible;
-        padding-right: 0;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-card:not(.is-empty) .accounting-entries {
+        flex: 1 1 auto;
+        min-height: 0;
     }
 }
 
