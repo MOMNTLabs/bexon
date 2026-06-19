@@ -5074,8 +5074,12 @@ function updateWorkspaceDueEntryFromAccounting(
     }
 
     $cycleCloseDay = workspaceAccountingCycleCloseDay($workspaceId);
-    $anchorPeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay((string) ($dueEntry['due_date'] ?? ''), $cycleCloseDay)
-        ?? normalizeAccountingPeriodKey($currentPeriodKey);
+    $anchorPeriodKey = $currentPeriodKey !== null && trim($currentPeriodKey) !== ''
+        ? normalizeAccountingPeriodKey($currentPeriodKey)
+        : (
+            accountingPeriodKeyFromDateWithCycleCloseDay((string) ($dueEntry['due_date'] ?? ''), $cycleCloseDay)
+            ?? normalizeAccountingPeriodKey($currentPeriodKey)
+        );
     $dueDate = accountingDueDateForPeriod($anchorPeriodKey, $monthlyDay, $cycleCloseDay);
     if ($dueDate === null) {
         throw new RuntimeException('Não foi possível definir a data da conta mensal.');
