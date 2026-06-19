@@ -8119,10 +8119,15 @@ function workspaceAccountingDetachCarriedEntry(PDO $pdo, int $workspaceId, int $
         return;
     }
 
+    $setClauses = ['carry_source_entry_id = NULL'];
+    if (workspaceAccountingHasDueSourceColumn($pdo)) {
+        $setClauses[] = 'source_due_entry_id = NULL';
+    }
+    $setClauses[] = 'updated_at = :updated_at';
+
     $stmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
-         SET carry_source_entry_id = NULL,
-             updated_at = :updated_at
+         SET ' . implode(",\n             ", $setClauses) . '
          WHERE workspace_id = :workspace_id
            AND id = :id'
     );
@@ -9540,6 +9545,7 @@ function updateWorkspaceAccountingEntryWithCarrySync(
         ) {
             workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
             workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, $entryId);
+            $sourceDueEntryId = 0;
         }
         if ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
             $currentPeriodKey = $entryPeriodKey;
