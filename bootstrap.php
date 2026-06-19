@@ -8069,6 +8069,26 @@ function workspaceAccountingSetCarryStopPeriodKey(PDO $pdo, int $workspaceId, in
     ]);
 }
 
+function workspaceAccountingDetachCarriedEntry(PDO $pdo, int $workspaceId, int $entryId): void
+{
+    if ($workspaceId <= 0 || $entryId <= 0 || !workspaceAccountingHasCarrySourceColumn($pdo)) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET carry_source_entry_id = NULL,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :id'
+    );
+    $stmt->execute([
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':id' => $entryId,
+    ]);
+}
+
 function workspaceAccountingDeleteEntryChain(PDO $pdo, int $workspaceId, int $entryId, bool $includeRoot = false): void
 {
     $entryIds = [];
@@ -9443,6 +9463,7 @@ function updateWorkspaceAccountingEntryWithCarrySync(
     try {
         $updatedEntry = null;
         $sourceDueEntryId = max(0, (int) ($existingEntry['source_due_entry_id'] ?? 0));
+        $carrySourceEntryId = max(0, (int) ($existingEntry['carry_source_entry_id'] ?? 0));
         $entryType = normalizeAccountingEntryType((string) ($existingEntry['entry_type'] ?? 'expense'));
         $existingIsMonthly = ((int) ($existingEntry['is_monthly'] ?? 0)) === 1 ? 1 : 0;
         $existingMonthlyMode = normalizeAccountingMonthlyMode(
@@ -9467,6 +9488,14 @@ function updateWorkspaceAccountingEntryWithCarrySync(
         if ($monthlyFlag === 1 && normalizeDueMonthlyDay($resolvedMonthlyDay) === null) {
             $resolvedMonthlyDay = normalizeDueMonthlyDay($existingEntry['monthly_day'] ?? null)
                 ?? dueMonthlyDayFromDate((string) ($existingEntry['due_date'] ?? ''));
+        }
+        if (
+            $carrySourceEntryId > 0
+            && workspaceAccountingHasCarrySourceColumn($pdo)
+            && workspaceAccountingHasCarryStopPeriodColumn($pdo)
+        ) {
+            workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
+            workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, $entryId);
         }
         if ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
             $currentPeriodKey = $entryPeriodKey;
