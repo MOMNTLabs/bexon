@@ -7030,6 +7030,122 @@ window.addEventListener("DOMContentLoaded", () => {
     return baseAmount + (current <= remainder ? 1 : 0);
   };
 
+  const getAccountingCreateSubitemRows = (form) => {
+    if (!(form instanceof HTMLFormElement)) return [];
+    return Array.from(form.querySelectorAll("[data-accounting-create-subitem-row]")).filter(
+      (row) => row instanceof HTMLElement
+    );
+  };
+
+  const syncAccountingCreateSubitems = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+
+    const hiddenField = form.querySelector("[data-accounting-create-subitems-json]");
+    const list = form.querySelector("[data-accounting-create-subitems-list]");
+    if (!(hiddenField instanceof HTMLInputElement) || !(list instanceof HTMLElement)) return;
+
+    const totalLabel = form.querySelector("[data-accounting-create-subitems-total]");
+    const primaryAmountField = form.querySelector("[data-accounting-primary-amount]");
+    const typeSelect = form.querySelector("[data-accounting-type-select]");
+    const installmentToggle = form.querySelector("[data-accounting-installment-toggle]");
+    const monthlyToggle = form.querySelector("[data-accounting-monthly-toggle]");
+    const rows = getAccountingCreateSubitemRows(form);
+    const hasSubitems = rows.length > 0;
+    const payload = [];
+    let totalCents = 0;
+
+    rows.forEach((row) => {
+      const labelField = row.querySelector("[data-accounting-create-subitem-label]");
+      const amountField = row.querySelector("[data-accounting-create-subitem-amount]");
+      const label = labelField instanceof HTMLInputElement ? String(labelField.value || "").trim() : "";
+      const amount = amountField instanceof HTMLInputElement ? String(amountField.value || "").trim() : "";
+      const amountCents = parseAccountingCurrencyToCents(amount);
+      if (amountCents !== null) {
+        totalCents += amountCents;
+      }
+      payload.push({ label, amount });
+    });
+
+    hiddenField.value = JSON.stringify(payload);
+    if (totalLabel instanceof HTMLElement) {
+      totalLabel.textContent = formatAccountingCentsToInputValue(totalCents);
+    }
+    if (primaryAmountField instanceof HTMLInputElement) {
+      primaryAmountField.readOnly = hasSubitems;
+      if (hasSubitems) {
+        primaryAmountField.value = formatAccountingCentsToInputValue(totalCents);
+      }
+    }
+    if (installmentToggle instanceof HTMLInputElement) {
+      installmentToggle.checked = hasSubitems ? false : installmentToggle.checked;
+      installmentToggle.disabled = hasSubitems || installmentToggle.disabled;
+    }
+    if (monthlyToggle instanceof HTMLInputElement) {
+      monthlyToggle.checked = hasSubitems ? false : monthlyToggle.checked;
+      monthlyToggle.disabled = hasSubitems || monthlyToggle.disabled;
+    }
+    if (typeSelect instanceof HTMLSelectElement) {
+      if (hasSubitems) {
+        typeSelect.value = "single";
+      }
+      typeSelect.disabled = hasSubitems;
+    }
+  };
+
+  const addAccountingCreateSubitemRow = (form, { label = "", amount = "" } = {}) => {
+    if (!(form instanceof HTMLFormElement)) return null;
+
+    const list = form.querySelector("[data-accounting-create-subitems-list]");
+    if (!(list instanceof HTMLElement)) return null;
+
+    const row = document.createElement("div");
+    row.className = "accounting-create-subitem-row";
+    row.dataset.accountingCreateSubitemRow = "1";
+
+    const labelField = document.createElement("input");
+    labelField.type = "text";
+    labelField.maxLength = 120;
+    labelField.className = "accounting-input accounting-input-label";
+    labelField.placeholder = "Subitem";
+    labelField.autocomplete = "off";
+    labelField.required = true;
+    labelField.dataset.accountingCreateSubitemLabel = "1";
+    labelField.value = label;
+
+    const amountField = document.createElement("input");
+    amountField.type = "text";
+    amountField.className = "accounting-input accounting-input-amount";
+    amountField.inputMode = "numeric";
+    amountField.placeholder = "0,00";
+    amountField.autocomplete = "off";
+    amountField.required = true;
+    amountField.name = "subitem_amount_value";
+    amountField.dataset.accountingCreateSubitemAmount = "1";
+    amountField.value = amount;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "accounting-entry-subitem-delete";
+    removeButton.dataset.accountingCreateSubitemRemove = "1";
+    removeButton.setAttribute("aria-label", "Remover subitem");
+    removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
+
+    row.append(labelField, amountField, removeButton);
+    list.append(row);
+    syncAccountingCreateSubitems(form);
+    labelField.focus();
+    return row;
+  };
+
+  const clearAccountingCreateSubitems = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+    const list = form.querySelector("[data-accounting-create-subitems-list]");
+    if (list instanceof HTMLElement) {
+      list.innerHTML = "";
+    }
+    syncAccountingCreateSubitems(form);
+  };
+
   const syncAccountingInstallmentForm = (form) => {
     if (!(form instanceof HTMLFormElement)) return;
 
@@ -7205,6 +7321,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (String(totalAmountField.value || "").trim() !== "") {
         primaryAmountField.value = totalAmountField.value;
       }
+      syncAccountingCreateSubitems(form);
       return;
     }
 
@@ -7227,6 +7344,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     primaryAmountField.value = totalAmountField.value || "";
+    syncAccountingCreateSubitems(form);
   };
 
   const getAccountingTaskLinkOptions = (form) => {
@@ -7699,6 +7817,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const form = toggle.querySelector(".accounting-create-form");
     if (reset && form instanceof HTMLFormElement) {
       form.reset();
+      clearAccountingCreateSubitems(form);
       syncAccountingInstallmentForm(form);
       syncAccountingTaskLinkForm(form);
     }
@@ -19163,6 +19282,16 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const accountingCreateSubitemForm = target.closest(".accounting-create-form");
+    if (
+      accountingCreateSubitemForm instanceof HTMLFormElement &&
+      target instanceof HTMLInputElement &&
+      target.matches("[data-accounting-create-subitem-label], [data-accounting-create-subitem-amount]")
+    ) {
+      syncAccountingCreateSubitems(accountingCreateSubitemForm);
+      return;
+    }
+
     if (
       target instanceof HTMLInputElement &&
       target.id === "accounting-period-input"
@@ -19184,6 +19313,15 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (isAccountingCurrencyInputField(target)) {
       formatAccountingCurrencyInputFieldWhileTyping(target);
+    }
+
+    const accountingCreateSubitemForm = target.closest(".accounting-create-form");
+    if (
+      accountingCreateSubitemForm instanceof HTMLFormElement &&
+      target.matches("[data-accounting-create-subitem-label], [data-accounting-create-subitem-amount]")
+    ) {
+      syncAccountingCreateSubitems(accountingCreateSubitemForm);
+      return;
     }
 
     if (!["amount_value", "total_amount_value", "opening_balance_value", "paid_amount_value"].includes(target.name)) {
@@ -19366,6 +19504,33 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLElement)) return;
 
+    const addButton = target.closest("[data-accounting-create-subitem-add]");
+    if (addButton instanceof HTMLButtonElement) {
+      const form = addButton.closest(".accounting-create-form");
+      if (!(form instanceof HTMLFormElement)) return;
+
+      event.preventDefault();
+      addAccountingCreateSubitemRow(form);
+      syncAccountingInstallmentForm(form);
+      return;
+    }
+
+    const removeButton = target.closest("[data-accounting-create-subitem-remove]");
+    if (!(removeButton instanceof HTMLButtonElement)) return;
+
+    const form = removeButton.closest(".accounting-create-form");
+    const row = removeButton.closest("[data-accounting-create-subitem-row]");
+    if (!(form instanceof HTMLFormElement) || !(row instanceof HTMLElement)) return;
+
+    event.preventDefault();
+    row.remove();
+    syncAccountingInstallmentForm(form);
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = getEventTargetElement(event);
+    if (!(target instanceof HTMLElement)) return;
+
     const editButton = target.closest("[data-accounting-entry-toggle], [data-accounting-entry-edit]");
     if (!(editButton instanceof HTMLElement)) return;
 
@@ -19444,6 +19609,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (form.matches(".accounting-create-form")) {
       event.preventDefault();
       syncAccountingInstallmentForm(form);
+      syncAccountingCreateSubitems(form);
       syncAccountingTaskLinkForm(form);
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
@@ -19534,6 +19700,7 @@ window.addEventListener("DOMContentLoaded", () => {
     root.querySelectorAll("[data-accounting-form]").forEach((form) => {
       if (!(form instanceof HTMLFormElement)) return;
       syncAccountingInstallmentForm(form);
+      syncAccountingCreateSubitems(form);
       syncAccountingTaskLinkForm(form);
       form
         .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="paid_amount_value"], input[name="payment_amount_value"], input[name="subitem_amount_value"]')

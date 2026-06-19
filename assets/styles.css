@@ -15204,6 +15204,42 @@ select option:checked,
     min-width: 96px;
 }
 
+.accounting-create-subitems {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.56);
+    box-shadow: inset 0 0 0 1px rgba(140, 181, 223, 0.2);
+}
+
+.accounting-create-subitems-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #3f5f80;
+    font-size: 0.75rem;
+}
+
+.accounting-create-subitems-list {
+    display: grid;
+    gap: 6px;
+}
+
+.accounting-create-subitem-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) 112px auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.accounting-create-subitem-add {
+    justify-self: start;
+    min-width: 0;
+}
+
 .accounting-entry-flow-note {
     grid-column: 1 / -1;
     display: flex;
@@ -16517,6 +16553,15 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
     .accounting-create-form .accounting-input-amount {
         width: 86px;
+    }
+
+    .accounting-create-subitem-row {
+        grid-template-columns: 1fr;
+    }
+
+    .accounting-create-subitem-row .accounting-entry-subitem-delete {
+        width: 100%;
+        border-radius: 8px;
     }
 
     .accounting-create-actions {

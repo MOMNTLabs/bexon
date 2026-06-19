@@ -6804,6 +6804,47 @@ function normalizeAccountingSubitemLabel(string $value): string
     return uppercaseFirstCharacter($value);
 }
 
+function normalizeAccountingSubitemPayloads($rawPayload): array
+{
+    if (!is_string($rawPayload) || trim($rawPayload) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($rawPayload, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $subitems = [];
+    foreach ($decoded as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $label = normalizeAccountingSubitemLabel((string) ($item['label'] ?? ''));
+        $amountInput = $item['amount'] ?? null;
+        if ($label === '' && trim((string) $amountInput) === '') {
+            continue;
+        }
+        if ($label === '') {
+            throw new RuntimeException('Informe um nome para o subitem.');
+        }
+
+        $amountCents = normalizeDueAmountCents($amountInput);
+        if ($amountCents === null) {
+            throw new RuntimeException('Informe um valor válido.');
+        }
+
+        $subitems[] = [
+            'label' => $label,
+            'amount_cents' => $amountCents,
+            'amount_input' => dueAmountLabelFromCents($amountCents),
+        ];
+    }
+
+    return $subitems;
+}
+
 function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array $entryIds): array
 {
     if ($workspaceId <= 0) {

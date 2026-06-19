@@ -793,6 +793,15 @@
                                         required
                                         data-accounting-primary-amount
                                     >
+                                    <input type="hidden" name="create_subitems_json" value="[]" data-accounting-create-subitems-json>
+                                    <div class="accounting-create-subitems" data-accounting-create-subitems>
+                                        <div class="accounting-create-subitems-head">
+                                            <strong>Subitens</strong>
+                                            <span data-accounting-create-subitems-total>R$ 0,00</span>
+                                        </div>
+                                        <div class="accounting-create-subitems-list" data-accounting-create-subitems-list></div>
+                                        <button type="button" class="btn btn-mini btn-ghost accounting-create-subitem-add" data-accounting-create-subitem-add>+ Subitem</button>
+                                    </div>
                                     <div class="accounting-create-footer">
                                         <div class="accounting-create-meta">
                                             <div class="accounting-entry-options">

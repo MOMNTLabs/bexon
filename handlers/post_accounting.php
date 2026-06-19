@@ -125,11 +125,24 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
 
                 $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
                 $entryType = normalizeAccountingEntryType((string) ($_POST['entry_type'] ?? 'expense'));
+                $createSubitems = normalizeAccountingSubitemPayloads($_POST['create_subitems_json'] ?? null);
                 $isSettled = array_key_exists('is_settled', $_POST) ? 1 : 0;
                 $isInstallment = $entryType === 'expense' && ((string) ($_POST['is_installment'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyDue = $entryType === 'expense' && ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyIncome = $entryType === 'income' && ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
                 $monthlyMode = (string) ($_POST['monthly_mode'] ?? 'uniform');
+                if ($createSubitems) {
+                    if ($entryType !== 'expense') {
+                        throw new RuntimeException('Subitens estão disponíveis apenas para contas.');
+                    }
+                    $isInstallment = 0;
+                    $isMonthlyDue = 0;
+                    $isMonthlyIncome = 0;
+                    $monthlyMode = 'uniform';
+                    $_POST['amount_value'] = dueAmountLabelFromCents(
+                        array_sum(array_map(static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0), $createSubitems))
+                    );
+                }
                 $isMonthlyGoal = $entryType === 'expense'
                     && $isMonthlyDue === 1
                     && normalizeAccountingMonthlyMode($monthlyMode, $entryType, 1) === 'goal';
@@ -151,7 +164,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['monthly_day'] ?? null
                     );
                 } else {
-                    createWorkspaceAccountingEntry(
+                    $entryId = createWorkspaceAccountingEntry(
                         $pdo,
                         $workspaceId,
                         $periodKey,
@@ -170,6 +183,16 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $monthlyMode,
                         $automationConfig
                     );
+                    foreach ($createSubitems as $subitem) {
+                        createWorkspaceAccountingSubitem(
+                            $pdo,
+                            $workspaceId,
+                            $entryId,
+                            (string) ($subitem['label'] ?? ''),
+                            $subitem['amount_input'] ?? null,
+                            (int) ($authUser['id'] ?? 0)
+                        );
+                    }
                 }
 
                 if (requestExpectsJson()) {
