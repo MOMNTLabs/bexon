@@ -16,7 +16,10 @@ $workspacePlanCardCurrentPlan = is_array($workspacePlanCardDefinitions[$workspac
     : (is_array($workspacePlanCardDefinitions['free'] ?? null) ? $workspacePlanCardDefinitions['free'] : ['key' => 'free', 'name' => 'Free']);
 $workspacePlanCardName = trim((string) ($workspacePlanCardCurrentPlan['name'] ?? 'Plano'));
 $workspacePlanCardBadge = trim((string) ($workspacePlanCardCurrentPlan['badge'] ?? ''));
-$workspacePlanCardSummary = trim((string) ($workspacePlanCardCurrentPlan['summary'] ?? ''));
+$workspacePlanCardSummary = '';
+if ($workspacePlanCardCurrentPlanKey === 'enterprise') {
+    $workspacePlanCardBadge = 'Acesso total';
+}
 $workspacePlanCardMemberLimit = max(0, (int) ($workspacePlanCardBillingLimit['max_users'] ?? ($workspacePlanCardCurrentPlan['max_users'] ?? 0)));
 $workspacePlanCardMemberCount = max(0, (int) ($workspacePlanCardBillingLimit['member_count'] ?? 0));
 $workspacePlanCardIsPersonalWorkspace = (bool) ($workspacePlanCardIsPersonalWorkspace ?? !empty($isPersonalWorkspace));
