@@ -8969,6 +8969,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       select.value = nextValue;
       syncSelectColor(select);
+      syncInlineSelectPicker(select);
 
       if (details instanceof HTMLDetailsElement) {
         details.open = false;
