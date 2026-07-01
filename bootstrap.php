@@ -811,6 +811,61 @@ function billingPlanAttributesFromStripeMetadata(array $metadata): array
     ];
 }
 
+function billingEnterpriseEmailOverrides(): array
+{
+    $emails = [
+        'rotelliofficial@gmail.com' => true,
+        'farmedempresa@hotmail.com' => true,
+    ];
+
+    $rawEmails = trim((string) (envValue('APP_ENTERPRISE_EMAILS') ?? ''));
+    if ($rawEmails !== '') {
+        foreach (preg_split('/[\s,;]+/', $rawEmails) ?: [] as $email) {
+            $email = strtolower(trim((string) $email));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[$email] = true;
+            }
+        }
+    }
+
+    return array_keys($emails);
+}
+
+function userHasEnterpriseBillingOverride(int $userId): bool
+{
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $user = userById($userId);
+    $email = strtolower(trim((string) ($user['email'] ?? '')));
+    return $email !== '' && in_array($email, billingEnterpriseEmailOverrides(), true);
+}
+
+function enterpriseBillingOverrideSubscription(int $userId, ?array $existingSubscription = null): ?array
+{
+    if (!userHasEnterpriseBillingOverride($userId)) {
+        return null;
+    }
+
+    $now = nowIso();
+    return array_merge($existingSubscription ?? [], [
+        'id' => (int) ($existingSubscription['id'] ?? 0),
+        'user_id' => $userId,
+        'plan_key' => 'enterprise',
+        'billing_interval' => 'year',
+        'max_users' => 0,
+        'subscription_status' => 'active',
+        'checkout_status' => 'enterprise_override',
+        'trial_end' => null,
+        'current_period_end' => null,
+        'cancel_at' => null,
+        'raw_payload_json' => '{"source":"enterprise_email_override"}',
+        'created_at' => (string) ($existingSubscription['created_at'] ?? $now),
+        'updated_at' => $now,
+    ]);
+}
+
 function billingSubscriptionPlanKey(array $subscription): string
 {
     return normalizeBillingPlanKey((string) ($subscription['plan_key'] ?? ''), null);
@@ -3331,7 +3386,9 @@ function userSubscriptionByUserId(int $userId): ?array
     );
     $stmt->execute([':user_id' => $userId]);
     $row = $stmt->fetch();
-    return $row ?: null;
+    $subscription = $row ?: null;
+
+    return enterpriseBillingOverrideSubscription($userId, $subscription) ?? $subscription;
 }
 
 function userIdByStripeCustomerId(string $customerId): ?int
