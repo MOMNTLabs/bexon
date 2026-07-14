@@ -16115,18 +16115,87 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
 .accounting-entry-subitem-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 6px;
+    min-height: 34px;
 }
 
 .accounting-entry-subitem-form,
 .accounting-entry-subitem-add-form {
     display: grid;
-    grid-template-columns: minmax(100px, 1fr) 112px auto;
+    grid-template-columns: minmax(100px, 1fr) 112px auto auto;
     align-items: center;
     gap: 6px;
     margin: 0;
+}
+
+.accounting-entry-subitem-form[hidden],
+.accounting-entry-subitem-status-form[hidden],
+.accounting-entry-subitem-summary[hidden] {
+    display: none !important;
+}
+
+.accounting-entry-subitem-row.is-editing .accounting-entry-subitem-form {
+    grid-column: 1 / 3;
+}
+
+.accounting-entry-subitem-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.5);
+    color: #34516f;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.accounting-entry-subitem-summary:hover,
+.accounting-entry-subitem-summary:focus-visible {
+    outline: none;
+    border-color: rgba(88, 139, 188, 0.28);
+    background: rgba(255, 255, 255, 0.86);
+}
+
+.accounting-entry-subitem-summary-label {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accounting-entry-subitem-summary-amount {
+    flex: 0 0 auto;
+    color: #4f6b88;
+    white-space: nowrap;
+}
+
+.accounting-entry-subitem-row.is-settled .accounting-entry-subitem-summary-label {
+    color: #71869b;
+    text-decoration: line-through;
+}
+
+.accounting-entry-subitem-status-form {
+    margin: 0;
+}
+
+.accounting-entry-subitem-paid-check,
+.accounting-entry-subitem-editor-paid-check {
+    white-space: nowrap;
+}
+
+.accounting-entry-subitem-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 .accounting-entry-subitem-delete-form {
@@ -16608,6 +16677,23 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     .accounting-entry-subitem-form,
     .accounting-entry-subitem-add-form {
         grid-template-columns: 1fr;
+    }
+
+    .accounting-entry-subitem-row.is-editing .accounting-entry-subitem-form {
+        grid-column: 1;
+    }
+
+    .accounting-entry-subitem-status-form {
+        justify-self: start;
+    }
+
+    .accounting-entry-subitem-editor-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .accounting-entry-subitem-editor-actions .btn-mini {
+        width: 100%;
     }
 
     .accounting-entry-subitem-form .btn-mini,

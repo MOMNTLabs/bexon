@@ -2919,6 +2919,8 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
                 entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
                 label TEXT NOT NULL,
                 amount_cents BIGINT NOT NULL DEFAULT 0,
+                is_settled SMALLINT NOT NULL DEFAULT 0,
+                settled_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
@@ -2933,6 +2935,8 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
                 entry_id INTEGER NOT NULL,
                 label TEXT NOT NULL,
                 amount_cents INTEGER NOT NULL DEFAULT 0,
+                is_settled INTEGER NOT NULL DEFAULT 0,
+                settled_at TEXT DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
@@ -2948,6 +2952,45 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_subitems_workspace_entry
          ON workspace_accounting_entry_subitems(workspace_id, entry_id, sort_order, id)'
     );
+
+    $hadSubitemSettledColumn = tableHasColumn($pdo, 'workspace_accounting_entry_subitems', 'is_settled');
+    $hadSubitemSettledAtColumn = tableHasColumn($pdo, 'workspace_accounting_entry_subitems', 'settled_at');
+    if (!$hadSubitemSettledColumn) {
+        $pdo->exec('ALTER TABLE workspace_accounting_entry_subitems ADD COLUMN is_settled INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!$hadSubitemSettledAtColumn) {
+        $settledAtType = dbDriverName($pdo) === 'pgsql' ? 'TIMESTAMP WITHOUT TIME ZONE' : 'TEXT';
+        $pdo->exec("ALTER TABLE workspace_accounting_entry_subitems ADD COLUMN settled_at {$settledAtType} DEFAULT NULL");
+    }
+    if (!$hadSubitemSettledColumn) {
+        $pdo->exec(
+            'UPDATE workspace_accounting_entry_subitems
+             SET is_settled = 1
+             WHERE EXISTS (
+                 SELECT 1
+                 FROM workspace_accounting_entries parent_entry
+                 WHERE parent_entry.id = workspace_accounting_entry_subitems.entry_id
+                   AND parent_entry.workspace_id = workspace_accounting_entry_subitems.workspace_id
+                   AND parent_entry.is_settled = 1
+             )'
+        );
+    }
+    if (!$hadSubitemSettledAtColumn) {
+        $pdo->exec(
+            'UPDATE workspace_accounting_entry_subitems
+             SET settled_at = COALESCE(
+                 (
+                     SELECT parent_entry.settled_at
+                     FROM workspace_accounting_entries parent_entry
+                     WHERE parent_entry.id = workspace_accounting_entry_subitems.entry_id
+                       AND parent_entry.workspace_id = workspace_accounting_entry_subitems.workspace_id
+                     LIMIT 1
+                 ),
+                 updated_at
+             )
+             WHERE is_settled = 1'
+        );
+    }
 }
 
 function ensureGroupPermissionSchema(PDO $pdo): void
@@ -6921,6 +6964,8 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
                 entry_id,
                 label,
                 amount_cents,
+                is_settled,
+                settled_at,
                 sort_order,
                 created_by,
                 created_at,
@@ -6941,6 +6986,7 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
         }
 
         $amountCents = normalizeDueAmountCents($row['amount_cents'] ?? null) ?? 0;
+        $isSettled = ((int) ($row['is_settled'] ?? 0)) === 1 ? 1 : 0;
         $subitemsByEntryId[$entryId][] = [
             'id' => (int) ($row['id'] ?? 0),
             'workspace_id' => (int) ($row['workspace_id'] ?? 0),
@@ -6949,6 +6995,8 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
             'amount_cents' => $amountCents,
             'amount_display' => dueAmountLabelFromCents($amountCents),
             'amount_input' => dueAmountLabelFromCents($amountCents),
+            'is_settled' => $isSettled,
+            'settled_at' => accountingDateTimeForStorage($row['settled_at'] ?? null),
             'sort_order' => max(0, (int) ($row['sort_order'] ?? 0)),
             'created_by' => isset($row['created_by']) ? (int) $row['created_by'] : null,
             'created_at' => accountingDateTimeForStorage($row['created_at'] ?? null) ?? '',
@@ -6995,12 +7043,33 @@ function workspaceAccountingAttachSubitems(PDO $pdo, int $workspaceId, array $en
         $entry['supports_subitems'] = workspaceAccountingEntrySupportsSubitems($entry) ? 1 : 0;
         if ($subitems) {
             $subitemTotalCents = array_sum(array_map(static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0), $subitems));
+            $settledSubitems = array_values(array_filter(
+                $subitems,
+                static fn (array $subitem): bool => ((int) ($subitem['is_settled'] ?? 0)) === 1
+            ));
+            $settledSubitemCount = count($settledSubitems);
+            $settledSubitemTimestamps = array_values(array_filter(array_map(
+                static fn (array $subitem): ?string => accountingDateTimeForStorage($subitem['settled_at'] ?? null),
+                $settledSubitems
+            )));
+            $subitemPaidCents = array_sum(array_map(
+                static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0),
+                $settledSubitems
+            ));
+            $allSubitemsSettled = $settledSubitemCount === count($subitems);
             $entry['amount_cents'] = $subitemTotalCents;
             $entry['total_amount_cents'] = $subitemTotalCents;
             $entry['amount_display'] = dueAmountLabelFromCents($subitemTotalCents);
             $entry['amount_input'] = dueAmountLabelFromCents($subitemTotalCents);
             $entry['total_amount_display'] = dueAmountLabelFromCents($subitemTotalCents);
             $entry['total_amount_input'] = dueAmountLabelFromCents($subitemTotalCents);
+            $entry['subitem_paid_cents'] = $subitemPaidCents;
+            $entry['subitem_paid_display'] = dueAmountLabelFromCents($subitemPaidCents);
+            $entry['settled_subitem_count'] = $settledSubitemCount;
+            $entry['is_settled'] = $allSubitemsSettled ? 1 : 0;
+            $entry['settled_at'] = $allSubitemsSettled && $settledSubitemTimestamps
+                ? max($settledSubitemTimestamps)
+                : null;
         }
     }
     unset($entry);
@@ -7057,6 +7126,53 @@ function workspaceAccountingRecalculateEntryAmountFromSubitems(PDO $pdo, int $wo
         ':workspace_id' => $workspaceId,
         ':entry_id' => $entryId,
     ]);
+}
+
+function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $workspaceId, int $entryId): void
+{
+    if ($workspaceId <= 0 || $entryId <= 0) {
+        return;
+    }
+
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) AS subitem_count,
+                COALESCE(SUM(CASE WHEN is_settled = 1 THEN 1 ELSE 0 END), 0) AS settled_count,
+                MAX(CASE WHEN is_settled = 1 THEN settled_at ELSE NULL END) AS latest_settled_at
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $subitemCount = max(0, (int) ($row['subitem_count'] ?? 0));
+    $settledCount = max(0, (int) ($row['settled_count'] ?? 0));
+    $isSettled = $subitemCount > 0 && $settledCount === $subitemCount;
+    $settledAt = $isSettled
+        ? (accountingDateTimeForStorage($row['latest_settled_at'] ?? null) ?? nowIso())
+        : null;
+
+    $updateStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_settled = :is_settled,
+             settled_at = :settled_at,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :entry_id'
+    );
+    $updateStmt->bindValue(':is_settled', $isSettled ? 1 : 0, PDO::PARAM_INT);
+    if ($settledAt !== null) {
+        $updateStmt->bindValue(':settled_at', $settledAt, PDO::PARAM_STR);
+    } else {
+        $updateStmt->bindValue(':settled_at', null, PDO::PARAM_NULL);
+    }
+    $updateStmt->bindValue(':updated_at', nowIso(), PDO::PARAM_STR);
+    $updateStmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $updateStmt->bindValue(':entry_id', $entryId, PDO::PARAM_INT);
+    $updateStmt->execute();
 }
 
 function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int $entryId): array
@@ -7133,10 +7249,11 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $subitemId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
 
     workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+    workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
     return $subitemId;
 }
 
-function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput): void
+function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput, int $isSettled = 0): void
 {
     workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
     $label = normalizeAccountingSubitemLabel($label);
@@ -7153,6 +7270,11 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
         'UPDATE workspace_accounting_entry_subitems
          SET label = :label,
              amount_cents = :amount_cents,
+             is_settled = :is_settled,
+             settled_at = CASE
+                 WHEN :settled_flag = 1 THEN COALESCE(settled_at, :settled_at)
+                 ELSE NULL
+             END,
              updated_at = :updated_at
          WHERE workspace_id = :workspace_id
            AND entry_id = :entry_id
@@ -7161,6 +7283,9 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $stmt->execute([
         ':label' => $label,
         ':amount_cents' => $amountCents,
+        ':is_settled' => $isSettled === 1 ? 1 : 0,
+        ':settled_flag' => $isSettled === 1 ? 1 : 0,
+        ':settled_at' => nowIso(),
         ':updated_at' => nowIso(),
         ':workspace_id' => $workspaceId,
         ':entry_id' => $entryId,
@@ -7171,6 +7296,7 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     }
 
     workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+    workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
 }
 
 function deleteWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId): void
@@ -7193,6 +7319,7 @@ function deleteWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     }
 
     workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
+    workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
 }
 
 function workspaceAccountingEntriesListRaw(
@@ -10299,7 +10426,9 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
                 continue;
             }
             $expenseTotal += $amountCents;
-            if ($isSettled) {
+            if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
+                $expensePaid += max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
+            } elseif ($isSettled) {
                 $expensePaid += $amountCents;
             }
         }
@@ -10411,6 +10540,10 @@ function workspaceAccountingNextIncomeProjectionSummary(
             }
 
             $amountCents = normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0;
+            if ($entryType === 'expense' && ((int) ($entry['has_subitems'] ?? 0)) === 1) {
+                $subitemPaidCents = max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
+                $amountCents = max(0, $amountCents - $subitemPaidCents);
+            }
             if ($amountCents <= 0) {
                 continue;
             }

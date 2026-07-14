@@ -256,6 +256,9 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     (string) ($_POST['monthly_mode'] ?? 'uniform'),
                     $automationConfig
                 );
+                if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
+                    workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+                }
 
                 if (requestExpectsJson()) {
                     respondJson([
@@ -443,7 +446,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $entryId,
                     $subitemId,
                     (string) ($_POST['subitem_label'] ?? ''),
-                    $_POST['subitem_amount_value'] ?? null
+                    $_POST['subitem_amount_value'] ?? null,
+                    isset($_POST['is_settled']) ? 1 : 0
                 );
 
                 if (requestExpectsJson()) {
