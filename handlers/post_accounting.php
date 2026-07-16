@@ -447,7 +447,9 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $subitemId,
                     (string) ($_POST['subitem_label'] ?? ''),
                     $_POST['subitem_amount_value'] ?? null,
-                    isset($_POST['is_settled']) ? 1 : 0
+                    array_key_exists('is_settled', $_POST)
+                        ? (((string) ($_POST['is_settled'] ?? '0')) === '1' ? 1 : 0)
+                        : null
                 );
 
                 if (requestExpectsJson()) {
@@ -458,6 +460,40 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 flash('success', 'Subitem atualizado.');
+                redirectTo(accountingRedirectPathFromRequest());
+
+            case 'update_accounting_subitem_statuses':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nao encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                if ($entryId <= 0) {
+                    throw new RuntimeException('Registro invalido.');
+                }
+
+                $decodedStatuses = json_decode((string) ($_POST['subitem_statuses_json'] ?? ''), true);
+                if (!is_array($decodedStatuses)) {
+                    throw new RuntimeException('Pagamentos de subitens invalidos.');
+                }
+
+                updateWorkspaceAccountingSubitemStatuses(
+                    $pdo,
+                    $workspaceId,
+                    $entryId,
+                    $decodedStatuses
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Pagamentos dos subitens atualizados.',
+                    ]);
+                }
+
+                flash('success', 'Pagamentos dos subitens atualizados.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'delete_accounting_subitem':
@@ -532,6 +568,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
         'delete_accounting_goal_payment',
         'create_accounting_subitem',
         'update_accounting_subitem',
+        'update_accounting_subitem_statuses',
         'delete_accounting_subitem',
         'delete_accounting_entry',
     ], true);

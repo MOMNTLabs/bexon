@@ -7253,7 +7253,7 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     return $subitemId;
 }
 
-function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput, int $isSettled = 0): void
+function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput, ?int $isSettled = null): void
 {
     workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
     $label = normalizeAccountingSubitemLabel($label);
@@ -7270,8 +7270,12 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
         'UPDATE workspace_accounting_entry_subitems
          SET label = :label,
              amount_cents = :amount_cents,
-             is_settled = :is_settled,
+             is_settled = CASE
+                 WHEN :has_settled_flag = 1 THEN :is_settled
+                 ELSE is_settled
+             END,
              settled_at = CASE
+                 WHEN :preserve_settled_flag = 1 THEN settled_at
                  WHEN :settled_flag = 1 THEN COALESCE(settled_at, :settled_at)
                  ELSE NULL
              END,
@@ -7283,6 +7287,8 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $stmt->execute([
         ':label' => $label,
         ':amount_cents' => $amountCents,
+        ':has_settled_flag' => $isSettled === null ? 0 : 1,
+        ':preserve_settled_flag' => $isSettled === null ? 1 : 0,
         ':is_settled' => $isSettled === 1 ? 1 : 0,
         ':settled_flag' => $isSettled === 1 ? 1 : 0,
         ':settled_at' => nowIso(),
@@ -7297,6 +7303,86 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
 
     workspaceAccountingRecalculateEntryAmountFromSubitems($pdo, $workspaceId, $entryId, true);
     workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+}
+
+function updateWorkspaceAccountingSubitemStatuses(PDO $pdo, int $workspaceId, int $entryId, array $statuses): void
+{
+    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
+    ensureWorkspaceAccountingSubitemSchema($pdo);
+
+    $normalizedStatuses = [];
+    foreach ($statuses as $status) {
+        if (!is_array($status)) {
+            continue;
+        }
+
+        $subitemId = max(0, (int) ($status['id'] ?? 0));
+        if ($subitemId <= 0) {
+            continue;
+        }
+        $normalizedStatuses[$subitemId] = ((int) ($status['is_settled'] ?? 0)) === 1 ? 1 : 0;
+    }
+    if (!$normalizedStatuses) {
+        throw new RuntimeException('Nenhum pagamento de subitem foi informado.');
+    }
+
+    $subitemIds = array_keys($normalizedStatuses);
+    $placeholders = implode(', ', array_fill(0, count($subitemIds), '?'));
+    $existingStmt = $pdo->prepare(
+        "SELECT id
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = ?
+           AND entry_id = ?
+           AND id IN ({$placeholders})"
+    );
+    $existingStmt->execute(array_merge([$workspaceId, $entryId], $subitemIds));
+    $existingIds = array_map('intval', $existingStmt->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    if (count($existingIds) !== count($subitemIds)) {
+        throw new RuntimeException('Um ou mais subitens nao foram encontrados.');
+    }
+
+    $startedTransaction = !$pdo->inTransaction();
+    if ($startedTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        $updatedAt = nowIso();
+        $updateStmt = $pdo->prepare(
+            'UPDATE workspace_accounting_entry_subitems
+             SET is_settled = :is_settled,
+                 settled_at = CASE
+                     WHEN :settled_flag = 1 THEN COALESCE(settled_at, :settled_at)
+                     ELSE NULL
+                 END,
+                 updated_at = :updated_at
+             WHERE workspace_id = :workspace_id
+               AND entry_id = :entry_id
+               AND id = :subitem_id'
+        );
+
+        foreach ($normalizedStatuses as $subitemId => $isSettled) {
+            $updateStmt->execute([
+                ':is_settled' => $isSettled,
+                ':settled_flag' => $isSettled,
+                ':settled_at' => $updatedAt,
+                ':updated_at' => $updatedAt,
+                ':workspace_id' => $workspaceId,
+                ':entry_id' => $entryId,
+                ':subitem_id' => $subitemId,
+            ]);
+        }
+
+        workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 function deleteWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId): void

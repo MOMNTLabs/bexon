@@ -7694,15 +7694,58 @@ window.addEventListener("DOMContentLoaded", () => {
     accountingAutosaveTimers.set(form, nextTimer);
   };
 
+  const syncAccountingSubitemStatusesForm = (panel) => {
+    if (!(panel instanceof HTMLElement)) return false;
+
+    const form = panel.querySelector("[data-accounting-subitem-statuses-form]");
+    const hiddenField = panel.querySelector("[data-accounting-subitem-statuses-json]");
+    const confirmButton = panel.querySelector("[data-accounting-subitem-statuses-confirm]");
+    const pendingNote = panel.querySelector("[data-accounting-subitem-statuses-note]");
+    if (
+      !(form instanceof HTMLFormElement) ||
+      !(hiddenField instanceof HTMLInputElement) ||
+      !(confirmButton instanceof HTMLButtonElement)
+    ) {
+      return false;
+    }
+
+    const payload = [];
+    let hasChanges = false;
+    panel.querySelectorAll("[data-accounting-subitem-paid-checkbox]").forEach((checkbox) => {
+      if (!(checkbox instanceof HTMLInputElement)) return;
+      const subitemId = Math.max(0, Number.parseInt(String(checkbox.dataset.subitemId || "0"), 10) || 0);
+      if (subitemId <= 0) return;
+
+      const isSettled = checkbox.checked ? 1 : 0;
+      payload.push({ id: subitemId, is_settled: isSettled });
+      if (String(checkbox.dataset.initialSettled || "0") !== String(isSettled)) {
+        hasChanges = true;
+      }
+
+      const subitemRow = checkbox.closest("[data-accounting-subitem-row]");
+      if (subitemRow instanceof HTMLElement) {
+        subitemRow.classList.toggle("is-settled", checkbox.checked);
+      }
+    });
+
+    hiddenField.value = JSON.stringify(payload);
+    confirmButton.disabled = !hasChanges;
+    panel.classList.toggle("has-pending-subitem-statuses", hasChanges);
+    if (pendingNote instanceof HTMLElement) {
+      pendingNote.hidden = !hasChanges;
+    }
+    return hasChanges;
+  };
+
   const closeAccountingSubitemEditor = (subitemRow, { reset = true } = {}) => {
     if (!(subitemRow instanceof HTMLElement)) return;
 
     const summary = subitemRow.querySelector("[data-accounting-subitem-edit]");
-    const statusForm = subitemRow.querySelector(".accounting-entry-subitem-status-form");
+    const statusControl = subitemRow.querySelector(".accounting-entry-subitem-status-control");
     const editorForm = subitemRow.querySelector(".accounting-entry-subitem-form");
     if (
       !(summary instanceof HTMLButtonElement) ||
-      !(statusForm instanceof HTMLFormElement) ||
+      !(statusControl instanceof HTMLElement) ||
       !(editorForm instanceof HTMLFormElement)
     ) {
       return;
@@ -7719,7 +7762,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     editorForm.hidden = true;
     summary.hidden = false;
-    statusForm.hidden = false;
+    statusControl.hidden = false;
     summary.setAttribute("aria-expanded", "false");
     subitemRow.classList.remove("is-editing");
   };
@@ -7728,18 +7771,18 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(subitemRow instanceof HTMLElement)) return;
 
     const summary = subitemRow.querySelector("[data-accounting-subitem-edit]");
-    const statusForm = subitemRow.querySelector(".accounting-entry-subitem-status-form");
+    const statusControl = subitemRow.querySelector(".accounting-entry-subitem-status-control");
     const editorForm = subitemRow.querySelector(".accounting-entry-subitem-form");
     if (
       !(summary instanceof HTMLButtonElement) ||
-      !(statusForm instanceof HTMLFormElement) ||
+      !(statusControl instanceof HTMLElement) ||
       !(editorForm instanceof HTMLFormElement)
     ) {
       return;
     }
 
     summary.hidden = true;
-    statusForm.hidden = true;
+    statusControl.hidden = true;
     editorForm.hidden = false;
     summary.setAttribute("aria-expanded", "true");
     subitemRow.classList.add("is-editing");
@@ -13251,8 +13294,8 @@ window.addEventListener("DOMContentLoaded", () => {
       formKind = "goal-payment-add";
     } else if (form.matches(".accounting-entry-subitem-add-form")) {
       formKind = "subitem-add";
-    } else if (form.matches(".accounting-entry-subitem-status-form")) {
-      formKind = "subitem-status";
+    } else if (form.matches(".accounting-entry-subitem-statuses-form")) {
+      formKind = "subitem-statuses";
     } else if (form.matches(".accounting-entry-subitem-form")) {
       formKind = "subitem-update";
     } else if (form.matches(".accounting-entry-subitem-delete-form")) {
@@ -13321,11 +13364,13 @@ window.addEventListener("DOMContentLoaded", () => {
       return entryRow.querySelector(".accounting-entry-goal-payment-add-form");
     }
 
-    if (["subitem-add", "subitem-status", "subitem-update", "subitem-delete"].includes(payload.formKind)) {
+    if (["subitem-add", "subitem-statuses", "subitem-update", "subitem-delete"].includes(payload.formKind)) {
       const selector =
         payload.formKind === "subitem-add"
           ? `.accounting-entry-subitem-add-form input[name="entry_id"][value="${payload.entryId}"]`
-          : `.accounting-entry-subitem-${payload.formKind === "subitem-update" ? "" : payload.formKind === "subitem-status" ? "status-" : "delete-"}form input[name="subitem_id"][value="${payload.subitemId}"]`;
+          : payload.formKind === "subitem-statuses"
+            ? `.accounting-entry-subitem-statuses-form input[name="entry_id"][value="${payload.entryId}"]`
+            : `.accounting-entry-subitem-${payload.formKind === "subitem-update" ? "" : "delete-"}form input[name="subitem_id"][value="${payload.subitemId}"]`;
       const matchedField = document.querySelector(selector);
       const entryRow = matchedField?.closest(".accounting-entry-row");
       if (!(entryRow instanceof HTMLElement)) return null;
@@ -13379,7 +13424,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (["subitem-add", "subitem-status", "subitem-update", "subitem-delete"].includes(payload.formKind)) {
+    if (["subitem-add", "subitem-statuses", "subitem-update", "subitem-delete"].includes(payload.formKind)) {
       void submitAccountingActionForm(form, {
         showSuccess: false,
         fallbackError: "Falha ao atualizar subitens.",
@@ -13534,7 +13579,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (
       form.matches(
-        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-status-form, .accounting-entry-subitem-delete-form"
+        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-statuses-form, .accounting-entry-subitem-delete-form"
       )
     ) {
       return buildAccountingResumePayload(form);
@@ -19281,17 +19326,12 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    const accountingSubitemStatusForm = target.closest(".accounting-entry-subitem-status-form");
     if (
-      accountingSubitemStatusForm instanceof HTMLFormElement &&
       target instanceof HTMLInputElement &&
-      target.name === "is_settled"
+      target.matches("[data-accounting-subitem-paid-checkbox]")
     ) {
-      void submitAccountingActionForm(accountingSubitemStatusForm, {
-        showSuccess: false,
-        fallbackError: "Falha ao atualizar pagamento do subitem.",
-        refresh: true,
-      }).catch(() => {});
+      const panel = target.closest(".accounting-entry-subitems-panel");
+      syncAccountingSubitemStatusesForm(panel);
       return;
     }
 
@@ -19768,7 +19808,21 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (form.matches(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-status-form")) {
+    if (form.matches(".accounting-entry-subitem-statuses-form")) {
+      event.preventDefault();
+      const panel = form.closest(".accounting-entry-subitems-panel");
+      if (!syncAccountingSubitemStatusesForm(panel)) {
+        return;
+      }
+      void submitAccountingActionForm(form, {
+        showSuccess: false,
+        fallbackError: "Falha ao atualizar pagamentos dos subitens.",
+        refresh: true,
+      }).catch(() => {});
+      return;
+    }
+
+    if (form.matches(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form")) {
       event.preventDefault();
       const amountField = form.querySelector('input[name="subitem_amount_value"]');
       if (amountField instanceof HTMLInputElement) {
@@ -19824,13 +19878,19 @@ window.addEventListener("DOMContentLoaded", () => {
       });
     });
 
-    root.querySelectorAll(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-status-form").forEach((form) => {
+    root.querySelectorAll(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form").forEach((form) => {
       if (!(form instanceof HTMLFormElement)) return;
       form.querySelectorAll('input[name="subitem_amount_value"]').forEach((field) => {
         if (field instanceof HTMLInputElement) {
           normalizeAccountingCurrencyInputField(field);
         }
       });
+    });
+
+    root.querySelectorAll(".accounting-entry-subitems-panel").forEach((panel) => {
+      if (panel instanceof HTMLElement) {
+        syncAccountingSubitemStatusesForm(panel);
+      }
     });
 
     root.querySelectorAll("[data-accounting-goal-payment-toggle]").forEach((button) => {

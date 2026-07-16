@@ -715,19 +715,18 @@
                                                                     <span class="accounting-entry-subitem-summary-label"><?= e($accountingSubitemLabel) ?></span>
                                                                     <span class="accounting-entry-subitem-summary-amount"><?= $renderAccountingMoney($accountingSubitemAmountInput) ?></span>
                                                                 </button>
-                                                                <form method="post" class="accounting-entry-subitem-status-form" data-accounting-subitem-status-form>
-                                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                                                                    <input type="hidden" name="action" value="update_accounting_subitem">
-                                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
-                                                                    <input type="hidden" name="subitem_id" value="<?= e((string) $accountingSubitemId) ?>">
-                                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
-                                                                    <input type="hidden" name="subitem_label" value="<?= e($accountingSubitemLabel) ?>">
-                                                                    <input type="hidden" name="subitem_amount_value" value="<?= e($accountingSubitemAmountInput) ?>">
+                                                                <div class="accounting-entry-subitem-status-control">
                                                                     <label class="accounting-check accounting-entry-subitem-paid-check">
-                                                                        <input type="checkbox" name="is_settled" value="1" <?= $accountingSubitemIsSettled ? 'checked' : '' ?>>
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            data-accounting-subitem-paid-checkbox
+                                                                            data-subitem-id="<?= e((string) $accountingSubitemId) ?>"
+                                                                            data-initial-settled="<?= $accountingSubitemIsSettled ? '1' : '0' ?>"
+                                                                            <?= $accountingSubitemIsSettled ? 'checked' : '' ?>
+                                                                        >
                                                                         <span>Pago</span>
                                                                     </label>
-                                                                </form>
+                                                                </div>
                                                                 <form method="post" class="accounting-entry-subitem-form" data-accounting-subitem-form autocomplete="off" hidden>
                                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                     <input type="hidden" name="action" value="update_accounting_subitem">
@@ -752,10 +751,6 @@
                                                                         autocomplete="off"
                                                                         required
                                                                     >
-                                                                    <label class="accounting-check accounting-entry-subitem-editor-paid-check">
-                                                                        <input type="checkbox" name="is_settled" value="1" <?= $accountingSubitemIsSettled ? 'checked' : '' ?>>
-                                                                        <span>Pago</span>
-                                                                    </label>
                                                                     <div class="accounting-entry-subitem-editor-actions">
                                                                         <button type="submit" class="btn btn-mini">Confirmar</button>
                                                                         <button type="button" class="btn btn-mini btn-ghost" data-accounting-subitem-cancel>Cancelar</button>
@@ -774,6 +769,15 @@
                                                             </div>
                                                         <?php endforeach; ?>
                                                     </div>
+                                                    <form method="post" class="accounting-entry-subitem-statuses-form" data-accounting-subitem-statuses-form>
+                                                        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                        <input type="hidden" name="action" value="update_accounting_subitem_statuses">
+                                                        <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                        <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                        <input type="hidden" name="subitem_statuses_json" value="[]" data-accounting-subitem-statuses-json>
+                                                        <span class="accounting-entry-subitem-statuses-note" data-accounting-subitem-statuses-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
+                                                        <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar pagamentos</button>
+                                                    </form>
                                                 <?php endif; ?>
                                                 <form method="post" class="accounting-entry-subitem-add-form" data-accounting-subitem-form autocomplete="off">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
