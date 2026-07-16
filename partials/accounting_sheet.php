@@ -405,6 +405,8 @@
                                         && $accountingEntryDiscountTotalCents >= $accountingEntryTotalCents;
                                     $accountingEntryDiscountRemainingCents = max(0, (int) ($accountingEntry['discount_remaining_cents'] ?? 0));
                                     $accountingEntryDiscountRemainingDisplay = (string) ($accountingEntry['discount_remaining_display'] ?? $accountingEntryAmountInput);
+                                    $accountingEntryShowDiscountSummaryProgress = $accountingEntryShowDiscountProgress
+                                        && !$accountingEntryIsSettled;
                                     ?>
                                     <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?>">
                                         <button
@@ -468,7 +470,7 @@
                                                     <?= $renderAccountingMoney($accountingEntryGoalPaymentDisplay) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <?php if ($accountingEntryShowDiscountProgress): ?>
+                                                <?php if ($accountingEntryShowDiscountSummaryProgress): ?>
                                                     <span
                                                         class="accounting-entry-summary-amount accounting-entry-summary-discount-progress"
                                                         aria-label="Abatido <?= e($accountingEntryDiscountTotalDisplay) ?> de <?= e($accountingEntryAmountInput) ?>"
