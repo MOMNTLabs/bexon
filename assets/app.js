@@ -6904,6 +6904,7 @@ window.addEventListener("DOMContentLoaded", () => {
       "opening_balance_value",
       "paid_amount_value",
       "subitem_amount_value",
+      "discount_amount_value",
     ].includes(field.name);
 
   const getAccountingCurrencyFieldState = (field) => {
@@ -7827,6 +7828,36 @@ window.addEventListener("DOMContentLoaded", () => {
     return true;
   };
 
+  const closeAccountingEntryDetailPanels = (entryRow) => {
+    if (!(entryRow instanceof HTMLElement)) return;
+
+    entryRow.classList.remove("is-subitems-open", "is-discounts-open");
+    entryRow.querySelectorAll("[data-accounting-entry-panel-toggle]").forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.classList.remove("is-active");
+      button.setAttribute("aria-expanded", "false");
+    });
+  };
+
+  const toggleAccountingEntryDetailPanel = (entryRow, panelName) => {
+    if (!(entryRow instanceof HTMLElement)) return;
+    const normalizedPanel = panelName === "discounts" ? "discounts" : "subitems";
+    const targetClass = normalizedPanel === "discounts" ? "is-discounts-open" : "is-subitems-open";
+    const shouldOpen = !entryRow.classList.contains(targetClass);
+
+    closeAccountingEntryDetailPanels(entryRow);
+    if (!shouldOpen) return;
+
+    entryRow.classList.add(targetClass);
+    const activeButton = entryRow.querySelector(
+      `[data-accounting-entry-panel-toggle="${normalizedPanel}"]`
+    );
+    if (activeButton instanceof HTMLButtonElement) {
+      activeButton.classList.add("is-active");
+      activeButton.setAttribute("aria-expanded", "true");
+    }
+  };
+
   const closeAccountingSubitemEditor = (subitemRow, { reset = true } = {}) => {
     if (!(subitemRow instanceof HTMLElement)) return;
 
@@ -7902,6 +7933,8 @@ window.addEventListener("DOMContentLoaded", () => {
         closeAccountingSubitemEditor(subitemRow, { reset });
       }
     });
+
+    closeAccountingEntryDetailPanels(entryRow);
 
     form.hidden = true;
     summary.hidden = false;
@@ -13382,6 +13415,10 @@ window.addEventListener("DOMContentLoaded", () => {
       formKind = "create";
     } else if (form.matches(".accounting-entry-goal-payment-add-form")) {
       formKind = "goal-payment-add";
+    } else if (form.matches(".accounting-entry-discount-add-form")) {
+      formKind = "discount-add";
+    } else if (form.matches(".accounting-entry-discount-delete-form")) {
+      formKind = "discount-delete";
     } else if (form.matches(".accounting-entry-subitem-add-form")) {
       formKind = "subitem-add";
     } else if (form.matches(".accounting-entry-subitem-statuses-form")) {
@@ -13396,6 +13433,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const entryIdField = form.querySelector('input[name="entry_id"]');
     const subitemIdField = form.querySelector('input[name="subitem_id"]');
+    const discountIdField = form.querySelector('input[name="discount_id"]');
     const entryTypeField = form.querySelector('[data-accounting-type-select], input[name="entry_type"]');
     const card = form.closest(".accounting-card");
     const cardType =
@@ -13411,6 +13449,10 @@ window.addEventListener("DOMContentLoaded", () => {
       subitemId:
         subitemIdField instanceof HTMLInputElement
           ? Math.max(0, Number.parseInt(String(subitemIdField.value || "0"), 10) || 0)
+          : 0,
+      discountId:
+        discountIdField instanceof HTMLInputElement
+          ? Math.max(0, Number.parseInt(String(discountIdField.value || "0"), 10) || 0)
           : 0,
       cardType,
       entryType:
@@ -13454,6 +13496,19 @@ window.addEventListener("DOMContentLoaded", () => {
       return entryRow.querySelector(".accounting-entry-goal-payment-add-form");
     }
 
+    if (["discount-add", "discount-delete"].includes(payload.formKind)) {
+      const selector =
+        payload.formKind === "discount-add"
+          ? `.accounting-entry-discount-add-form input[name="entry_id"][value="${payload.entryId}"]`
+          : `.accounting-entry-discount-delete-form input[name="discount_id"][value="${payload.discountId}"]`;
+      const matchedField = document.querySelector(selector);
+      const entryRow = matchedField?.closest(".accounting-entry-row");
+      if (!(entryRow instanceof HTMLElement)) return null;
+      openAccountingEntryEditor(entryRow);
+      toggleAccountingEntryDetailPanel(entryRow, "discounts");
+      return matchedField?.closest("form") || null;
+    }
+
     if (["subitem-add", "subitem-statuses", "subitem-update", "subitem-delete"].includes(payload.formKind)) {
       const selector =
         payload.formKind === "subitem-add"
@@ -13465,6 +13520,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const entryRow = matchedField?.closest(".accounting-entry-row");
       if (!(entryRow instanceof HTMLElement)) return null;
       openAccountingEntryEditor(entryRow);
+      toggleAccountingEntryDetailPanel(entryRow, "subitems");
       return matchedField?.closest("form") || null;
     }
 
@@ -13535,7 +13591,7 @@ window.addEventListener("DOMContentLoaded", () => {
     syncAccountingTaskLinkForm(form);
     form
       .querySelectorAll(
-        'input[name="amount_value"], input[name="total_amount_value"], input[name="opening_balance_value"], input[name="paid_amount_value"], input[name="payment_amount_value"], input[name="subitem_amount_value"]'
+        'input[name="amount_value"], input[name="total_amount_value"], input[name="opening_balance_value"], input[name="paid_amount_value"], input[name="payment_amount_value"], input[name="subitem_amount_value"], input[name="discount_amount_value"]'
       )
       .forEach((field) => {
         if (field instanceof HTMLInputElement) {
@@ -13669,7 +13725,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (
       form.matches(
-        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-statuses-form, .accounting-entry-subitem-delete-form"
+        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-discount-add-form, .accounting-entry-discount-delete-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-statuses-form, .accounting-entry-subitem-delete-form"
       )
     ) {
       return buildAccountingResumePayload(form);
@@ -19427,6 +19483,15 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    if (["discount-add", "discount-delete"].includes(payload.formKind)) {
+      void submitAccountingActionForm(form, {
+        showSuccess: false,
+        fallbackError: "Falha ao atualizar abatimentos.",
+        refresh: true,
+      }).catch(() => {});
+      return;
+    }
+
     const accountingEntryForm = target.closest(".accounting-entry-form, .accounting-entry-quick-status-form");
     const isAccountingEntryField =
       target instanceof HTMLInputElement || target instanceof HTMLSelectElement;
@@ -19628,7 +19693,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (["amount_value", "total_amount_value", "opening_balance_value", "paid_amount_value", "subitem_amount_value"].includes(target.name)) {
+    if (["amount_value", "total_amount_value", "opening_balance_value", "paid_amount_value", "subitem_amount_value", "discount_amount_value"].includes(target.name)) {
       normalizeAccountingCurrencyInputField(target);
     }
 
@@ -19660,6 +19725,22 @@ window.addEventListener("DOMContentLoaded", () => {
 
     event.preventDefault();
     closeAccountingEntryEditor(entryRow);
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = getEventTargetElement(event);
+    if (!(target instanceof HTMLElement)) return;
+
+    const panelToggle = target.closest("[data-accounting-entry-panel-toggle]");
+    if (!(panelToggle instanceof HTMLButtonElement)) return;
+    const entryRow = panelToggle.closest(".accounting-entry-row");
+    if (!(entryRow instanceof HTMLElement)) return;
+
+    event.preventDefault();
+    toggleAccountingEntryDetailPanel(
+      entryRow,
+      String(panelToggle.dataset.accountingEntryPanelToggle || "subitems")
+    );
   });
 
   document.addEventListener("click", (event) => {
@@ -19912,6 +19993,33 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    if (form.matches(".accounting-entry-discount-add-form")) {
+      event.preventDefault();
+      const amountField = form.querySelector('input[name="discount_amount_value"]');
+      if (amountField instanceof HTMLInputElement) {
+        normalizeAccountingCurrencyInputField(amountField);
+      }
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+        return;
+      }
+      void submitAccountingActionForm(form, {
+        showSuccess: false,
+        fallbackError: "Falha ao adicionar abatimento.",
+        refresh: true,
+      }).catch(() => {});
+      return;
+    }
+
+    if (form.matches(".accounting-entry-discount-delete-form")) {
+      event.preventDefault();
+      void submitAccountingActionForm(form, {
+        showSuccess: false,
+        fallbackError: "Falha ao remover abatimento.",
+        refresh: true,
+      }).catch(() => {});
+      return;
+    }
+
     if (form.matches(".accounting-entry-subitem-statuses-form")) {
       event.preventDefault();
       const panel = form.closest(".accounting-entry-subitems-panel");
@@ -19971,7 +20079,7 @@ window.addEventListener("DOMContentLoaded", () => {
       syncAccountingCreateSubitems(form);
       syncAccountingTaskLinkForm(form);
       form
-        .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="paid_amount_value"], input[name="payment_amount_value"], input[name="subitem_amount_value"]')
+        .querySelectorAll('input[name="amount_value"], input[name="total_amount_value"], input[name="paid_amount_value"], input[name="payment_amount_value"], input[name="subitem_amount_value"], input[name="discount_amount_value"]')
         .forEach((field) => {
           if (field instanceof HTMLInputElement) {
             normalizeAccountingCurrencyInputField(field);
@@ -19991,6 +20099,15 @@ window.addEventListener("DOMContentLoaded", () => {
     root.querySelectorAll(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form").forEach((form) => {
       if (!(form instanceof HTMLFormElement)) return;
       form.querySelectorAll('input[name="subitem_amount_value"]').forEach((field) => {
+        if (field instanceof HTMLInputElement) {
+          normalizeAccountingCurrencyInputField(field);
+        }
+      });
+    });
+
+    root.querySelectorAll(".accounting-entry-discount-add-form").forEach((form) => {
+      if (!(form instanceof HTMLFormElement)) return;
+      form.querySelectorAll('input[name="discount_amount_value"]').forEach((field) => {
         if (field instanceof HTMLInputElement) {
           normalizeAccountingCurrencyInputField(field);
         }

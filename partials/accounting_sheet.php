@@ -387,10 +387,18 @@
                                         : [];
                                     $accountingEntryHasSubitems = !empty($accountingEntrySubitems);
                                     $accountingEntrySupportsSubitems = ((int) ($accountingEntry['supports_subitems'] ?? 0)) === 1;
-                                    $accountingEntrySubitemCount = count($accountingEntrySubitems);
-                                    $accountingEntrySubitemBadge = $accountingEntrySubitemCount > 0
-                                        ? ($accountingEntrySubitemCount . ' sub' . ($accountingEntrySubitemCount === 1 ? '' : 's'))
-                                        : '';
+                                    $accountingEntrySubitemPaidCents = max(0, (int) ($accountingEntry['subitem_paid_cents'] ?? 0));
+                                    $accountingEntryTotalCents = max(0, (int) ($accountingEntry['amount_cents'] ?? 0));
+                                    $accountingEntryShowSubitemProgress = $accountingEntryHasSubitems
+                                        && $accountingEntrySubitemPaidCents > 0;
+                                    $accountingEntrySubitemPaidCompact = dueAmountCompactLabelFromCents($accountingEntrySubitemPaidCents, true);
+                                    $accountingEntryTotalCompact = dueAmountCompactLabelFromCents($accountingEntryTotalCents, true);
+                                    $accountingEntryDiscounts = is_array($accountingEntry['discounts'] ?? null)
+                                        ? $accountingEntry['discounts']
+                                        : [];
+                                    $accountingEntrySupportsDiscounts = ((int) ($accountingEntry['supports_discounts'] ?? 0)) === 1;
+                                    $accountingEntryDiscountRemainingCents = max(0, (int) ($accountingEntry['discount_remaining_cents'] ?? 0));
+                                    $accountingEntryDiscountRemainingDisplay = (string) ($accountingEntry['discount_remaining_display'] ?? $accountingEntryAmountInput);
                                     ?>
                                     <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?>">
                                         <button
@@ -423,15 +431,12 @@
                                                                 </span>
                                                             </span>
                                                         </span>
-                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryIsOverdue || $accountingEntrySubitemBadge !== ''): ?>
+                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryIsOverdue): ?>
                                                         <span class="accounting-entry-summary-meta">
                                                             <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
                                                             <?php elseif ($accountingEntryIsInstallment): ?>
                                                                 <span class="accounting-entry-badge is-installment"><?= e($accountingEntryInstallmentBadge) ?></span>
-                                                            <?php endif; ?>
-                                                            <?php if ($accountingEntrySubitemBadge !== ''): ?>
-                                                                <span class="accounting-entry-badge is-subitems"><?= e($accountingEntrySubitemBadge) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryShowPendingBadge): ?>
                                                                 <span class="accounting-entry-badge is-pending">Pendente</span>
@@ -457,7 +462,18 @@
                                                     <?= $renderAccountingMoney($accountingEntryGoalPaymentDisplay) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <span class="accounting-entry-summary-amount"><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
+                                                <?php if ($accountingEntryShowSubitemProgress): ?>
+                                                    <span
+                                                        class="accounting-entry-summary-amount accounting-entry-summary-paid-progress"
+                                                        aria-label="Pago <?= e((string) ($accountingEntry['subitem_paid_display'] ?? 'R$ 0,00')) ?> de <?= e($accountingEntryAmountInput) ?>"
+                                                    >
+                                                        <span><?= e($accountingEntrySubitemPaidCompact) ?></span>
+                                                        <span aria-hidden="true">/</span>
+                                                        <strong><?= e($accountingEntryTotalCompact) ?></strong>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="accounting-entry-summary-amount"><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                         </button>
                                         <?php if ($accountingEntryIsMonthlyGoal): ?>
@@ -616,7 +632,7 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntrySubitemBadge !== ''): ?>
+                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge): ?>
                                                 <div class="accounting-entry-meta">
                                                     <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
@@ -634,9 +650,6 @@
                                                     <?php endif; ?>
                                                     <?php if ($accountingEntryShowPendingBadge): ?>
                                                         <span class="accounting-entry-badge is-pending">Pendente</span>
-                                                    <?php endif; ?>
-                                                    <?php if ($accountingEntrySubitemBadge !== ''): ?>
-                                                        <span class="accounting-entry-badge is-subitems"><?= e($accountingEntrySubitemBadge) ?></span>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
@@ -678,8 +691,28 @@
                                                 <input type="hidden" name="monthly_day" value="">
                                             <?php endif; ?>
                                         </form>
+                                        <?php if ($accountingEntrySupportsSubitems || $accountingEntrySupportsDiscounts): ?>
+                                            <div class="accounting-entry-detail-actions">
+                                                <?php if ($accountingEntrySupportsSubitems): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-mini btn-ghost"
+                                                        data-accounting-entry-panel-toggle="subitems"
+                                                        aria-expanded="false"
+                                                    >Subitens</button>
+                                                <?php endif; ?>
+                                                <?php if ($accountingEntrySupportsDiscounts): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-mini btn-ghost"
+                                                        data-accounting-entry-panel-toggle="discounts"
+                                                        aria-expanded="false"
+                                                    >Abater</button>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
                                         <?php if ($accountingEntrySupportsSubitems): ?>
-                                            <div class="accounting-entry-subitems-panel">
+                                            <div class="accounting-entry-subitems-panel" data-accounting-entry-panel="subitems">
                                                 <div class="accounting-entry-subitems-head">
                                                     <strong>Subitens</strong>
                                                     <span><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
@@ -793,6 +826,55 @@
                                                     <input type="hidden" name="create_subitems_json" value="[]" data-accounting-pending-subitems-json>
                                                     <span class="accounting-entry-subitem-statuses-note" data-accounting-subitem-statuses-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
                                                     <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar altera&ccedil;&otilde;es</button>
+                                                </form>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if ($accountingEntrySupportsDiscounts): ?>
+                                            <div class="accounting-entry-discounts-panel" data-accounting-entry-panel="discounts">
+                                                <div class="accounting-entry-discounts-head">
+                                                    <strong>Abatimentos</strong>
+                                                    <span>Falta <?= $renderAccountingMoney($accountingEntryDiscountRemainingDisplay) ?></span>
+                                                </div>
+                                                <?php if ($accountingEntryDiscounts): ?>
+                                                    <div class="accounting-entry-discounts-list">
+                                                        <?php foreach ($accountingEntryDiscounts as $accountingDiscount): ?>
+                                                            <?php
+                                                            $accountingDiscountId = (int) ($accountingDiscount['id'] ?? 0);
+                                                            $accountingDiscountAmountDisplay = (string) ($accountingDiscount['amount_display'] ?? 'R$ 0,00');
+                                                            ?>
+                                                            <div class="accounting-entry-discount-row">
+                                                                <span>- <?= $renderAccountingMoney($accountingDiscountAmountDisplay) ?></span>
+                                                                <form method="post" class="accounting-entry-discount-delete-form">
+                                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                                    <input type="hidden" name="action" value="delete_accounting_discount">
+                                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                                    <input type="hidden" name="discount_id" value="<?= e((string) $accountingDiscountId) ?>">
+                                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                                    <button type="submit" class="accounting-entry-subitem-delete" aria-label="Remover abatimento">
+                                                                        <span aria-hidden="true">&times;</span>
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                                <form method="post" class="accounting-entry-discount-add-form" autocomplete="off">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                    <input type="hidden" name="action" value="add_accounting_discount">
+                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                    <input
+                                                        type="text"
+                                                        name="discount_amount_value"
+                                                        class="accounting-input accounting-input-amount"
+                                                        inputmode="numeric"
+                                                        placeholder="<?= $accountingEntryDiscountRemainingCents > 0 ? '0,00' : 'Quitado' ?>"
+                                                        autocomplete="off"
+                                                        aria-label="Valor do abatimento"
+                                                        <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>
+                                                        required
+                                                    >
+                                                    <button type="submit" class="btn btn-mini" <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>>+</button>
                                                 </form>
                                             </div>
                                         <?php endif; ?>

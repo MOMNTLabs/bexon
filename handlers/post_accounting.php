@@ -427,6 +427,61 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 flash('success', 'Subitem adicionado.');
                 redirectTo(accountingRedirectPathFromRequest());
 
+            case 'add_accounting_discount':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo não encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                if ($entryId <= 0) {
+                    throw new RuntimeException('Registro inválido.');
+                }
+
+                addWorkspaceAccountingDiscount(
+                    $pdo,
+                    $workspaceId,
+                    $entryId,
+                    $_POST['discount_amount_value'] ?? null,
+                    (int) ($authUser['id'] ?? 0)
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Abatimento adicionado.',
+                    ]);
+                }
+
+                flash('success', 'Abatimento adicionado.');
+                redirectTo(accountingRedirectPathFromRequest());
+
+            case 'delete_accounting_discount':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo não encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                $discountId = (int) ($_POST['discount_id'] ?? 0);
+                if ($entryId <= 0 || $discountId <= 0) {
+                    throw new RuntimeException('Abatimento inválido.');
+                }
+
+                deleteWorkspaceAccountingDiscount($pdo, $workspaceId, $entryId, $discountId);
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => 'Abatimento removido.',
+                    ]);
+                }
+
+                flash('success', 'Abatimento removido.');
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'update_accounting_subitem':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -601,6 +656,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
         'update_accounting_goal_payment',
         'add_accounting_goal_payment',
         'delete_accounting_goal_payment',
+        'add_accounting_discount',
+        'delete_accounting_discount',
         'create_accounting_subitem',
         'update_accounting_subitem',
         'update_accounting_subitem_statuses',

@@ -68,6 +68,7 @@ function migrate(PDO $pdo): void
     ensureWorkspaceInventorySchema($pdo);
     ensureWorkspaceAccountingSchema($pdo);
     ensureWorkspaceAccountingSubitemSchema($pdo);
+    ensureWorkspaceAccountingDiscountSchema($pdo);
     ensureTaskExtendedSchema($pdo);
     ensureTaskGroupsSchema($pdo);
     ensureTaskHistorySchema($pdo);
@@ -2991,6 +2992,41 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
              WHERE is_settled = 1'
         );
     }
+}
+
+function ensureWorkspaceAccountingDiscountSchema(PDO $pdo): void
+{
+    if (dbDriverName($pdo) === 'pgsql') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_entry_discounts (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
+                amount_cents BIGINT NOT NULL DEFAULT 0,
+                created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )'
+        );
+    } else {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_entry_discounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                entry_id INTEGER NOT NULL,
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                created_by INTEGER DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (entry_id) REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            )'
+        );
+    }
+
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_discounts_workspace_entry_created
+         ON workspace_accounting_entry_discounts(workspace_id, entry_id, created_at, id)'
+    );
 }
 
 function ensureGroupPermissionSchema(PDO $pdo): void
@@ -6889,6 +6925,270 @@ function workspaceAccountingGoalPaymentTotalCents(PDO $pdo, int $workspaceId, in
     return max(0, (int) $stmt->fetchColumn());
 }
 
+function workspaceAccountingDiscountsByEntryIds(PDO $pdo, int $workspaceId, array $entryIds): array
+{
+    if ($workspaceId <= 0) {
+        return [];
+    }
+
+    $entryIds = array_values(array_unique(array_filter(array_map('intval', $entryIds), static fn (int $entryId): bool => $entryId > 0)));
+    if (!$entryIds) {
+        return [];
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $placeholders = implode(', ', array_fill(0, count($entryIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT id, workspace_id, entry_id, amount_cents, created_by, created_at
+         FROM workspace_accounting_entry_discounts
+         WHERE workspace_id = ?
+           AND entry_id IN ({$placeholders})
+         ORDER BY entry_id ASC, created_at DESC, id DESC"
+    );
+    $stmt->execute(array_merge([$workspaceId], $entryIds));
+
+    $discountsByEntryId = [];
+    foreach ($stmt->fetchAll() ?: [] as $row) {
+        $entryId = (int) ($row['entry_id'] ?? 0);
+        $amountCents = max(0, normalizeDueAmountCents($row['amount_cents'] ?? null) ?? 0);
+        if ($entryId <= 0 || $amountCents <= 0) {
+            continue;
+        }
+
+        $discountsByEntryId[$entryId][] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'workspace_id' => (int) ($row['workspace_id'] ?? 0),
+            'entry_id' => $entryId,
+            'amount_cents' => $amountCents,
+            'amount_display' => dueAmountLabelFromCents($amountCents),
+            'created_by' => isset($row['created_by']) ? (int) $row['created_by'] : null,
+            'created_at' => accountingDateTimeForStorage($row['created_at'] ?? null) ?? '',
+        ];
+    }
+
+    return $discountsByEntryId;
+}
+
+function workspaceAccountingEntrySupportsDiscounts(array $entry): bool
+{
+    return normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
+        && ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1;
+}
+
+function workspaceAccountingAttachDiscounts(PDO $pdo, int $workspaceId, array $entries): array
+{
+    if ($workspaceId <= 0 || !$entries) {
+        return $entries;
+    }
+
+    $entryIds = [];
+    foreach ($entries as $entry) {
+        $entryId = (int) ($entry['id'] ?? 0);
+        if ($entryId > 0) {
+            $entryIds[] = $entryId;
+        }
+    }
+
+    $discountsByEntryId = workspaceAccountingDiscountsByEntryIds($pdo, $workspaceId, $entryIds);
+    foreach ($entries as &$entry) {
+        $entryId = (int) ($entry['id'] ?? 0);
+        $discounts = $discountsByEntryId[$entryId] ?? [];
+        $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        $discountTotalCents = min(
+            $amountCents,
+            array_sum(array_map(static fn (array $discount): int => (int) ($discount['amount_cents'] ?? 0), $discounts))
+        );
+        $hasSubitems = ((int) ($entry['has_subitems'] ?? 0)) === 1;
+        $paidCents = $hasSubitems
+            ? max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0)
+            : (((int) ($entry['is_settled'] ?? 0)) === 1 ? max(0, $amountCents - $discountTotalCents) : 0);
+        $remainingCents = ((int) ($entry['is_settled'] ?? 0)) === 1 && !$hasSubitems
+            ? 0
+            : max(0, $amountCents - $paidCents - $discountTotalCents);
+
+        $entry['discounts'] = $discounts;
+        $entry['discount_count'] = count($discounts);
+        $entry['discount_total_cents'] = $discountTotalCents;
+        $entry['discount_total_display'] = dueAmountLabelFromCents($discountTotalCents);
+        $entry['discount_remaining_cents'] = $remainingCents;
+        $entry['discount_remaining_display'] = dueAmountLabelFromCents($remainingCents);
+        $entry['effective_amount_cents'] = max(0, $amountCents - $discountTotalCents);
+        $entry['effective_amount_display'] = dueAmountLabelFromCents(max(0, $amountCents - $discountTotalCents));
+        $entry['supports_discounts'] = workspaceAccountingEntrySupportsDiscounts($entry) ? 1 : 0;
+        if ($hasSubitems && $amountCents > 0 && $remainingCents <= 0) {
+            $entry['is_settled'] = 1;
+        }
+    }
+    unset($entry);
+
+    return $entries;
+}
+
+function workspaceAccountingDiscountTotalCents(PDO $pdo, int $workspaceId, int $entryId): int
+{
+    if ($workspaceId <= 0 || $entryId <= 0) {
+        return 0;
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT COALESCE(SUM(amount_cents), 0)
+         FROM workspace_accounting_entry_discounts
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+
+    return max(0, (int) $stmt->fetchColumn());
+}
+
+function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null): int
+{
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
+        throw new RuntimeException('Este item não aceita abatimentos.');
+    }
+
+    $amountCents = normalizeDueAmountCents($amountInput);
+    if ($amountCents === null || $amountCents <= 0) {
+        throw new RuntimeException('Informe um valor de abatimento válido.');
+    }
+
+    $remainingCents = max(0, (int) ($entry['discount_remaining_cents'] ?? 0));
+    if ($remainingCents <= 0) {
+        throw new RuntimeException('Este item não possui valor restante para abater.');
+    }
+    if ($amountCents > $remainingCents) {
+        throw new RuntimeException('O abatimento não pode ser maior que o valor restante.');
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $createdAt = nowIso();
+    if (dbDriverName($pdo) === 'pgsql') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_entry_discounts (
+                workspace_id, entry_id, amount_cents, created_by, created_at
+            ) VALUES (
+                :workspace_id, :entry_id, :amount_cents, :created_by, :created_at
+            ) RETURNING id'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_accounting_entry_discounts (
+                workspace_id, entry_id, amount_cents, created_by, created_at
+            ) VALUES (
+                :workspace_id, :entry_id, :amount_cents, :created_by, :created_at
+            )'
+        );
+    }
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':entry_id', $entryId, PDO::PARAM_INT);
+    $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    if ($createdBy !== null && $createdBy > 0) {
+        $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':created_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':created_at', $createdAt, PDO::PARAM_STR);
+    $stmt->execute();
+
+    $discountId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
+    if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
+        workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+    } elseif (((int) ($entry['discount_total_cents'] ?? 0)) + $amountCents >= (int) ($entry['amount_cents'] ?? 0)) {
+        $settleStmt = $pdo->prepare(
+            'UPDATE workspace_accounting_entries
+             SET is_settled = 1,
+                 settled_at = COALESCE(settled_at, :settled_at),
+                 updated_at = :updated_at
+             WHERE workspace_id = :workspace_id
+               AND id = :entry_id'
+        );
+        $settleStmt->execute([
+            ':settled_at' => $createdAt,
+            ':updated_at' => $createdAt,
+            ':workspace_id' => $workspaceId,
+            ':entry_id' => $entryId,
+        ]);
+    }
+
+    return $discountId;
+}
+
+function deleteWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, int $discountId): void
+{
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
+        throw new RuntimeException('Abatimento não encontrado.');
+    }
+    $amountCents = max(0, (int) ($entry['amount_cents'] ?? 0));
+    $oldDiscountTotalCents = max(0, (int) ($entry['discount_total_cents'] ?? 0));
+    $hasSubitems = ((int) ($entry['has_subitems'] ?? 0)) === 1;
+    $wasFullyDiscounted = !$hasSubitems && $amountCents > 0 && $oldDiscountTotalCents >= $amountCents;
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $stmt = $pdo->prepare(
+        'DELETE FROM workspace_accounting_entry_discounts
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id
+           AND id = :discount_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+        ':discount_id' => $discountId,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        throw new RuntimeException('Abatimento não encontrado.');
+    }
+
+    if ($hasSubitems) {
+        workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+    } elseif ($wasFullyDiscounted) {
+        $newDiscountTotalCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+        if ($newDiscountTotalCents < $amountCents) {
+            $reopenStmt = $pdo->prepare(
+                'UPDATE workspace_accounting_entries
+                 SET is_settled = 0,
+                     settled_at = NULL,
+                     updated_at = :updated_at
+                 WHERE workspace_id = :workspace_id
+                   AND id = :entry_id'
+            );
+            $reopenStmt->execute([
+                ':updated_at' => nowIso(),
+                ':workspace_id' => $workspaceId,
+                ':entry_id' => $entryId,
+            ]);
+        }
+    }
+}
+
+function validateWorkspaceAccountingSubitemCoverage(PDO $pdo, int $workspaceId, int $entryId): void
+{
+    $stmt = $pdo->prepare(
+        'SELECT COALESCE(SUM(amount_cents), 0) AS total_cents,
+                COALESCE(SUM(CASE WHEN is_settled = 1 THEN amount_cents ELSE 0 END), 0) AS paid_cents
+         FROM workspace_accounting_entry_subitems
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $totalCents = max(0, (int) ($row['total_cents'] ?? 0));
+    $paidCents = max(0, (int) ($row['paid_cents'] ?? 0));
+    $discountCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+    if ($paidCents + $discountCents > $totalCents) {
+        throw new RuntimeException('Os pagamentos e abatimentos ultrapassam o valor total do item.');
+    }
+}
+
 function normalizeAccountingSubitemLabel(string $value): string
 {
     $value = trim($value);
@@ -7138,7 +7438,8 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     ensureWorkspaceAccountingSubitemSchema($pdo);
     $stmt = $pdo->prepare(
         'SELECT COUNT(*) AS subitem_count,
-                COALESCE(SUM(CASE WHEN is_settled = 1 THEN 1 ELSE 0 END), 0) AS settled_count,
+                COALESCE(SUM(amount_cents), 0) AS total_cents,
+                COALESCE(SUM(CASE WHEN is_settled = 1 THEN amount_cents ELSE 0 END), 0) AS paid_cents,
                 MAX(CASE WHEN is_settled = 1 THEN settled_at ELSE NULL END) AS latest_settled_at
          FROM workspace_accounting_entry_subitems
          WHERE workspace_id = :workspace_id
@@ -7150,8 +7451,10 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     ]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $subitemCount = max(0, (int) ($row['subitem_count'] ?? 0));
-    $settledCount = max(0, (int) ($row['settled_count'] ?? 0));
-    $isSettled = $subitemCount > 0 && $settledCount === $subitemCount;
+    $totalCents = max(0, (int) ($row['total_cents'] ?? 0));
+    $paidCents = max(0, (int) ($row['paid_cents'] ?? 0));
+    $discountCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+    $isSettled = $subitemCount > 0 && $totalCents > 0 && $paidCents + $discountCents >= $totalCents;
     $settledAt = $isSettled
         ? (accountingDateTimeForStorage($row['latest_settled_at'] ?? null) ?? nowIso())
         : null;
@@ -7382,6 +7685,7 @@ function updateWorkspaceAccountingSubitemStatuses(PDO $pdo, int $workspaceId, in
             ]);
         }
 
+        validateWorkspaceAccountingSubitemCoverage($pdo, $workspaceId, $entryId);
         workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
         if ($startedTransaction) {
             $pdo->commit();
@@ -7537,6 +7841,7 @@ function workspaceAccountingEntriesListRaw(
 
     $rows = workspaceAccountingApplyAutomations($pdo, $rows);
     $rows = workspaceAccountingAttachSubitems($pdo, $workspaceId, $rows);
+    $rows = workspaceAccountingAttachDiscounts($pdo, $workspaceId, $rows);
 
     return workspaceAccountingAttachGoalPaymentHistory($pdo, $workspaceId, $rows);
 }
@@ -7648,6 +7953,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     );
     $entry = workspaceAccountingApplyCompletedTaskAutomation($pdo, $entry);
     $entry = workspaceAccountingAttachSubitems($pdo, $workspaceId, [$entry])[0] ?? $entry;
+    $entry = workspaceAccountingAttachDiscounts($pdo, $workspaceId, [$entry])[0] ?? $entry;
     $entry['goal_payment_history'] = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1
         ? workspaceAccountingGoalPaymentHistory($pdo, $workspaceId, $entryId)
         : [];
@@ -10489,6 +10795,13 @@ function accountingSnapshotMovementDeltaCents(array $entries, string $snapshotAt
         }
 
         $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        if ($entryType === 'expense') {
+            $discountCents = min(
+                $amountCents,
+                max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
+            );
+            $amountCents = max(0, $amountCents - $discountCents);
+        }
         $deltaCents += $entryType === 'income' ? $amountCents : (-1 * $amountCents);
     }
 
@@ -10499,6 +10812,7 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
 {
     $expenseTotal = 0;
     $expensePaid = 0;
+    $expenseDiscount = 0;
     $incomeTotal = 0;
     $incomeReceived = 0;
 
@@ -10520,19 +10834,27 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
                 $expensePaid += $paidAmountCents;
                 continue;
             }
+            $discountCents = min(
+                $amountCents,
+                max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
+            );
             $expenseTotal += $amountCents;
+            $expenseDiscount += $discountCents;
             if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
-                $expensePaid += max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
+                $expensePaid += min(
+                    max(0, $amountCents - $discountCents),
+                    max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0)
+                );
             } elseif ($isSettled) {
-                $expensePaid += $amountCents;
+                $expensePaid += max(0, $amountCents - $discountCents);
             }
         }
     }
 
-    $expenseRemaining = max(0, $expenseTotal - $expensePaid);
+    $expenseRemaining = max(0, $expenseTotal - $expensePaid - $expenseDiscount);
     $incomeRemaining = max(0, $incomeTotal - $incomeReceived);
     $monthMovement = $incomeReceived - $expensePaid;
-    $projectedMovement = $incomeTotal - $expenseTotal;
+    $projectedMovement = $incomeTotal - max(0, $expenseTotal - $expenseDiscount);
     $currentBalance = $openingBalanceCents + $monthMovement;
     $finalBalance = $openingBalanceCents + $projectedMovement;
     $postSnapshotMovementCents = 0;
@@ -10540,6 +10862,7 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
     return [
         'expense_total_cents' => $expenseTotal,
         'expense_paid_cents' => $expensePaid,
+        'expense_discount_cents' => $expenseDiscount,
         'expense_remaining_cents' => $expenseRemaining,
         'income_total_cents' => $incomeTotal,
         'income_received_cents' => $incomeReceived,
@@ -10558,6 +10881,7 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
         'post_snapshot_movement_display' => dueAmountLabelFromSignedCents($postSnapshotMovementCents),
         'expense_total_display' => dueAmountLabelFromCents($expenseTotal),
         'expense_paid_display' => dueAmountLabelFromCents($expensePaid),
+        'expense_discount_display' => dueAmountLabelFromCents($expenseDiscount),
         'expense_remaining_display' => dueAmountLabelFromCents($expenseRemaining),
         'income_total_display' => dueAmountLabelFromCents($incomeTotal),
         'income_received_display' => dueAmountLabelFromCents($incomeReceived),
@@ -10635,9 +10959,16 @@ function workspaceAccountingNextIncomeProjectionSummary(
             }
 
             $amountCents = normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0;
-            if ($entryType === 'expense' && ((int) ($entry['has_subitems'] ?? 0)) === 1) {
-                $subitemPaidCents = max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
-                $amountCents = max(0, $amountCents - $subitemPaidCents);
+            if ($entryType === 'expense') {
+                $discountCents = min(
+                    $amountCents,
+                    max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
+                );
+                $amountCents = max(0, $amountCents - $discountCents);
+                if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
+                    $subitemPaidCents = max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
+                    $amountCents = max(0, $amountCents - $subitemPaidCents);
+                }
             }
             if ($amountCents <= 0) {
                 continue;
