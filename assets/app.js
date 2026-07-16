@@ -7699,11 +7699,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const form = panel.querySelector("[data-accounting-subitem-statuses-form]");
     const hiddenField = panel.querySelector("[data-accounting-subitem-statuses-json]");
+    const pendingSubitemsField = panel.querySelector("[data-accounting-pending-subitems-json]");
     const confirmButton = panel.querySelector("[data-accounting-subitem-statuses-confirm]");
     const pendingNote = panel.querySelector("[data-accounting-subitem-statuses-note]");
     if (
       !(form instanceof HTMLFormElement) ||
       !(hiddenField instanceof HTMLInputElement) ||
+      !(pendingSubitemsField instanceof HTMLInputElement) ||
       !(confirmButton instanceof HTMLButtonElement)
     ) {
       return false;
@@ -7728,13 +7730,101 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    const pendingSubitems = [];
+    panel.querySelectorAll("[data-accounting-pending-subitem-row]").forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      const paidCheckbox = row.querySelector("[data-accounting-pending-subitem-paid-checkbox]");
+      const isSettled = paidCheckbox instanceof HTMLInputElement && paidCheckbox.checked ? 1 : 0;
+      pendingSubitems.push({
+        label: String(row.dataset.subitemLabel || "").trim(),
+        amount: String(row.dataset.subitemAmount || "").trim(),
+        is_settled: isSettled,
+      });
+      row.classList.toggle("is-settled", isSettled === 1);
+    });
+
     hiddenField.value = JSON.stringify(payload);
-    confirmButton.disabled = !hasChanges;
-    panel.classList.toggle("has-pending-subitem-statuses", hasChanges);
+    pendingSubitemsField.value = JSON.stringify(pendingSubitems);
+    const hasPendingChanges = hasChanges || pendingSubitems.length > 0;
+    confirmButton.disabled = !hasPendingChanges;
+    panel.classList.toggle("has-pending-subitem-statuses", hasPendingChanges);
     if (pendingNote instanceof HTMLElement) {
-      pendingNote.hidden = !hasChanges;
+      pendingNote.hidden = !hasPendingChanges;
     }
-    return hasChanges;
+    return hasPendingChanges;
+  };
+
+  const stageAccountingSubitem = (form) => {
+    if (!(form instanceof HTMLFormElement)) return false;
+
+    const panel = form.closest(".accounting-entry-subitems-panel");
+    const list = panel?.querySelector("[data-accounting-subitems-list]");
+    const labelField = form.querySelector('input[name="subitem_label"]');
+    const amountField = form.querySelector('input[name="subitem_amount_value"]');
+    if (
+      !(panel instanceof HTMLElement) ||
+      !(list instanceof HTMLElement) ||
+      !(labelField instanceof HTMLInputElement) ||
+      !(amountField instanceof HTMLInputElement)
+    ) {
+      return false;
+    }
+
+    amountField.setCustomValidity("");
+    normalizeAccountingCurrencyInputField(amountField);
+    const amountCents = parseAccountingCurrencyToCents(amountField.value);
+    if (amountCents === null) {
+      amountField.setCustomValidity("Informe um valor válido.");
+    }
+    if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      amountField.setCustomValidity("");
+      return false;
+    }
+    amountField.setCustomValidity("");
+
+    const label = String(labelField.value || "").trim();
+    const amount = String(amountField.value || "").trim();
+    const row = document.createElement("div");
+    row.className = "accounting-entry-subitem-row is-pending";
+    row.dataset.accountingPendingSubitemRow = "1";
+    row.dataset.subitemLabel = label;
+    row.dataset.subitemAmount = amount;
+
+    const summary = document.createElement("div");
+    summary.className = "accounting-entry-subitem-summary";
+    const labelSummary = document.createElement("span");
+    labelSummary.className = "accounting-entry-subitem-summary-label";
+    labelSummary.textContent = label;
+    const amountSummary = document.createElement("span");
+    amountSummary.className = "accounting-entry-subitem-summary-amount";
+    amountSummary.textContent = formatAccountingCentsToInputValue(amountCents);
+    summary.append(labelSummary, amountSummary);
+
+    const statusControl = document.createElement("div");
+    statusControl.className = "accounting-entry-subitem-status-control";
+    const paidLabel = document.createElement("label");
+    paidLabel.className = "accounting-check accounting-entry-subitem-paid-check";
+    const paidCheckbox = document.createElement("input");
+    paidCheckbox.type = "checkbox";
+    paidCheckbox.dataset.accountingPendingSubitemPaidCheckbox = "1";
+    const paidText = document.createElement("span");
+    paidText.textContent = "Pago";
+    paidLabel.append(paidCheckbox, paidText);
+    statusControl.append(paidLabel);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "accounting-entry-subitem-delete";
+    removeButton.dataset.accountingPendingSubitemRemove = "1";
+    removeButton.setAttribute("aria-label", `Remover novo subitem ${label}`);
+    removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
+
+    row.append(summary, statusControl, removeButton);
+    list.append(row);
+    form.reset();
+    syncAccountingSubitemStatusesForm(panel);
+    labelField.focus();
+    return true;
   };
 
   const closeAccountingSubitemEditor = (subitemRow, { reset = true } = {}) => {
@@ -19328,7 +19418,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (
       target instanceof HTMLInputElement &&
-      target.matches("[data-accounting-subitem-paid-checkbox]")
+      target.matches(
+        "[data-accounting-subitem-paid-checkbox], [data-accounting-pending-subitem-paid-checkbox]"
+      )
     ) {
       const panel = target.closest(".accounting-entry-subitems-panel");
       syncAccountingSubitemStatusesForm(panel);
@@ -19574,6 +19666,18 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLElement)) return;
 
+    const removePendingButton = target.closest("[data-accounting-pending-subitem-remove]");
+    if (removePendingButton instanceof HTMLButtonElement) {
+      const panel = removePendingButton.closest(".accounting-entry-subitems-panel");
+      const pendingRow = removePendingButton.closest("[data-accounting-pending-subitem-row]");
+      if (!(panel instanceof HTMLElement) || !(pendingRow instanceof HTMLElement)) return;
+
+      event.preventDefault();
+      pendingRow.remove();
+      syncAccountingSubitemStatusesForm(panel);
+      return;
+    }
+
     const cancelButton = target.closest("[data-accounting-subitem-cancel]");
     if (cancelButton instanceof HTMLButtonElement) {
       const subitemRow = cancelButton.closest("[data-accounting-subitem-row]");
@@ -19816,13 +19920,19 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       void submitAccountingActionForm(form, {
         showSuccess: false,
-        fallbackError: "Falha ao atualizar pagamentos dos subitens.",
+        fallbackError: "Falha ao confirmar as alterações dos subitens.",
         refresh: true,
       }).catch(() => {});
       return;
     }
 
-    if (form.matches(".accounting-entry-subitem-form, .accounting-entry-subitem-add-form")) {
+    if (form.matches(".accounting-entry-subitem-add-form")) {
+      event.preventDefault();
+      stageAccountingSubitem(form);
+      return;
+    }
+
+    if (form.matches(".accounting-entry-subitem-form")) {
       event.preventDefault();
       const amountField = form.querySelector('input[name="subitem_amount_value"]');
       if (amountField instanceof HTMLInputElement) {

@@ -479,21 +479,56 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Pagamentos de subitens invalidos.');
                 }
 
-                updateWorkspaceAccountingSubitemStatuses(
-                    $pdo,
-                    $workspaceId,
-                    $entryId,
-                    $decodedStatuses
-                );
+                $createSubitems = normalizeAccountingSubitemPayloads($_POST['create_subitems_json'] ?? null);
+                if (!$decodedStatuses && !$createSubitems) {
+                    throw new RuntimeException('Nenhuma alteracao de subitem foi informada.');
+                }
+
+                $startedTransaction = !$pdo->inTransaction();
+                if ($startedTransaction) {
+                    $pdo->beginTransaction();
+                }
+
+                try {
+                    if ($decodedStatuses) {
+                        updateWorkspaceAccountingSubitemStatuses(
+                            $pdo,
+                            $workspaceId,
+                            $entryId,
+                            $decodedStatuses
+                        );
+                    }
+
+                    foreach ($createSubitems as $subitem) {
+                        createWorkspaceAccountingSubitem(
+                            $pdo,
+                            $workspaceId,
+                            $entryId,
+                            (string) ($subitem['label'] ?? ''),
+                            $subitem['amount_input'] ?? null,
+                            (int) ($authUser['id'] ?? 0),
+                            (int) ($subitem['is_settled'] ?? 0)
+                        );
+                    }
+
+                    if ($startedTransaction) {
+                        $pdo->commit();
+                    }
+                } catch (Throwable $e) {
+                    if ($startedTransaction && $pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    throw $e;
+                }
 
                 if (requestExpectsJson()) {
                     respondJson([
                         'ok' => true,
-                        'message' => 'Pagamentos dos subitens atualizados.',
+                        'message' => 'Subitens atualizados.',
                     ]);
                 }
 
-                flash('success', 'Pagamentos dos subitens atualizados.');
+                flash('success', 'Subitens atualizados.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'delete_accounting_subitem':

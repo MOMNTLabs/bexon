@@ -6939,6 +6939,7 @@ function normalizeAccountingSubitemPayloads($rawPayload): array
             'label' => $label,
             'amount_cents' => $amountCents,
             'amount_input' => dueAmountLabelFromCents($amountCents),
+            'is_settled' => ((int) ($item['is_settled'] ?? 0)) === 1 ? 1 : 0,
         ];
     }
 
@@ -7188,7 +7189,7 @@ function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int
     return $entry;
 }
 
-function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null): int
+function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null, int $isSettled = 0): int
 {
     workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
     $label = normalizeAccountingSubitemLabel($label);
@@ -7213,22 +7214,24 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     ]);
     $sortOrder = ((int) $sortStmt->fetchColumn()) + 1;
     $createdAt = nowIso();
+    $isSettled = $isSettled === 1 ? 1 : 0;
+    $settledAt = $isSettled === 1 ? $createdAt : null;
 
     if (dbDriverName($pdo) === 'pgsql') {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_subitems (
-                workspace_id, entry_id, label, amount_cents, sort_order, created_by, created_at, updated_at
+                workspace_id, entry_id, label, amount_cents, sort_order, is_settled, settled_at, created_by, created_at, updated_at
             ) VALUES (
-                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :created_by, :created_at, :updated_at
+                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
             )
             RETURNING id'
         );
     } else {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_subitems (
-                workspace_id, entry_id, label, amount_cents, sort_order, created_by, created_at, updated_at
+                workspace_id, entry_id, label, amount_cents, sort_order, is_settled, settled_at, created_by, created_at, updated_at
             ) VALUES (
-                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :created_by, :created_at, :updated_at
+                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
             )'
         );
     }
@@ -7238,6 +7241,12 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $stmt->bindValue(':label', $label, PDO::PARAM_STR);
     $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
     $stmt->bindValue(':sort_order', $sortOrder, PDO::PARAM_INT);
+    $stmt->bindValue(':is_settled', $isSettled, PDO::PARAM_INT);
+    if ($settledAt !== null) {
+        $stmt->bindValue(':settled_at', $settledAt, PDO::PARAM_STR);
+    } else {
+        $stmt->bindValue(':settled_at', null, PDO::PARAM_NULL);
+    }
     if ($createdBy !== null && $createdBy > 0) {
         $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
     } else {

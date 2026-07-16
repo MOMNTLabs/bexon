@@ -653,17 +653,6 @@
                                                     </label>
                                                 <?php endif; ?>
                                             </div>
-                                            <div class="accounting-entry-flow-note">
-                                                <?= $renderAccountingHelpTooltip(
-                                                    $accountingEntryIsMonthlyGoal
-                                                        ? 'Saldo a quitar: os pagamentos parciais são lançados no botão + e só eles entram no caixa e na projeção.'
-                                                        : 'Despesa prevista: este valor continua na projeção até você marcar como pago.',
-                                                    $accountingEntryIsMonthlyGoal
-                                                        ? 'Entender saldo a quitar'
-                                                        : 'Entender projeção desta conta',
-                                                    'is-left'
-                                                ) ?>
-                                            </div>
                                             <div class="accounting-entry-editor-actions">
                                                 <button type="submit" class="btn btn-mini">Salvar</button>
                                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-entry-cancel>Cancelar</button>
@@ -695,8 +684,8 @@
                                                     <strong>Subitens</strong>
                                                     <span><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
                                                 </div>
-                                                <?php if ($accountingEntrySubitems): ?>
-                                                    <div class="accounting-entry-subitems-list">
+                                                <div class="accounting-entry-subitems-list" data-accounting-subitems-list>
+                                                    <?php if ($accountingEntrySubitems): ?>
                                                         <?php foreach ($accountingEntrySubitems as $accountingSubitem): ?>
                                                             <?php
                                                             $accountingSubitemId = (int) ($accountingSubitem['id'] ?? 0);
@@ -768,17 +757,8 @@
                                                                 </form>
                                                             </div>
                                                         <?php endforeach; ?>
-                                                    </div>
-                                                    <form method="post" class="accounting-entry-subitem-statuses-form" data-accounting-subitem-statuses-form>
-                                                        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                                                        <input type="hidden" name="action" value="update_accounting_subitem_statuses">
-                                                        <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
-                                                        <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
-                                                        <input type="hidden" name="subitem_statuses_json" value="[]" data-accounting-subitem-statuses-json>
-                                                        <span class="accounting-entry-subitem-statuses-note" data-accounting-subitem-statuses-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
-                                                        <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar pagamentos</button>
-                                                    </form>
-                                                <?php endif; ?>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <form method="post" class="accounting-entry-subitem-add-form" data-accounting-subitem-form autocomplete="off">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                     <input type="hidden" name="action" value="create_accounting_subitem">
@@ -803,6 +783,16 @@
                                                         required
                                                     >
                                                     <button type="submit" class="btn btn-mini">+</button>
+                                                </form>
+                                                <form method="post" class="accounting-entry-subitem-statuses-form" data-accounting-subitem-statuses-form>
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                    <input type="hidden" name="action" value="update_accounting_subitem_statuses">
+                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                    <input type="hidden" name="subitem_statuses_json" value="[]" data-accounting-subitem-statuses-json>
+                                                    <input type="hidden" name="create_subitems_json" value="[]" data-accounting-pending-subitems-json>
+                                                    <span class="accounting-entry-subitem-statuses-note" data-accounting-subitem-statuses-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
+                                                    <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar altera&ccedil;&otilde;es</button>
                                                 </form>
                                             </div>
                                         <?php endif; ?>

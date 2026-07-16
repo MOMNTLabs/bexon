@@ -15096,7 +15096,7 @@ select option:checked,
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: minmax(0, 1fr) 116px minmax(86px, auto);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
     gap: 6px 8px;
     align-items: center;
     border: 1px solid rgba(140, 181, 223, 0.32);
@@ -15810,7 +15810,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-entry-meta {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     display: flex;
     align-items: center;
@@ -15840,6 +15840,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-entry-form.has-task-link .accounting-entry-editor-actions {
+    grid-column: 1 / -1;
     grid-row: 4;
 }
 
@@ -16121,6 +16122,18 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     min-height: 34px;
 }
 
+.accounting-entry-subitem-row.is-pending {
+    padding-left: 4px;
+    border-left: 2px solid rgba(198, 126, 24, 0.55);
+}
+
+.accounting-entry-subitem-row.is-pending .accounting-entry-subitem-summary {
+    border-style: dashed;
+    border-color: rgba(198, 126, 24, 0.2);
+    background: rgba(255, 249, 239, 0.78);
+    cursor: default;
+}
+
 .accounting-entry-subitem-form,
 .accounting-entry-subitem-add-form {
     display: grid;
@@ -16250,8 +16263,8 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-entry-editor-actions {
-    grid-column: 1 / -1;
-    grid-row: 3;
+    grid-column: 2 / 4;
+    grid-row: 2;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -16615,7 +16628,8 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     }
 
     .accounting-entry-form {
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) 112px auto;
+        grid-template-rows: auto auto;
     }
 
     .accounting-create-form {
@@ -16626,13 +16640,29 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
         grid-template-columns: 1fr;
     }
 
-    .accounting-entry-form .accounting-input-label,
-    .accounting-entry-form .accounting-entry-meta,
-    .accounting-entry-form .accounting-input-amount,
-    .accounting-entry-form .accounting-entry-status,
+    .accounting-entry-form .accounting-input-label {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .accounting-entry-form .accounting-entry-meta {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .accounting-entry-form .accounting-input-amount {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .accounting-entry-form .accounting-entry-status {
+        grid-column: 3;
+        grid-row: 1;
+    }
+
     .accounting-entry-editor-actions {
-        grid-column: auto;
-        grid-row: auto;
+        grid-column: 2 / 4;
+        grid-row: 2;
     }
 
     .accounting-entry-form .accounting-input-amount {
@@ -17295,7 +17325,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     .accounting-entry-form {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 112px auto;
-        grid-template-rows: auto auto auto;
+        grid-template-rows: auto auto;
         gap: 6px;
         align-items: center;
         min-width: 0;
@@ -17308,7 +17338,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     }
 
     .accounting-entry-form .accounting-entry-meta {
-        grid-column: 1 / 4;
+        grid-column: 1;
         grid-row: 2;
         justify-self: start;
         gap: 4px;
@@ -17357,8 +17387,8 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     }
 
     .accounting-entry-editor-actions {
-        grid-column: 1 / 4;
-        grid-row: 3;
+        grid-column: 2 / 4;
+        grid-row: 2;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         width: 100%;
