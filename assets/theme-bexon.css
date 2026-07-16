@@ -2211,6 +2211,262 @@ body.is-auth .auth-inline-link:focus-visible {
     color: var(--color-accent-900);
 }
 
+/* Plans screen */
+body.is-plans {
+    color: var(--ui-text);
+    color-scheme: light;
+    background:
+        radial-gradient(circle at 50% -12%, rgba(var(--color-accent-500-rgb), 0.1), transparent 34%),
+        var(--surface-shell);
+}
+
+body.is-plans .app-shell {
+    width: min(1260px, calc(100% - 28px));
+    min-height: 100dvh;
+    padding: 20px 0 28px;
+}
+
+body.is-plans .plans-screen {
+    min-height: calc(100dvh - 48px);
+}
+
+body.is-plans .plans-shell {
+    gap: 20px;
+    padding: clamp(20px, 3vw, 34px);
+    border: 1px solid rgba(32, 36, 43, 0.08);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.96),
+        0 18px 48px rgba(31, 36, 43, 0.08);
+}
+
+body.is-plans .plans-head {
+    gap: 6px;
+}
+
+body.is-plans .plans-brand-lockup {
+    width: min(148px, 48vw);
+    margin-bottom: 2px;
+    opacity: 1;
+}
+
+body.is-plans .plans-eyebrow {
+    margin-top: 0;
+    color: var(--color-accent-700);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+}
+
+body.is-plans .plans-head h1 {
+    color: var(--color-ink-800);
+    font-size: clamp(1.72rem, 3vw, 2.48rem);
+    letter-spacing: -0.035em;
+}
+
+body.is-plans .plans-head p {
+    color: var(--color-ink-600);
+    font-size: 0.94rem;
+    line-height: 1.5;
+}
+
+body.is-plans .plans-billing-toggle {
+    width: min(340px, 100%);
+    padding: 4px;
+    border: 1px solid rgba(32, 36, 43, 0.1);
+    border-radius: 14px;
+    background: var(--color-cream-200);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+body.is-plans .plans-billing-toggle button {
+    min-height: 42px;
+    border-radius: 10px;
+    color: var(--color-ink-600);
+}
+
+body.is-plans .plans-billing-toggle button span {
+    color: var(--color-ink-500);
+}
+
+body.is-plans .plans-billing-toggle button:hover,
+body.is-plans .plans-billing-toggle button:focus-visible {
+    color: var(--color-ink-800);
+    outline: none;
+}
+
+body.is-plans .plans-billing-toggle button.is-active {
+    background: var(--color-metal-400);
+    color: var(--color-white);
+    box-shadow: none;
+}
+
+body.is-plans .plans-billing-toggle button.is-active span {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+body.is-plans .plans-grid {
+    gap: 12px;
+}
+
+body.is-plans .plans-card {
+    position: relative;
+    gap: 13px;
+    padding: 18px;
+    border: 1px solid rgba(32, 36, 43, 0.1);
+    border-radius: 18px;
+    background: var(--color-white);
+    color: var(--ui-text);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.94);
+    overflow: hidden;
+}
+
+body.is-plans .plans-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: rgba(95, 105, 120, 0.16);
+}
+
+body.is-plans .plans-card.is-highlight {
+    border-color: rgba(var(--color-accent-500-rgb), 0.38);
+    background:
+        radial-gradient(circle at 18% 0%, rgba(var(--color-accent-500-rgb), 0.12), transparent 42%),
+        var(--color-white);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.96),
+        0 14px 32px rgba(113, 75, 22, 0.08);
+}
+
+body.is-plans .plans-card.is-highlight::before {
+    background: linear-gradient(90deg, var(--color-accent-400), var(--color-accent-600));
+}
+
+body.is-plans .plans-card-head {
+    min-height: 58px;
+    gap: 7px;
+}
+
+body.is-plans .plans-card-head h2 {
+    color: var(--color-ink-800);
+    font-size: 1.08rem;
+}
+
+body.is-plans .plans-card-head span {
+    padding: 4px 8px;
+    border: 1px solid rgba(var(--color-accent-500-rgb), 0.16);
+    background: rgba(var(--color-accent-200-rgb), 0.32);
+    color: var(--color-accent-900);
+    font-size: 0.68rem;
+}
+
+body.is-plans .plans-price-currency,
+body.is-plans .plans-price [data-plan-price-suffix] {
+    color: var(--color-ink-500);
+}
+
+body.is-plans .plans-price-amount {
+    color: var(--color-ink-800);
+    font-size: 1.82rem;
+}
+
+body.is-plans .plans-price.is-consult-price .plans-price-amount {
+    font-size: 1.32rem;
+}
+
+body.is-plans .plans-billing-note,
+body.is-plans .plans-summary,
+body.is-plans .plans-legal {
+    color: var(--color-ink-500);
+}
+
+body.is-plans .plans-trial-note,
+body.is-plans .plans-limit {
+    color: var(--color-accent-700);
+}
+
+body.is-plans .plans-summary {
+    min-height: 62px;
+    color: var(--color-ink-600);
+    font-size: 0.84rem;
+}
+
+body.is-plans .plans-card .btn.plans-action {
+    min-height: 42px;
+    border-color: rgba(var(--color-accent-500-rgb), 0.26);
+    background: var(--color-metal-400);
+    color: var(--color-white);
+    box-shadow: none;
+}
+
+body.is-plans .plans-card .btn.plans-action:hover,
+body.is-plans .plans-card .btn.plans-action:focus-visible {
+    border-color: rgba(var(--color-accent-500-rgb), 0.46);
+    background: var(--color-metal-300);
+    color: var(--color-white);
+    transform: none;
+}
+
+body.is-plans .plans-features {
+    gap: 8px;
+}
+
+body.is-plans .plans-features li {
+    color: var(--color-ink-600);
+    font-size: 0.82rem;
+}
+
+body.is-plans .plans-features li::before {
+    width: 6px;
+    height: 6px;
+    background: var(--color-accent-500);
+}
+
+body.is-plans .plans-legal {
+    font-size: 0.76rem;
+}
+
+body.is-plans .plans-legal a {
+    color: var(--color-accent-700);
+}
+
+body.is-plans .plans-legal a:hover,
+body.is-plans .plans-legal a:focus-visible {
+    color: var(--color-accent-900);
+}
+
+@media (max-width: 1060px) {
+    body.is-plans .plans-shell {
+        padding: 24px;
+    }
+}
+
+@media (max-width: 680px) {
+    body.is-plans .app-shell {
+        width: min(100% - 18px, 560px);
+        padding: 10px 0 18px;
+    }
+
+    body.is-plans .plans-shell {
+        gap: 16px;
+        padding: 18px 14px;
+        border-radius: 20px;
+    }
+
+    body.is-plans .plans-head h1 {
+        font-size: 1.72rem;
+    }
+
+    body.is-plans .plans-card {
+        padding: 16px;
+    }
+
+    body.is-plans .plans-summary {
+        min-height: 0;
+    }
+}
+
 body .flash {
     border-color: rgba(162, 128, 74, 0.26);
     background: rgba(255, 255, 255, 0.98);

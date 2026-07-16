@@ -15064,21 +15064,6 @@ select option:checked,
     font-size: inherit;
 }
 
-.accounting-entry-summary-discount-progress {
-    display: inline-flex;
-    align-items: baseline;
-    justify-content: flex-end;
-    gap: 3px;
-    color: #5f7690;
-    font-size: 0.74rem;
-    font-weight: 500;
-}
-
-.accounting-entry-summary-discount-progress strong {
-    color: #29486a;
-    font-size: 0.82rem;
-}
-
 .accounting-entry-quick-status-form {
     display: flex;
     align-items: center;
@@ -15851,6 +15836,12 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     border-radius: 999px;
     background: rgba(220, 226, 233, 0.58);
     overflow: hidden;
+}
+
+.accounting-entry-discount-payment-progress.is-summary {
+    width: min(220px, 45vw);
+    min-width: 130px;
+    flex: 0 1 220px;
 }
 
 .accounting-entry-discount-payment-progress-fill {

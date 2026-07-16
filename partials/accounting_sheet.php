@@ -374,7 +374,7 @@
                                             : '');
                                     $accountingEntryIsOverdue = ((int) ($accountingEntry['is_overdue'] ?? 0)) === 1;
                                     $accountingEntryDueDateBadge = $accountingEntryDueDateDisplay !== ''
-                                        && ($accountingEntryIsCarried || $accountingEntryIsOverdue)
+                                        && $accountingEntryIsCarried
                                         ? ('Venc. ' . $accountingEntryDueDateDisplay)
                                         : '';
                                     $accountingEntryOverdueDays = max(0, (int) ($accountingEntry['overdue_days'] ?? 0));
@@ -418,6 +418,19 @@
                                             <span class="accounting-entry-summary-main">
                                                 <span class="accounting-entry-summary-head">
                                                     <span class="accounting-entry-summary-title" title="<?= e($accountingEntryLabel) ?>"><?= e($accountingEntryLabel) ?></span>
+                                                    <?php if ($accountingEntryShowDiscountSummaryProgress): ?>
+                                                        <span
+                                                            class="accounting-entry-discount-payment-progress is-summary"
+                                                            aria-label="Pago via abatimentos <?= e($accountingEntryDiscountTotalDisplay) ?> de <?= e($accountingEntryAmountInput) ?>"
+                                                        >
+                                                            <span class="accounting-entry-discount-payment-progress-fill" style="width: <?= e($accountingEntryDiscountProgressWidth) ?>%"></span>
+                                                            <span class="accounting-entry-discount-payment-progress-values">
+                                                                <span><?= e($accountingEntryDiscountTotalCompact) ?></span>
+                                                                <span aria-hidden="true">/</span>
+                                                                <strong><?= e($accountingEntryTotalCompact) ?></strong>
+                                                            </span>
+                                                        </span>
+                                                    <?php endif; ?>
                                                     <?php if ($accountingEntryIsMonthlyGoal): ?>
                                                         <span
                                                             class="accounting-entry-goal-progress<?= $accountingEntryGoalIsComplete ? ' is-complete' : '' ?>"
@@ -439,7 +452,7 @@
                                                                 </span>
                                                             </span>
                                                         </span>
-                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryIsOverdue): ?>
+                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryDueDateBadge !== '' || $accountingEntryIsOverdue): ?>
                                                         <span class="accounting-entry-summary-meta">
                                                             <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
@@ -450,7 +463,7 @@
                                                                 <span class="accounting-entry-badge is-pending">Pendente</span>
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryDueDateBadge !== ''): ?>
-                                                                <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryDueDateBadge) ?></span>
+                                                                <span class="accounting-entry-badge is-due-date"><?= e($accountingEntryDueDateBadge) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($accountingEntryIsOverdue): ?>
                                                                 <span
@@ -470,18 +483,7 @@
                                                     <?= $renderAccountingMoney($accountingEntryGoalPaymentDisplay) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <?php if ($accountingEntryShowDiscountSummaryProgress): ?>
-                                                    <span
-                                                        class="accounting-entry-summary-amount accounting-entry-summary-discount-progress"
-                                                        aria-label="Abatido <?= e($accountingEntryDiscountTotalDisplay) ?> de <?= e($accountingEntryAmountInput) ?>"
-                                                    >
-                                                        <span><?= e($accountingEntryDiscountTotalCompact) ?></span>
-                                                        <span aria-hidden="true">/</span>
-                                                        <strong><?= e($accountingEntryTotalCompact) ?></strong>
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="accounting-entry-summary-amount"><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
-                                                <?php endif; ?>
+                                                <span class="accounting-entry-summary-amount"><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
                                             <?php endif; ?>
                                         </button>
                                         <?php if ($accountingEntryIsMonthlyGoal): ?>
