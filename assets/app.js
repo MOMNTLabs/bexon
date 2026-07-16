@@ -7713,40 +7713,20 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     const payload = [];
-    let hasChanges = false;
-    panel.querySelectorAll("[data-accounting-subitem-paid-checkbox]").forEach((checkbox) => {
-      if (!(checkbox instanceof HTMLInputElement)) return;
-      const subitemId = Math.max(0, Number.parseInt(String(checkbox.dataset.subitemId || "0"), 10) || 0);
-      if (subitemId <= 0) return;
-
-      const isSettled = checkbox.checked ? 1 : 0;
-      payload.push({ id: subitemId, is_settled: isSettled });
-      if (String(checkbox.dataset.initialSettled || "0") !== String(isSettled)) {
-        hasChanges = true;
-      }
-
-      const subitemRow = checkbox.closest("[data-accounting-subitem-row]");
-      if (subitemRow instanceof HTMLElement) {
-        subitemRow.classList.toggle("is-settled", checkbox.checked);
-      }
-    });
 
     const pendingSubitems = [];
     panel.querySelectorAll("[data-accounting-pending-subitem-row]").forEach((row) => {
       if (!(row instanceof HTMLElement)) return;
-      const paidCheckbox = row.querySelector("[data-accounting-pending-subitem-paid-checkbox]");
-      const isSettled = paidCheckbox instanceof HTMLInputElement && paidCheckbox.checked ? 1 : 0;
       pendingSubitems.push({
         label: String(row.dataset.subitemLabel || "").trim(),
         amount: String(row.dataset.subitemAmount || "").trim(),
-        is_settled: isSettled,
+        is_settled: 0,
       });
-      row.classList.toggle("is-settled", isSettled === 1);
     });
 
     hiddenField.value = JSON.stringify(payload);
     pendingSubitemsField.value = JSON.stringify(pendingSubitems);
-    const hasPendingChanges = hasChanges || pendingSubitems.length > 0;
+    const hasPendingChanges = pendingSubitems.length > 0;
     confirmButton.disabled = !hasPendingChanges;
     panel.classList.toggle("has-pending-subitem-statuses", hasPendingChanges);
     if (pendingNote instanceof HTMLElement) {
@@ -7801,18 +7781,6 @@ window.addEventListener("DOMContentLoaded", () => {
     amountSummary.textContent = formatAccountingCentsToInputValue(amountCents);
     summary.append(labelSummary, amountSummary);
 
-    const statusControl = document.createElement("div");
-    statusControl.className = "accounting-entry-subitem-status-control";
-    const paidLabel = document.createElement("label");
-    paidLabel.className = "accounting-check accounting-entry-subitem-paid-check";
-    const paidCheckbox = document.createElement("input");
-    paidCheckbox.type = "checkbox";
-    paidCheckbox.dataset.accountingPendingSubitemPaidCheckbox = "1";
-    const paidText = document.createElement("span");
-    paidText.textContent = "Pago";
-    paidLabel.append(paidCheckbox, paidText);
-    statusControl.append(paidLabel);
-
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "accounting-entry-subitem-delete";
@@ -7820,11 +7788,151 @@ window.addEventListener("DOMContentLoaded", () => {
     removeButton.setAttribute("aria-label", `Remover novo subitem ${label}`);
     removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
 
-    row.append(summary, statusControl, removeButton);
+    row.append(summary, removeButton);
     list.append(row);
     form.reset();
     syncAccountingSubitemStatusesForm(panel);
     labelField.focus();
+    return true;
+  };
+
+  const syncAccountingDiscountConfirmForm = (panel) => {
+    if (!(panel instanceof HTMLElement)) return false;
+
+    const hiddenField = panel.querySelector("[data-accounting-pending-discounts-json]");
+    const confirmButton = panel.querySelector("[data-accounting-discount-confirm]");
+    const pendingNote = panel.querySelector("[data-accounting-discount-confirm-note]");
+    const settleRemainingButton = panel.querySelector("[data-accounting-discount-settle-remaining]");
+    if (!(hiddenField instanceof HTMLInputElement) || !(confirmButton instanceof HTMLButtonElement)) {
+      return false;
+    }
+
+    const discounts = [];
+    let pendingCents = 0;
+    panel.querySelectorAll("[data-accounting-pending-discount-row]").forEach((row) => {
+      if (!(row instanceof HTMLElement)) return;
+      discounts.push({ amount: String(row.dataset.discountAmount || "").trim() });
+      pendingCents += Math.max(
+        0,
+        Number.parseInt(String(row.dataset.discountCents || "0"), 10) || 0
+      );
+    });
+
+    hiddenField.value = JSON.stringify(discounts);
+    const hasPendingDiscounts = discounts.length > 0;
+    confirmButton.disabled = !hasPendingDiscounts;
+    if (pendingNote instanceof HTMLElement) {
+      pendingNote.hidden = !hasPendingDiscounts;
+    }
+    if (settleRemainingButton instanceof HTMLButtonElement) {
+      const remainingCents = Math.max(
+        0,
+        Number.parseInt(String(panel.dataset.accountingDiscountRemainingCents || "0"), 10) || 0
+      );
+      settleRemainingButton.disabled = remainingCents - pendingCents <= 0;
+    }
+    return hasPendingDiscounts;
+  };
+
+  const stageAccountingRemainingDiscount = (button) => {
+    if (!(button instanceof HTMLButtonElement)) return false;
+
+    const panel = button.closest(".accounting-entry-discounts-panel");
+    const form = button.closest(".accounting-entry-discount-add-form");
+    const amountField = form?.querySelector('input[name="discount_amount_value"]');
+    if (
+      !(panel instanceof HTMLElement) ||
+      !(form instanceof HTMLFormElement) ||
+      !(amountField instanceof HTMLInputElement)
+    ) {
+      return false;
+    }
+
+    const remainingCents = Math.max(
+      0,
+      Number.parseInt(String(panel.dataset.accountingDiscountRemainingCents || "0"), 10) || 0
+    );
+    const pendingCents = Array.from(
+      panel.querySelectorAll("[data-accounting-pending-discount-row]")
+    ).reduce(
+      (total, row) =>
+        total +
+        (row instanceof HTMLElement
+          ? Math.max(0, Number.parseInt(String(row.dataset.discountCents || "0"), 10) || 0)
+          : 0),
+      0
+    );
+    const amountToSettleCents = Math.max(0, remainingCents - pendingCents);
+    if (amountToSettleCents <= 0) return false;
+
+    amountField.value = formatAccountingCentsToInputValue(amountToSettleCents);
+    return stageAccountingDiscount(form);
+  };
+
+  const stageAccountingDiscount = (form) => {
+    if (!(form instanceof HTMLFormElement)) return false;
+
+    const panel = form.closest(".accounting-entry-discounts-panel");
+    const list = panel?.querySelector("[data-accounting-discounts-list]");
+    const amountField = form.querySelector('input[name="discount_amount_value"]');
+    if (
+      !(panel instanceof HTMLElement) ||
+      !(list instanceof HTMLElement) ||
+      !(amountField instanceof HTMLInputElement)
+    ) {
+      return false;
+    }
+
+    amountField.setCustomValidity("");
+    normalizeAccountingCurrencyInputField(amountField);
+    const amountCents = parseAccountingCurrencyToCents(amountField.value);
+    const remainingCents = Math.max(
+      0,
+      Number.parseInt(String(panel.dataset.accountingDiscountRemainingCents || "0"), 10) || 0
+    );
+    const pendingCents = Array.from(
+      panel.querySelectorAll("[data-accounting-pending-discount-row]")
+    ).reduce(
+      (total, row) =>
+        total +
+        (row instanceof HTMLElement
+          ? Math.max(0, Number.parseInt(String(row.dataset.discountCents || "0"), 10) || 0)
+          : 0),
+      0
+    );
+
+    if (amountCents === null || amountCents <= 0) {
+      amountField.setCustomValidity("Informe um valor de abatimento válido.");
+    } else if (amountCents + pendingCents > remainingCents) {
+      amountField.setCustomValidity("O abatimento não pode ser maior que o valor restante.");
+    }
+    if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      amountField.setCustomValidity("");
+      return false;
+    }
+    amountField.setCustomValidity("");
+
+    const amount = String(amountField.value || "").trim();
+    const row = document.createElement("div");
+    row.className = "accounting-entry-discount-row is-pending";
+    row.dataset.accountingPendingDiscountRow = "1";
+    row.dataset.discountAmount = amount;
+    row.dataset.discountCents = String(amountCents);
+
+    const amountLabel = document.createElement("span");
+    amountLabel.textContent = `- ${formatAccountingCentsToInputValue(amountCents)}`;
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "accounting-entry-subitem-delete";
+    removeButton.dataset.accountingPendingDiscountRemove = "1";
+    removeButton.setAttribute("aria-label", "Remover novo abatimento");
+    removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
+
+    row.append(amountLabel, removeButton);
+    list.append(row);
+    form.reset();
+    syncAccountingDiscountConfirmForm(panel);
+    amountField.focus();
     return true;
   };
 
@@ -7862,11 +7970,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(subitemRow instanceof HTMLElement)) return;
 
     const summary = subitemRow.querySelector("[data-accounting-subitem-edit]");
-    const statusControl = subitemRow.querySelector(".accounting-entry-subitem-status-control");
     const editorForm = subitemRow.querySelector(".accounting-entry-subitem-form");
     if (
       !(summary instanceof HTMLButtonElement) ||
-      !(statusControl instanceof HTMLElement) ||
       !(editorForm instanceof HTMLFormElement)
     ) {
       return;
@@ -7883,7 +7989,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     editorForm.hidden = true;
     summary.hidden = false;
-    statusControl.hidden = false;
     summary.setAttribute("aria-expanded", "false");
     subitemRow.classList.remove("is-editing");
   };
@@ -7892,18 +7997,15 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(subitemRow instanceof HTMLElement)) return;
 
     const summary = subitemRow.querySelector("[data-accounting-subitem-edit]");
-    const statusControl = subitemRow.querySelector(".accounting-entry-subitem-status-control");
     const editorForm = subitemRow.querySelector(".accounting-entry-subitem-form");
     if (
       !(summary instanceof HTMLButtonElement) ||
-      !(statusControl instanceof HTMLElement) ||
       !(editorForm instanceof HTMLFormElement)
     ) {
       return;
     }
 
     summary.hidden = true;
-    statusControl.hidden = true;
     editorForm.hidden = false;
     summary.setAttribute("aria-expanded", "true");
     subitemRow.classList.add("is-editing");
@@ -13417,6 +13519,8 @@ window.addEventListener("DOMContentLoaded", () => {
       formKind = "goal-payment-add";
     } else if (form.matches(".accounting-entry-discount-add-form")) {
       formKind = "discount-add";
+    } else if (form.matches(".accounting-entry-discount-confirm-form")) {
+      formKind = "discount-confirm";
     } else if (form.matches(".accounting-entry-discount-delete-form")) {
       formKind = "discount-delete";
     } else if (form.matches(".accounting-entry-subitem-add-form")) {
@@ -13496,10 +13600,12 @@ window.addEventListener("DOMContentLoaded", () => {
       return entryRow.querySelector(".accounting-entry-goal-payment-add-form");
     }
 
-    if (["discount-add", "discount-delete"].includes(payload.formKind)) {
+    if (["discount-add", "discount-confirm", "discount-delete"].includes(payload.formKind)) {
       const selector =
         payload.formKind === "discount-add"
           ? `.accounting-entry-discount-add-form input[name="entry_id"][value="${payload.entryId}"]`
+          : payload.formKind === "discount-confirm"
+            ? `.accounting-entry-discount-confirm-form input[name="entry_id"][value="${payload.entryId}"]`
           : `.accounting-entry-discount-delete-form input[name="discount_id"][value="${payload.discountId}"]`;
       const matchedField = document.querySelector(selector);
       const entryRow = matchedField?.closest(".accounting-entry-row");
@@ -13565,6 +13671,15 @@ window.addEventListener("DOMContentLoaded", () => {
       void submitAccountingActionForm(form, {
         successMessage: "Pagamento adicionado.",
         fallbackError: "Falha ao adicionar pagamento.",
+        refresh: true,
+      }).catch(() => {});
+      return;
+    }
+
+    if (["discount-add", "discount-confirm", "discount-delete"].includes(payload.formKind)) {
+      void submitAccountingActionForm(form, {
+        showSuccess: false,
+        fallbackError: "Falha ao atualizar abatimentos.",
         refresh: true,
       }).catch(() => {});
       return;
@@ -13725,7 +13840,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (
       form.matches(
-        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-discount-add-form, .accounting-entry-discount-delete-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-statuses-form, .accounting-entry-subitem-delete-form"
+        ".accounting-entry-form, .accounting-entry-quick-status-form, .accounting-create-form, .accounting-entry-goal-payment-add-form, .accounting-entry-discount-add-form, .accounting-entry-discount-confirm-form, .accounting-entry-discount-delete-form, .accounting-entry-subitem-form, .accounting-entry-subitem-add-form, .accounting-entry-subitem-statuses-form, .accounting-entry-subitem-delete-form"
       )
     ) {
       return buildAccountingResumePayload(form);
@@ -19472,26 +19587,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    if (
-      target instanceof HTMLInputElement &&
-      target.matches(
-        "[data-accounting-subitem-paid-checkbox], [data-accounting-pending-subitem-paid-checkbox]"
-      )
-    ) {
-      const panel = target.closest(".accounting-entry-subitems-panel");
-      syncAccountingSubitemStatusesForm(panel);
-      return;
-    }
-
-    if (["discount-add", "discount-delete"].includes(payload.formKind)) {
-      void submitAccountingActionForm(form, {
-        showSuccess: false,
-        fallbackError: "Falha ao atualizar abatimentos.",
-        refresh: true,
-      }).catch(() => {});
-      return;
-    }
-
     const accountingEntryForm = target.closest(".accounting-entry-form, .accounting-entry-quick-status-form");
     const isAccountingEntryField =
       target instanceof HTMLInputElement || target instanceof HTMLSelectElement;
@@ -19747,6 +19842,13 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLElement)) return;
 
+    const settleRemainingButton = target.closest("[data-accounting-discount-settle-remaining]");
+    if (settleRemainingButton instanceof HTMLButtonElement) {
+      event.preventDefault();
+      stageAccountingRemainingDiscount(settleRemainingButton);
+      return;
+    }
+
     const removePendingButton = target.closest("[data-accounting-pending-subitem-remove]");
     if (removePendingButton instanceof HTMLButtonElement) {
       const panel = removePendingButton.closest(".accounting-entry-subitems-panel");
@@ -19756,6 +19858,18 @@ window.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       pendingRow.remove();
       syncAccountingSubitemStatusesForm(panel);
+      return;
+    }
+
+    const removePendingDiscountButton = target.closest("[data-accounting-pending-discount-remove]");
+    if (removePendingDiscountButton instanceof HTMLButtonElement) {
+      const panel = removePendingDiscountButton.closest(".accounting-entry-discounts-panel");
+      const pendingRow = removePendingDiscountButton.closest("[data-accounting-pending-discount-row]");
+      if (!(panel instanceof HTMLElement) || !(pendingRow instanceof HTMLElement)) return;
+
+      event.preventDefault();
+      pendingRow.remove();
+      syncAccountingDiscountConfirmForm(panel);
       return;
     }
 
@@ -19995,16 +20109,19 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (form.matches(".accounting-entry-discount-add-form")) {
       event.preventDefault();
-      const amountField = form.querySelector('input[name="discount_amount_value"]');
-      if (amountField instanceof HTMLInputElement) {
-        normalizeAccountingCurrencyInputField(amountField);
-      }
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      stageAccountingDiscount(form);
+      return;
+    }
+
+    if (form.matches(".accounting-entry-discount-confirm-form")) {
+      event.preventDefault();
+      const panel = form.closest(".accounting-entry-discounts-panel");
+      if (!syncAccountingDiscountConfirmForm(panel)) {
         return;
       }
       void submitAccountingActionForm(form, {
         showSuccess: false,
-        fallbackError: "Falha ao adicionar abatimento.",
+        fallbackError: "Falha ao confirmar abatimentos.",
         refresh: true,
       }).catch(() => {});
       return;
@@ -20112,6 +20229,12 @@ window.addEventListener("DOMContentLoaded", () => {
           normalizeAccountingCurrencyInputField(field);
         }
       });
+    });
+
+    root.querySelectorAll(".accounting-entry-discounts-panel").forEach((panel) => {
+      if (panel instanceof HTMLElement) {
+        syncAccountingDiscountConfirmForm(panel);
+      }
     });
 
     root.querySelectorAll(".accounting-entry-subitems-panel").forEach((panel) => {

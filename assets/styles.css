@@ -15064,7 +15064,7 @@ select option:checked,
     font-size: inherit;
 }
 
-.accounting-entry-summary-paid-progress {
+.accounting-entry-summary-discount-progress {
     display: inline-flex;
     align-items: baseline;
     justify-content: flex-end;
@@ -15074,7 +15074,7 @@ select option:checked,
     font-weight: 500;
 }
 
-.accounting-entry-summary-paid-progress strong {
+.accounting-entry-summary-discount-progress strong {
     color: #29486a;
     font-size: 0.82rem;
 }
@@ -15835,6 +15835,57 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     min-width: 0;
 }
 
+.accounting-entry-meta.has-discount-progress {
+    width: 100%;
+}
+
+.accounting-entry-discount-payment-progress {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 280px);
+    min-height: 18px;
+    padding: 0 8px;
+    border: 1px solid rgba(98, 109, 123, 0.22);
+    border-radius: 999px;
+    background: rgba(220, 226, 233, 0.58);
+    overflow: hidden;
+}
+
+.accounting-entry-discount-payment-progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(231, 177, 72, 0.72) 0%, rgba(205, 132, 25, 0.82) 100%);
+}
+
+.accounting-entry-discount-payment-progress-values {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+    color: #3d4957;
+    font-size: 0.68rem;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.accounting-entry-discount-payment-progress-values strong {
+    color: inherit;
+    font-weight: 700;
+}
+
+.accounting-entry-discount-payment-progress.is-complete {
+    border-color: rgba(210, 171, 84, 0.34);
+    background: rgba(246, 232, 191, 0.78);
+}
+
 .accounting-entry-form .accounting-input-amount {
     grid-column: 2;
     grid-row: 1;
@@ -16185,6 +16236,30 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     width: 112px;
 }
 
+.accounting-entry-discount-settle-button {
+    min-width: 60px;
+}
+
+.accounting-entry-discount-confirm-form {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin: 2px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid rgba(140, 181, 223, 0.2);
+}
+
+.accounting-entry-discount-confirm-note {
+    color: #8a6632;
+    font-size: 0.72rem;
+}
+
+.accounting-entry-discount-confirm-form .btn-mini:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .accounting-entry-subitems-list {
     display: grid;
     gap: 6px;
@@ -16192,7 +16267,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
 .accounting-entry-subitem-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 6px;
     min-height: 34px;
@@ -16220,13 +16295,12 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-entry-subitem-form[hidden],
-.accounting-entry-subitem-status-control[hidden],
 .accounting-entry-subitem-summary[hidden] {
     display: none !important;
 }
 
 .accounting-entry-subitem-row.is-editing .accounting-entry-subitem-form {
-    grid-column: 1 / 3;
+    grid-column: 1;
 }
 
 .accounting-entry-subitem-summary {
@@ -16263,19 +16337,6 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-entry-subitem-summary-amount {
     flex: 0 0 auto;
     color: #4f6b88;
-    white-space: nowrap;
-}
-
-.accounting-entry-subitem-row.is-settled .accounting-entry-subitem-summary-label {
-    color: #71869b;
-    text-decoration: line-through;
-}
-
-.accounting-entry-subitem-status-control {
-    min-width: 72px;
-}
-
-.accounting-entry-subitem-paid-check {
     white-space: nowrap;
 }
 
@@ -16808,16 +16869,21 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
         grid-column: 1;
     }
 
-    .accounting-entry-subitem-status-control {
-        justify-self: start;
-    }
-
     .accounting-entry-subitem-statuses-form {
         align-items: stretch;
         flex-direction: column;
     }
 
     .accounting-entry-subitem-statuses-form .btn-mini {
+        width: 100%;
+    }
+
+    .accounting-entry-discount-confirm-form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .accounting-entry-discount-confirm-form .btn-mini {
         width: 100%;
     }
 

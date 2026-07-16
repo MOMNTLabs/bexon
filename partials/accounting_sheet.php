@@ -387,16 +387,22 @@
                                         : [];
                                     $accountingEntryHasSubitems = !empty($accountingEntrySubitems);
                                     $accountingEntrySupportsSubitems = ((int) ($accountingEntry['supports_subitems'] ?? 0)) === 1;
-                                    $accountingEntrySubitemPaidCents = max(0, (int) ($accountingEntry['subitem_paid_cents'] ?? 0));
-                                    $accountingEntryTotalCents = max(0, (int) ($accountingEntry['amount_cents'] ?? 0));
-                                    $accountingEntryShowSubitemProgress = $accountingEntryHasSubitems
-                                        && $accountingEntrySubitemPaidCents > 0;
-                                    $accountingEntrySubitemPaidCompact = dueAmountCompactLabelFromCents($accountingEntrySubitemPaidCents, true);
-                                    $accountingEntryTotalCompact = dueAmountCompactLabelFromCents($accountingEntryTotalCents, true);
                                     $accountingEntryDiscounts = is_array($accountingEntry['discounts'] ?? null)
                                         ? $accountingEntry['discounts']
                                         : [];
                                     $accountingEntrySupportsDiscounts = ((int) ($accountingEntry['supports_discounts'] ?? 0)) === 1;
+                                    $accountingEntryTotalCents = max(0, (int) ($accountingEntry['amount_cents'] ?? 0));
+                                    $accountingEntryDiscountTotalCents = max(0, (int) ($accountingEntry['discount_total_cents'] ?? 0));
+                                    $accountingEntryShowDiscountProgress = $accountingEntryDiscountTotalCents > 0;
+                                    $accountingEntryDiscountTotalDisplay = (string) ($accountingEntry['discount_total_display'] ?? 'R$ 0,00');
+                                    $accountingEntryDiscountTotalCompact = dueAmountCompactLabelFromCents($accountingEntryDiscountTotalCents, true);
+                                    $accountingEntryTotalCompact = dueAmountCompactLabelFromCents($accountingEntryTotalCents, true);
+                                    $accountingEntryDiscountProgressPercent = $accountingEntryTotalCents > 0
+                                        ? min(100, max(0, ($accountingEntryDiscountTotalCents / $accountingEntryTotalCents) * 100))
+                                        : 0;
+                                    $accountingEntryDiscountProgressWidth = number_format($accountingEntryDiscountProgressPercent, 2, '.', '');
+                                    $accountingEntryDiscountIsComplete = $accountingEntryTotalCents > 0
+                                        && $accountingEntryDiscountTotalCents >= $accountingEntryTotalCents;
                                     $accountingEntryDiscountRemainingCents = max(0, (int) ($accountingEntry['discount_remaining_cents'] ?? 0));
                                     $accountingEntryDiscountRemainingDisplay = (string) ($accountingEntry['discount_remaining_display'] ?? $accountingEntryAmountInput);
                                     ?>
@@ -462,12 +468,12 @@
                                                     <?= $renderAccountingMoney($accountingEntryGoalPaymentDisplay) ?>
                                                 </span>
                                             <?php else: ?>
-                                                <?php if ($accountingEntryShowSubitemProgress): ?>
+                                                <?php if ($accountingEntryShowDiscountProgress): ?>
                                                     <span
-                                                        class="accounting-entry-summary-amount accounting-entry-summary-paid-progress"
-                                                        aria-label="Pago <?= e((string) ($accountingEntry['subitem_paid_display'] ?? 'R$ 0,00')) ?> de <?= e($accountingEntryAmountInput) ?>"
+                                                        class="accounting-entry-summary-amount accounting-entry-summary-discount-progress"
+                                                        aria-label="Abatido <?= e($accountingEntryDiscountTotalDisplay) ?> de <?= e($accountingEntryAmountInput) ?>"
                                                     >
-                                                        <span><?= e($accountingEntrySubitemPaidCompact) ?></span>
+                                                        <span><?= e($accountingEntryDiscountTotalCompact) ?></span>
                                                         <span aria-hidden="true">/</span>
                                                         <strong><?= e($accountingEntryTotalCompact) ?></strong>
                                                     </span>
@@ -632,8 +638,21 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge): ?>
-                                                <div class="accounting-entry-meta">
+                                            <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryShowDiscountProgress): ?>
+                                                <div class="accounting-entry-meta<?= $accountingEntryShowDiscountProgress ? ' has-discount-progress' : '' ?>">
+                                                    <?php if ($accountingEntryShowDiscountProgress): ?>
+                                                        <span
+                                                            class="accounting-entry-discount-payment-progress<?= $accountingEntryDiscountIsComplete ? ' is-complete' : '' ?>"
+                                                            aria-label="Pago via abatimentos <?= e($accountingEntryDiscountTotalDisplay) ?> de <?= e($accountingEntryAmountInput) ?>"
+                                                        >
+                                                            <span class="accounting-entry-discount-payment-progress-fill" style="width: <?= e($accountingEntryDiscountProgressWidth) ?>%"></span>
+                                                            <span class="accounting-entry-discount-payment-progress-values">
+                                                                <span><?= e($accountingEntryDiscountTotalCompact) ?></span>
+                                                                <span aria-hidden="true">/</span>
+                                                                <strong><?= e($accountingEntryTotalCompact) ?></strong>
+                                                            </span>
+                                                        </span>
+                                                    <?php endif; ?>
                                                     <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                         <label class="accounting-entry-edit-control is-monthly">
                                                             <span>Mensal -</span>
@@ -724,9 +743,8 @@
                                                             $accountingSubitemId = (int) ($accountingSubitem['id'] ?? 0);
                                                             $accountingSubitemLabel = (string) ($accountingSubitem['label'] ?? '');
                                                             $accountingSubitemAmountInput = (string) ($accountingSubitem['amount_input'] ?? 'R$ 0,00');
-                                                            $accountingSubitemIsSettled = ((int) ($accountingSubitem['is_settled'] ?? 0)) === 1;
                                                             ?>
-                                                            <div class="accounting-entry-subitem-row<?= $accountingSubitemIsSettled ? ' is-settled' : '' ?>" data-accounting-subitem-row>
+                                                            <div class="accounting-entry-subitem-row" data-accounting-subitem-row>
                                                                 <button
                                                                     type="button"
                                                                     class="accounting-entry-subitem-summary"
@@ -737,18 +755,6 @@
                                                                     <span class="accounting-entry-subitem-summary-label"><?= e($accountingSubitemLabel) ?></span>
                                                                     <span class="accounting-entry-subitem-summary-amount"><?= $renderAccountingMoney($accountingSubitemAmountInput) ?></span>
                                                                 </button>
-                                                                <div class="accounting-entry-subitem-status-control">
-                                                                    <label class="accounting-check accounting-entry-subitem-paid-check">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            data-accounting-subitem-paid-checkbox
-                                                                            data-subitem-id="<?= e((string) $accountingSubitemId) ?>"
-                                                                            data-initial-settled="<?= $accountingSubitemIsSettled ? '1' : '0' ?>"
-                                                                            <?= $accountingSubitemIsSettled ? 'checked' : '' ?>
-                                                                        >
-                                                                        <span>Pago</span>
-                                                                    </label>
-                                                                </div>
                                                                 <form method="post" class="accounting-entry-subitem-form" data-accounting-subitem-form autocomplete="off" hidden>
                                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                     <input type="hidden" name="action" value="update_accounting_subitem">
@@ -825,18 +831,22 @@
                                                     <input type="hidden" name="subitem_statuses_json" value="[]" data-accounting-subitem-statuses-json>
                                                     <input type="hidden" name="create_subitems_json" value="[]" data-accounting-pending-subitems-json>
                                                     <span class="accounting-entry-subitem-statuses-note" data-accounting-subitem-statuses-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
-                                                    <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar altera&ccedil;&otilde;es</button>
+                                                    <button type="submit" class="btn btn-mini" data-accounting-subitem-statuses-confirm disabled>Confirmar subitens</button>
                                                 </form>
                                             </div>
                                         <?php endif; ?>
                                         <?php if ($accountingEntrySupportsDiscounts): ?>
-                                            <div class="accounting-entry-discounts-panel" data-accounting-entry-panel="discounts">
+                                            <div
+                                                class="accounting-entry-discounts-panel"
+                                                data-accounting-entry-panel="discounts"
+                                                data-accounting-discount-remaining-cents="<?= e((string) $accountingEntryDiscountRemainingCents) ?>"
+                                            >
                                                 <div class="accounting-entry-discounts-head">
                                                     <strong>Abatimentos</strong>
                                                     <span>Falta <?= $renderAccountingMoney($accountingEntryDiscountRemainingDisplay) ?></span>
                                                 </div>
-                                                <?php if ($accountingEntryDiscounts): ?>
-                                                    <div class="accounting-entry-discounts-list">
+                                                <div class="accounting-entry-discounts-list" data-accounting-discounts-list>
+                                                    <?php if ($accountingEntryDiscounts): ?>
                                                         <?php foreach ($accountingEntryDiscounts as $accountingDiscount): ?>
                                                             <?php
                                                             $accountingDiscountId = (int) ($accountingDiscount['id'] ?? 0);
@@ -856,8 +866,8 @@
                                                                 </form>
                                                             </div>
                                                         <?php endforeach; ?>
-                                                    </div>
-                                                <?php endif; ?>
+                                                    <?php endif; ?>
+                                                </div>
                                                 <form method="post" class="accounting-entry-discount-add-form" autocomplete="off">
                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                     <input type="hidden" name="action" value="add_accounting_discount">
@@ -874,7 +884,28 @@
                                                         <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>
                                                         required
                                                     >
-                                                    <button type="submit" class="btn btn-mini" <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>>+</button>
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-mini"
+                                                        data-accounting-discount-add-button
+                                                        <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>
+                                                    >+</button>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-mini btn-ghost accounting-entry-discount-settle-button"
+                                                        data-accounting-discount-settle-remaining
+                                                        title="Adicionar o valor restante"
+                                                        <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>
+                                                    >Quitar</button>
+                                                </form>
+                                                <form method="post" class="accounting-entry-discount-confirm-form">
+                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                    <input type="hidden" name="action" value="add_accounting_discount">
+                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                    <input type="hidden" name="discounts_json" value="[]" data-accounting-pending-discounts-json>
+                                                    <span class="accounting-entry-discount-confirm-note" data-accounting-discount-confirm-note hidden>Altera&ccedil;&otilde;es n&atilde;o salvas</span>
+                                                    <button type="submit" class="btn btn-mini" data-accounting-discount-confirm disabled>Confirmar abatimentos</button>
                                                 </form>
                                             </div>
                                         <?php endif; ?>

@@ -439,22 +439,68 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro inválido.');
                 }
 
-                addWorkspaceAccountingDiscount(
-                    $pdo,
-                    $workspaceId,
-                    $entryId,
-                    $_POST['discount_amount_value'] ?? null,
-                    (int) ($authUser['id'] ?? 0)
-                );
+                $discountsJson = trim((string) ($_POST['discounts_json'] ?? ''));
+                $discountAmounts = [];
+                if ($discountsJson !== '') {
+                    $decodedDiscounts = json_decode($discountsJson, true);
+                    if (!is_array($decodedDiscounts) || count($decodedDiscounts) > 100) {
+                        throw new RuntimeException('Abatimentos inválidos.');
+                    }
+
+                    foreach ($decodedDiscounts as $discount) {
+                        if (!is_array($discount)) {
+                            throw new RuntimeException('Abatimento inválido.');
+                        }
+
+                        $amount = $discount['amount'] ?? null;
+                        $amountCents = normalizeDueAmountCents($amount);
+                        if ($amountCents === null || $amountCents <= 0) {
+                            throw new RuntimeException('Informe um valor de abatimento válido.');
+                        }
+                        $discountAmounts[] = $amount;
+                    }
+
+                    if (!$discountAmounts) {
+                        throw new RuntimeException('Nenhum abatimento foi informado.');
+                    }
+                } else {
+                    $discountAmounts[] = $_POST['discount_amount_value'] ?? null;
+                }
+
+                $startedTransaction = !$pdo->inTransaction();
+                if ($startedTransaction) {
+                    $pdo->beginTransaction();
+                }
+
+                try {
+                    foreach ($discountAmounts as $discountAmount) {
+                        addWorkspaceAccountingDiscount(
+                            $pdo,
+                            $workspaceId,
+                            $entryId,
+                            $discountAmount,
+                            (int) ($authUser['id'] ?? 0)
+                        );
+                    }
+
+                    if ($startedTransaction) {
+                        $pdo->commit();
+                    }
+                } catch (Throwable $e) {
+                    if ($startedTransaction && $pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    throw $e;
+                }
 
                 if (requestExpectsJson()) {
                     respondJson([
                         'ok' => true,
-                        'message' => 'Abatimento adicionado.',
+                        'message' => 'Abatimentos atualizados.',
                     ]);
                 }
 
-                flash('success', 'Abatimento adicionado.');
+                flash('success', 'Abatimentos atualizados.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'delete_accounting_discount':
