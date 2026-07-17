@@ -12966,7 +12966,7 @@ function workspaceUpdateSidebarToolsConfiguration(PDO $pdo, int $workspaceId, ar
     return workspaceSidebarToolsConfig($workspaceId, $workspace);
 }
 
-function workspaceReassignAccountingMonthlyEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
+function workspaceReassignAccountingDatedEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
 {
     if ($workspaceId <= 0) {
         return;
@@ -12977,7 +12977,7 @@ function workspaceReassignAccountingMonthlyEntriesForCycleCloseDay(PDO $pdo, int
         'SELECT id, period_key, due_date
          FROM workspace_accounting_entries
          WHERE workspace_id = :workspace_id
-           AND is_monthly = 1
+           AND (is_monthly = 1 OR weekly_recurrence_id IS NOT NULL)
            AND due_date IS NOT NULL
          ORDER BY id ASC'
     );
@@ -13042,7 +13042,7 @@ function workspaceUpdateAccountingCycleCloseDay(PDO $pdo, int $workspaceId, $cyc
             ':workspace_id' => $workspaceId,
         ]);
 
-        workspaceReassignAccountingMonthlyEntriesForCycleCloseDay($pdo, $workspaceId, $cycleCloseDay);
+        workspaceReassignAccountingDatedEntriesForCycleCloseDay($pdo, $workspaceId, $cycleCloseDay);
 
         if ($startedTransaction) {
             $pdo->commit();
