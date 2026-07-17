@@ -7815,6 +7815,68 @@ window.addEventListener("DOMContentLoaded", () => {
     initializeAccountingEnhancements(nextSheet);
   };
 
+  const formatAccountingCents = (value) => {
+    const cents = Math.max(0, Number.parseInt(String(value || "0"), 10) || 0);
+    const amount = cents / 100;
+    const formatted = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+    const [major = formatted, minor = "00"] = formatted.split(",");
+    return `<span class="accounting-money"><span class="accounting-money-major">${major}</span><span class="accounting-money-minor">,${minor}</span></span>`;
+  };
+
+  const applyAccountingQuickStatusSummary = (summary) => {
+    if (!summary || typeof summary !== "object") return;
+
+    const updateTotal = (entryType, paidKey, totalKey, paidLabel, helperLabel = "") => {
+      const card = document.querySelector(
+        entryType === "income" ? ".accounting-card.is-income-card" : ".accounting-card.is-expense-card"
+      );
+      if (!(card instanceof HTMLElement)) return;
+
+      const total = Math.max(0, Number.parseInt(String(summary[totalKey] || "0"), 10) || 0);
+      const paid = Math.min(total, Math.max(0, Number.parseInt(String(summary[paidKey] || "0"), 10) || 0));
+      const pair = card.querySelector(".accounting-total-pair");
+      if (!(pair instanceof HTMLElement)) return;
+
+      const isComplete = total > 0 && paid >= total;
+      pair.innerHTML = isComplete
+        ? `<strong class="accounting-total-main">${formatAccountingCents(total)}</strong>`
+        : `<span class="accounting-total-secondary">${formatAccountingCents(paid)}</span><span class="accounting-total-separator">/</span><strong class="accounting-total-main">${formatAccountingCents(total)}</strong>`;
+      pair.setAttribute(
+        "aria-label",
+        isComplete
+          ? `Total ${paidLabel.toLowerCase()} R$ ${(total / 100).toFixed(2).replace(".", ",")}`
+          : `${paidLabel} R$ ${(paid / 100).toFixed(2).replace(".", ",")} de R$ ${(total / 100).toFixed(2).replace(".", ",")}`
+      );
+
+      if (entryType !== "expense") return;
+      const totalBox = pair.closest(".is-expense-total");
+      if (!(totalBox instanceof HTMLElement)) return;
+      const remaining = Math.max(0, total - paid);
+      const helper = totalBox.querySelector(".accounting-total-helper");
+      if (remaining <= 0) {
+        helper?.remove();
+        totalBox.classList.remove("has-helper");
+        return;
+      }
+
+      totalBox.classList.add("has-helper");
+      const helperHtml = `<span class="accounting-total-helper"><span>${helperLabel}</span><strong>${formatAccountingCents(remaining)}</strong></span>`;
+      if (helper instanceof HTMLElement) {
+        helper.outerHTML = helperHtml;
+      } else {
+        pair.insertAdjacentHTML("afterend", helperHtml);
+      }
+    };
+
+    updateTotal("expense", "expense_paid_cents", "expense_total_cents", "Pago", "Faltam");
+    updateTotal("income", "income_received_cents", "income_total_cents", "Recebido");
+  };
+
   const submitAccountingActionForm = async (
     form,
     {
@@ -7835,11 +7897,23 @@ window.addEventListener("DOMContentLoaded", () => {
     syncAccountingInstallmentForm(form);
     syncAccountingTaskLinkForm(form);
 
+    if (form.matches(".accounting-entry-quick-status-form")) {
+      let fastStatusField = form.querySelector('input[name="fast_status_only"]');
+      if (!(fastStatusField instanceof HTMLInputElement)) {
+        fastStatusField = document.createElement("input");
+        fastStatusField.type = "hidden";
+        fastStatusField.name = "fast_status_only";
+        form.append(fastStatusField);
+      }
+      fastStatusField.value = "1";
+    }
+
     form.dataset.submitting = "1";
     form.classList.add("is-saving");
 
     try {
       const data = await postFormJson(form);
+      applyAccountingQuickStatusSummary(data?.accounting_summary);
       if (refresh) {
         await refreshAccountingSectionFromServer({ accountingPeriod });
       }
@@ -7873,7 +7947,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return await submitAccountingActionForm(form, {
         ...options,
         showSuccess: false,
-        refresh: true,
+        refresh: !form.matches(".accounting-entry-quick-status-form"),
       });
     } finally {
       if (form.isConnected && form.dataset.accountingPending === "1") {

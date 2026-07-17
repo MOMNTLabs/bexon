@@ -382,10 +382,27 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 if (requestExpectsJson()) {
-                    respondJson([
+                    $response = [
                         'ok' => true,
                         'message' => 'Registro atualizado.',
-                    ]);
+                    ];
+                    if (((string) ($_POST['fast_status_only'] ?? '')) === '1') {
+                        $summaryPeriodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
+                        $summaryEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $summaryPeriodKey);
+                        $summary = accountingSummary($summaryEntries, 0, [
+                            'period_key' => $summaryPeriodKey,
+                            'current_period_key' => accountingCycleCurrentPeriodKey(
+                                workspaceAccountingCycleCloseDay($workspaceId)
+                            ),
+                        ]);
+                        $response['accounting_summary'] = [
+                            'expense_total_cents' => (int) ($summary['expense_total_cents'] ?? 0),
+                            'expense_paid_cents' => (int) ($summary['expense_paid_cents'] ?? 0),
+                            'income_total_cents' => (int) ($summary['income_total_cents'] ?? 0),
+                            'income_received_cents' => (int) ($summary['income_received_cents'] ?? 0),
+                        ];
+                    }
+                    respondJson($response);
                 }
 
                 flash('success', 'Registro atualizado.');
