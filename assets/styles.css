@@ -14961,16 +14961,16 @@ select option:checked,
     border-radius: 10px;
     border: 1px solid rgba(133, 178, 225, 0.72);
     background: #f7faff;
-    padding: 10px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
 }
 
 .accounting-card-footer {
     display: grid;
-    gap: 8px;
+    gap: 6px;
     margin-top: auto;
 }
 
@@ -14979,8 +14979,8 @@ select option:checked,
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
-    padding: 2px 2px 8px;
-    height: 56px;
+    padding: 1px 1px 6px;
+    height: 48px;
     border-bottom: 1px solid rgba(142, 183, 224, 0.45);
     box-sizing: border-box;
 }
@@ -15022,7 +15022,7 @@ select option:checked,
 .accounting-entries {
     display: grid;
     gap: 0;
-    max-height: 340px;
+    max-height: 260px;
     min-width: 0;
     overflow-x: hidden;
     overflow-y: auto;
@@ -15170,7 +15170,7 @@ select option:checked,
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
     align-items: center;
-    padding: 7px 0;
+    padding: 5px 0;
 }
 
 .accounting-entry-row.is-balance-adjustment {
