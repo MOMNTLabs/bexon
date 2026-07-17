@@ -130,14 +130,14 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 $isInstallment = $entryType === 'expense' && ((string) ($_POST['is_installment'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyDue = $entryType === 'expense' && ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyIncome = $entryType === 'income' && ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
+                $isWeekly = ((string) ($_POST['is_weekly_due'] ?? '0')) === '1'
+                    || ((string) ($_POST['accounting_type_choice'] ?? '')) === 'weekly';
                 $monthlyMode = (string) ($_POST['monthly_mode'] ?? 'uniform');
                 if ($createSubitems) {
-                    if ($entryType !== 'expense') {
-                        throw new RuntimeException('Subitens estão disponíveis apenas para contas.');
-                    }
                     $isInstallment = 0;
                     $isMonthlyDue = 0;
                     $isMonthlyIncome = 0;
+                    $isWeekly = false;
                     $monthlyMode = 'uniform';
                     $_POST['amount_value'] = dueAmountLabelFromCents(
                         array_sum(array_map(static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0), $createSubitems))
@@ -152,7 +152,28 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $entryType
                 );
 
-                if ($isMonthlyDue === 1 && !$isMonthlyGoal) {
+                if ($isWeekly) {
+                    $entryId = createWorkspaceAccountingWeeklyRecurrence(
+                        $pdo,
+                        $workspaceId,
+                        $periodKey,
+                        $entryType,
+                        (string) ($_POST['label'] ?? ''),
+                        $_POST['amount_value'] ?? null,
+                        $_POST['weekly_day'] ?? null,
+                        (int) ($authUser['id'] ?? 0)
+                    );
+                    if ($isSettled === 1) {
+                        updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
+                            $pdo,
+                            $workspaceId,
+                            $entryId,
+                            (string) ($_POST['label'] ?? ''),
+                            $_POST['amount_value'] ?? null,
+                            1
+                        );
+                    }
+                } elseif ($isMonthlyDue === 1 && !$isMonthlyGoal) {
                     createWorkspaceAccountingMonthlyDue(
                         $pdo,
                         $workspaceId,
@@ -218,7 +239,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 $entryWorkspaceStmt = $pdo->prepare(
-                    'SELECT workspace_id, entry_type
+                    'SELECT workspace_id, entry_type, weekly_recurrence_id
                      FROM workspace_accounting_entries
                      WHERE id = :id
                      LIMIT 1'
@@ -232,6 +253,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
 
                 $isSettled = array_key_exists('is_settled', $_POST) ? 1 : 0;
                 $entryType = normalizeAccountingEntryType((string) ($entryRow['entry_type'] ?? 'expense'));
+                $weeklyRecurrenceId = max(0, (int) ($entryRow['weekly_recurrence_id'] ?? 0));
                 $isInstallment = $entryType === 'expense' && ((string) ($_POST['is_installment'] ?? '0')) === '1' ? 1 : 0;
                 $isMonthlyFlag = ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
                 $automationConfig = accountingAutomationConfigFromRequest(
@@ -239,23 +261,34 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     (int) ($authUser['id'] ?? 0),
                     $entryType
                 );
-                updateWorkspaceAccountingEntryWithCarrySync(
-                    $pdo,
-                    $workspaceId,
-                    $entryId,
-                    (string) ($_POST['label'] ?? ''),
-                    $_POST['amount_value'] ?? null,
-                    $isSettled,
-                    $isInstallment,
-                    accountingInstallmentProgressFromRequest($_POST),
-                    $_POST['total_amount_value'] ?? null,
-                    $_POST['installment_number'] ?? null,
-                    $_POST['installment_total'] ?? null,
-                    $_POST['monthly_day'] ?? null,
-                    $isMonthlyFlag,
-                    (string) ($_POST['monthly_mode'] ?? 'uniform'),
-                    $automationConfig
-                );
+                if ($weeklyRecurrenceId > 0) {
+                    updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
+                        $pdo,
+                        $workspaceId,
+                        $entryId,
+                        (string) ($_POST['label'] ?? ''),
+                        $_POST['amount_value'] ?? null,
+                        $isSettled
+                    );
+                } else {
+                    updateWorkspaceAccountingEntryWithCarrySync(
+                        $pdo,
+                        $workspaceId,
+                        $entryId,
+                        (string) ($_POST['label'] ?? ''),
+                        $_POST['amount_value'] ?? null,
+                        $isSettled,
+                        $isInstallment,
+                        accountingInstallmentProgressFromRequest($_POST),
+                        $_POST['total_amount_value'] ?? null,
+                        $_POST['installment_number'] ?? null,
+                        $_POST['installment_total'] ?? null,
+                        $_POST['monthly_day'] ?? null,
+                        $isMonthlyFlag,
+                        (string) ($_POST['monthly_mode'] ?? 'uniform'),
+                        $automationConfig
+                    );
+                }
                 if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
                     workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
                 }
@@ -439,29 +472,32 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro inválido.');
                 }
 
+                $discountEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+                $discountIsIncome = normalizeAccountingEntryType((string) ($discountEntry['entry_type'] ?? 'expense')) === 'income';
+
                 $discountsJson = trim((string) ($_POST['discounts_json'] ?? ''));
                 $discountAmounts = [];
                 if ($discountsJson !== '') {
                     $decodedDiscounts = json_decode($discountsJson, true);
                     if (!is_array($decodedDiscounts) || count($decodedDiscounts) > 100) {
-                        throw new RuntimeException('Abatimentos inválidos.');
+                        throw new RuntimeException($discountIsIncome ? 'Recebimentos inválidos.' : 'Abatimentos inválidos.');
                     }
 
                     foreach ($decodedDiscounts as $discount) {
                         if (!is_array($discount)) {
-                            throw new RuntimeException('Abatimento inválido.');
+                            throw new RuntimeException($discountIsIncome ? 'Recebimento inválido.' : 'Abatimento inválido.');
                         }
 
                         $amount = $discount['amount'] ?? null;
                         $amountCents = normalizeDueAmountCents($amount);
                         if ($amountCents === null || $amountCents <= 0) {
-                            throw new RuntimeException('Informe um valor de abatimento válido.');
+                            throw new RuntimeException($discountIsIncome ? 'Informe um valor recebido válido.' : 'Informe um valor de abatimento válido.');
                         }
                         $discountAmounts[] = $amount;
                     }
 
                     if (!$discountAmounts) {
-                        throw new RuntimeException('Nenhum abatimento foi informado.');
+                        throw new RuntimeException($discountIsIncome ? 'Nenhum recebimento foi informado.' : 'Nenhum abatimento foi informado.');
                     }
                 } else {
                     $discountAmounts[] = $_POST['discount_amount_value'] ?? null;
@@ -496,11 +532,11 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 if (requestExpectsJson()) {
                     respondJson([
                         'ok' => true,
-                        'message' => 'Abatimentos atualizados.',
+                        'message' => $discountIsIncome ? 'Recebimentos atualizados.' : 'Abatimentos atualizados.',
                     ]);
                 }
 
-                flash('success', 'Abatimentos atualizados.');
+                flash('success', $discountIsIncome ? 'Recebimentos atualizados.' : 'Abatimentos atualizados.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'delete_accounting_discount':
@@ -516,16 +552,19 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Abatimento inválido.');
                 }
 
+                $discountEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+                $discountIsIncome = normalizeAccountingEntryType((string) ($discountEntry['entry_type'] ?? 'expense')) === 'income';
+
                 deleteWorkspaceAccountingDiscount($pdo, $workspaceId, $entryId, $discountId);
 
                 if (requestExpectsJson()) {
                     respondJson([
                         'ok' => true,
-                        'message' => 'Abatimento removido.',
+                        'message' => $discountIsIncome ? 'Recebimento removido.' : 'Abatimento removido.',
                     ]);
                 }
 
-                flash('success', 'Abatimento removido.');
+                flash('success', $discountIsIncome ? 'Recebimento removido.' : 'Abatimento removido.');
                 redirectTo(accountingRedirectPathFromRequest());
 
             case 'update_accounting_subitem':

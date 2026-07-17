@@ -2406,7 +2406,23 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 task_link_rate_cents BIGINT NOT NULL DEFAULT 0,
                 source_due_entry_id BIGINT DEFAULT NULL REFERENCES workspace_due_entries(id) ON DELETE SET NULL,
                 carry_source_entry_id BIGINT DEFAULT NULL REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL,
+                weekly_recurrence_id BIGINT DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
+                created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_weekly_recurrences (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                entry_type VARCHAR(16) NOT NULL DEFAULT \'expense\',
+                label TEXT NOT NULL,
+                amount_cents BIGINT NOT NULL DEFAULT 0,
+                weekday SMALLINT NOT NULL,
+                anchor_date DATE NOT NULL,
+                end_date DATE DEFAULT NULL,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
@@ -2460,6 +2476,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 task_link_rate_cents INTEGER NOT NULL DEFAULT 0,
                 source_due_entry_id INTEGER DEFAULT NULL,
                 carry_source_entry_id INTEGER DEFAULT NULL,
+                weekly_recurrence_id INTEGER DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
@@ -2468,6 +2485,23 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
                 FOREIGN KEY (source_due_entry_id) REFERENCES workspace_due_entries(id) ON DELETE SET NULL,
                 FOREIGN KEY (carry_source_entry_id) REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL
+            )'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_accounting_weekly_recurrences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                entry_type TEXT NOT NULL DEFAULT \'expense\',
+                label TEXT NOT NULL,
+                amount_cents INTEGER NOT NULL DEFAULT 0,
+                weekday INTEGER NOT NULL,
+                anchor_date TEXT NOT NULL,
+                end_date TEXT DEFAULT NULL,
+                created_by INTEGER DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
             )'
         );
         $pdo->exec(
@@ -2609,6 +2643,13 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key')) {
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN carry_stop_period_key TEXT DEFAULT NULL");
     }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN weekly_recurrence_id BIGINT DEFAULT NULL");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN weekly_recurrence_id INTEGER DEFAULT NULL");
+        }
+    }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'sort_order')) {
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
     }
@@ -2680,6 +2721,14 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     $pdo->exec(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_accounting_entries_workspace_period_due_source_unique
          ON workspace_accounting_entries(workspace_id, period_key, source_due_entry_id)'
+    );
+    $pdo->exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_accounting_entries_weekly_occurrence_unique
+         ON workspace_accounting_entries(workspace_id, weekly_recurrence_id, due_date)'
+    );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_weekly_recurrences_workspace
+         ON workspace_accounting_weekly_recurrences(workspace_id, anchor_date, end_date)'
     );
     $pdo->exec(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_accounting_periods_workspace_period
@@ -3227,6 +3276,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         'source_due_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id'),
         'carry_source_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id'),
         'carry_stop_period_key' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key'),
+        'weekly_recurrence_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id'),
         'is_monthly' => tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly'),
         'monthly_mode' => tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode'),
         'paid_amount_cents' => tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents'),
@@ -3243,6 +3293,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         || !$capabilities['source_due_entry_id']
         || !$capabilities['carry_source_entry_id']
         || !$capabilities['carry_stop_period_key']
+        || !$capabilities['weekly_recurrence_id']
         || !$capabilities['is_monthly']
         || !$capabilities['monthly_mode']
         || !$capabilities['paid_amount_cents']
@@ -3263,6 +3314,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         $capabilities['source_due_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'source_due_entry_id');
         $capabilities['carry_source_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id');
         $capabilities['carry_stop_period_key'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key');
+        $capabilities['weekly_recurrence_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id');
         $capabilities['is_monthly'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly');
         $capabilities['monthly_mode'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode');
         $capabilities['paid_amount_cents'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents');
@@ -6417,6 +6469,9 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $row['settled_at'] = accountingDateTimeForStorage($row['settled_at'] ?? null);
     $row['due_date'] = dueDateForStorage((string) ($row['due_date'] ?? ''));
     $row['is_monthly'] = ((int) ($row['is_monthly'] ?? 0)) === 1 ? 1 : 0;
+    $weeklyRecurrenceId = max(0, (int) ($row['weekly_recurrence_id'] ?? 0));
+    $row['weekly_recurrence_id'] = $weeklyRecurrenceId > 0 ? $weeklyRecurrenceId : null;
+    $row['is_weekly'] = $weeklyRecurrenceId > 0 ? 1 : 0;
     $row['monthly_day'] = normalizeDueMonthlyDay($row['monthly_day'] ?? null);
     if ($row['monthly_day'] === null && $row['due_date'] !== null) {
         $row['monthly_day'] = dueMonthlyDayFromDate($row['due_date']);
@@ -6478,7 +6533,7 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $today = (new DateTimeImmutable('today'))->format('Y-m-d');
     $row['is_auto_received'] = (
         $row['entry_type'] === 'income'
-        && $row['is_monthly'] === 1
+        && ($row['is_monthly'] === 1 || $row['is_weekly'] === 1)
         && $row['is_monthly_goal'] !== 1
         && $row['due_date'] !== null
         && $row['due_date'] <= $today
@@ -6971,8 +7026,7 @@ function workspaceAccountingDiscountsByEntryIds(PDO $pdo, int $workspaceId, arra
 
 function workspaceAccountingEntrySupportsDiscounts(array $entry): bool
 {
-    return normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
-        && ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1;
+    return ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1;
 }
 
 function workspaceAccountingAttachDiscounts(PDO $pdo, int $workspaceId, array $entries): array
@@ -6999,12 +7053,8 @@ function workspaceAccountingAttachDiscounts(PDO $pdo, int $workspaceId, array $e
             array_sum(array_map(static fn (array $discount): int => (int) ($discount['amount_cents'] ?? 0), $discounts))
         );
         $hasSubitems = ((int) ($entry['has_subitems'] ?? 0)) === 1;
-        $paidCents = $hasSubitems
-            ? max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0)
-            : (((int) ($entry['is_settled'] ?? 0)) === 1 ? max(0, $amountCents - $discountTotalCents) : 0);
-        $remainingCents = ((int) ($entry['is_settled'] ?? 0)) === 1 && !$hasSubitems
-            ? 0
-            : max(0, $amountCents - $paidCents - $discountTotalCents);
+        $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
+        $remainingCents = $isSettled ? 0 : max(0, $amountCents - $discountTotalCents);
 
         $entry['discounts'] = $discounts;
         $entry['discount_count'] = count($discounts);
@@ -7048,21 +7098,22 @@ function workspaceAccountingDiscountTotalCents(PDO $pdo, int $workspaceId, int $
 function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null): int
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    $isIncome = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'income';
     if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
-        throw new RuntimeException('Este item não aceita abatimentos.');
+        throw new RuntimeException($isIncome ? 'Esta entrada não aceita recebimentos.' : 'Este item não aceita abatimentos.');
     }
 
     $amountCents = normalizeDueAmountCents($amountInput);
     if ($amountCents === null || $amountCents <= 0) {
-        throw new RuntimeException('Informe um valor de abatimento válido.');
+        throw new RuntimeException($isIncome ? 'Informe um valor recebido válido.' : 'Informe um valor de abatimento válido.');
     }
 
     $remainingCents = max(0, (int) ($entry['discount_remaining_cents'] ?? 0));
     if ($remainingCents <= 0) {
-        throw new RuntimeException('Este item não possui valor restante para abater.');
+        throw new RuntimeException($isIncome ? 'Esta entrada já foi recebida por completo.' : 'Este item não possui valor restante para abater.');
     }
     if ($amountCents > $remainingCents) {
-        throw new RuntimeException('O abatimento não pode ser maior que o valor restante.');
+        throw new RuntimeException($isIncome ? 'O recebimento não pode ser maior que o valor restante.' : 'O abatimento não pode ser maior que o valor restante.');
     }
 
     ensureWorkspaceAccountingDiscountSchema($pdo);
@@ -7121,13 +7172,14 @@ function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId
 function deleteWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, int $discountId): void
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    $isIncome = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'income';
     if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
-        throw new RuntimeException('Abatimento não encontrado.');
+        throw new RuntimeException($isIncome ? 'Recebimento não encontrado.' : 'Abatimento não encontrado.');
     }
     $amountCents = max(0, (int) ($entry['amount_cents'] ?? 0));
     $oldDiscountTotalCents = max(0, (int) ($entry['discount_total_cents'] ?? 0));
     $hasSubitems = ((int) ($entry['has_subitems'] ?? 0)) === 1;
-    $wasFullyDiscounted = !$hasSubitems && $amountCents > 0 && $oldDiscountTotalCents >= $amountCents;
+    $wasFullyDiscounted = $amountCents > 0 && $oldDiscountTotalCents >= $amountCents;
 
     ensureWorkspaceAccountingDiscountSchema($pdo);
     $stmt = $pdo->prepare(
@@ -7142,7 +7194,7 @@ function deleteWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entr
         ':discount_id' => $discountId,
     ]);
     if ($stmt->rowCount() <= 0) {
-        throw new RuntimeException('Abatimento não encontrado.');
+        throw new RuntimeException($isIncome ? 'Recebimento não encontrado.' : 'Abatimento não encontrado.');
     }
 
     if ($hasSubitems) {
@@ -7310,10 +7362,11 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
 
 function workspaceAccountingEntrySupportsSubitems(array $entry): bool
 {
-    return normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
-        && ((int) ($entry['is_installment'] ?? 0)) !== 1
+    return ((int) ($entry['is_installment'] ?? 0)) !== 1
         && ((int) ($entry['is_monthly'] ?? 0)) !== 1
+        && ((int) ($entry['is_weekly'] ?? 0)) !== 1
         && ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1
+        && normalizeAccountingAutomationType((string) ($entry['automation_type'] ?? 'manual')) === 'manual'
         && max(0, (int) ($entry['source_due_entry_id'] ?? 0)) <= 0;
 }
 
@@ -7349,15 +7402,10 @@ function workspaceAccountingAttachSubitems(PDO $pdo, int $workspaceId, array $en
                 static fn (array $subitem): bool => ((int) ($subitem['is_settled'] ?? 0)) === 1
             ));
             $settledSubitemCount = count($settledSubitems);
-            $settledSubitemTimestamps = array_values(array_filter(array_map(
-                static fn (array $subitem): ?string => accountingDateTimeForStorage($subitem['settled_at'] ?? null),
-                $settledSubitems
-            )));
             $subitemPaidCents = array_sum(array_map(
                 static fn (array $subitem): int => (int) ($subitem['amount_cents'] ?? 0),
                 $settledSubitems
             ));
-            $allSubitemsSettled = $settledSubitemCount === count($subitems);
             $entry['amount_cents'] = $subitemTotalCents;
             $entry['total_amount_cents'] = $subitemTotalCents;
             $entry['amount_display'] = dueAmountLabelFromCents($subitemTotalCents);
@@ -7367,10 +7415,6 @@ function workspaceAccountingAttachSubitems(PDO $pdo, int $workspaceId, array $en
             $entry['subitem_paid_cents'] = $subitemPaidCents;
             $entry['subitem_paid_display'] = dueAmountLabelFromCents($subitemPaidCents);
             $entry['settled_subitem_count'] = $settledSubitemCount;
-            $entry['is_settled'] = $allSubitemsSettled ? 1 : 0;
-            $entry['settled_at'] = $allSubitemsSettled && $settledSubitemTimestamps
-                ? max($settledSubitemTimestamps)
-                : null;
         }
     }
     unset($entry);
@@ -7438,9 +7482,7 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     ensureWorkspaceAccountingSubitemSchema($pdo);
     $stmt = $pdo->prepare(
         'SELECT COUNT(*) AS subitem_count,
-                COALESCE(SUM(amount_cents), 0) AS total_cents,
-                COALESCE(SUM(CASE WHEN is_settled = 1 THEN amount_cents ELSE 0 END), 0) AS paid_cents,
-                MAX(CASE WHEN is_settled = 1 THEN settled_at ELSE NULL END) AS latest_settled_at
+                COALESCE(SUM(amount_cents), 0) AS total_cents
          FROM workspace_accounting_entry_subitems
          WHERE workspace_id = :workspace_id
            AND entry_id = :entry_id'
@@ -7452,12 +7494,9 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $subitemCount = max(0, (int) ($row['subitem_count'] ?? 0));
     $totalCents = max(0, (int) ($row['total_cents'] ?? 0));
-    $paidCents = max(0, (int) ($row['paid_cents'] ?? 0));
     $discountCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
-    $isSettled = $subitemCount > 0 && $totalCents > 0 && $paidCents + $discountCents >= $totalCents;
-    $settledAt = $isSettled
-        ? (accountingDateTimeForStorage($row['latest_settled_at'] ?? null) ?? nowIso())
-        : null;
+    $isSettled = $subitemCount > 0 && $totalCents > 0 && $discountCents >= $totalCents;
+    $settledAt = $isSettled ? nowIso() : null;
 
     $updateStmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
@@ -7734,6 +7773,9 @@ function workspaceAccountingEntriesListRaw(
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     $entryType = $entryType !== null ? normalizeAccountingEntryType($entryType) : null;
     $accountingSchema = workspaceAccountingSchemaCapabilities($pdo);
+    if (!empty($accountingSchema['weekly_recurrence_id'])) {
+        workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
+    }
     $dueDateSelect = !empty($accountingSchema['due_date'])
         ? 'ae.due_date'
         : 'NULL AS due_date';
@@ -7746,6 +7788,9 @@ function workspaceAccountingEntriesListRaw(
     $carryStopPeriodKeySelect = !empty($accountingSchema['carry_stop_period_key'])
         ? 'ae.carry_stop_period_key'
         : 'NULL AS carry_stop_period_key';
+    $weeklyRecurrenceIdSelect = !empty($accountingSchema['weekly_recurrence_id'])
+        ? 'ae.weekly_recurrence_id'
+        : 'NULL AS weekly_recurrence_id';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -7808,6 +7853,7 @@ function workspaceAccountingEntriesListRaw(
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
                 ' . $carryStopPeriodKeySelect . ',
+                ' . $weeklyRecurrenceIdSelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -7865,6 +7911,9 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     $carryStopPeriodKeySelect = !empty($accountingSchema['carry_stop_period_key'])
         ? 'ae.carry_stop_period_key'
         : 'NULL AS carry_stop_period_key';
+    $weeklyRecurrenceIdSelect = !empty($accountingSchema['weekly_recurrence_id'])
+        ? 'ae.weekly_recurrence_id'
+        : 'NULL AS weekly_recurrence_id';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -7927,6 +7976,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
                 ' . $sourceDueEntrySelect . ',
                 ' . $carrySourceEntrySelect . ',
                 ' . $carryStopPeriodKeySelect . ',
+                ' . $weeklyRecurrenceIdSelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -8761,6 +8811,9 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
     $sourceEntryId = (int) ($sourceEntry['id'] ?? 0);
     $entryType = normalizeAccountingEntryType((string) ($sourceEntry['entry_type'] ?? 'expense'));
     if ($workspaceId <= 0 || $sourceEntryId <= 0) {
+        return null;
+    }
+    if (((int) ($sourceEntry['is_weekly'] ?? 0)) === 1) {
         return null;
     }
 
@@ -9695,6 +9748,371 @@ function workspaceAccountingEntriesByType(array $entries): array
     }
 
     return $grouped;
+}
+
+function normalizeAccountingWeeklyDay($value): int
+{
+    $weekday = (int) $value;
+    return $weekday >= 1 && $weekday <= 7
+        ? $weekday
+        : (int) (new DateTimeImmutable('today'))->format('N');
+}
+
+function accountingWeeklyDayLabel($value, bool $compact = false): string
+{
+    $weekday = normalizeAccountingWeeklyDay($value);
+    $labels = $compact
+        ? [1 => 'Seg', 2 => 'Ter', 3 => 'Qua', 4 => 'Qui', 5 => 'Sex', 6 => 'Sáb', 7 => 'Dom']
+        : [1 => 'Segunda', 2 => 'Terça', 3 => 'Quarta', 4 => 'Quinta', 5 => 'Sexta', 6 => 'Sábado', 7 => 'Domingo'];
+    return $labels[$weekday];
+}
+
+function workspaceAccountingWeeklyAnchorDate(int $workspaceId, string $periodKey, $weekdayInput): string
+{
+    $weekday = normalizeAccountingWeeklyDay($weekdayInput);
+    $range = accountingPeriodRangeForCycleCloseDay($periodKey, workspaceAccountingCycleCloseDay($workspaceId));
+    $startDate = new DateTimeImmutable((string) ($range['start_date'] ?? accountingPeriodStartDate($periodKey)));
+    $endDate = new DateTimeImmutable((string) ($range['end_date'] ?? $startDate->modify('+1 month -1 day')->format('Y-m-d')));
+    $today = new DateTimeImmutable('today');
+    $baseDate = $today >= $startDate && $today <= $endDate ? $today : $startDate;
+    $offset = ($weekday - (int) $baseDate->format('N') + 7) % 7;
+    return $baseDate->modify('+' . $offset . ' days')->format('Y-m-d');
+}
+
+function workspaceAccountingCreateWeeklyOccurrence(PDO $pdo, array $recurrence, string $dueDate): int
+{
+    $workspaceId = (int) ($recurrence['workspace_id'] ?? 0);
+    $recurrenceId = (int) ($recurrence['id'] ?? 0);
+    $entryType = normalizeAccountingEntryType((string) ($recurrence['entry_type'] ?? 'expense'));
+    $label = normalizeAccountingEntryLabel((string) ($recurrence['label'] ?? ''));
+    $amountCents = max(0, normalizeDueAmountCents($recurrence['amount_cents'] ?? null) ?? 0);
+    $dueDate = dueDateForStorage($dueDate);
+    if ($workspaceId <= 0 || $recurrenceId <= 0 || $label === '' || $dueDate === null) {
+        throw new RuntimeException('Recorrência semanal inválida.');
+    }
+
+    $periodKey = accountingPeriodKeyFromDateWithCycleCloseDay($dueDate, workspaceAccountingCycleCloseDay($workspaceId));
+    if ($periodKey === null) {
+        throw new RuntimeException('Data semanal inválida.');
+    }
+
+    $existingStmt = $pdo->prepare(
+        'SELECT id
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id = :weekly_recurrence_id
+           AND due_date = :due_date
+         LIMIT 1'
+    );
+    $existingStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':due_date' => $dueDate,
+    ]);
+    $existingId = (int) $existingStmt->fetchColumn();
+    if ($existingId > 0) {
+        return $existingId;
+    }
+
+    $createdAt = nowIso();
+    $stmt = $pdo->prepare(
+        'INSERT INTO workspace_accounting_entries (
+            workspace_id, period_key, entry_type, label, amount_cents, total_amount_cents,
+            is_installment, is_monthly, monthly_mode, paid_amount_cents,
+            installment_number, installment_total, is_settled, settled_at, due_date,
+            weekly_recurrence_id, sort_order, created_by, created_at, updated_at
+        ) VALUES (
+            :workspace_id, :period_key, :entry_type, :label, :amount_cents, :total_amount_cents,
+            0, 0, :monthly_mode, 0,
+            0, 0, 0, NULL, :due_date,
+            :weekly_recurrence_id, :sort_order, :created_by, :created_at, :updated_at
+        )'
+    );
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':period_key', $periodKey, PDO::PARAM_STR);
+    $stmt->bindValue(':entry_type', $entryType, PDO::PARAM_STR);
+    $stmt->bindValue(':label', $label, PDO::PARAM_STR);
+    $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':total_amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':monthly_mode', 'uniform', PDO::PARAM_STR);
+    $stmt->bindValue(':due_date', $dueDate, PDO::PARAM_STR);
+    $stmt->bindValue(':weekly_recurrence_id', $recurrenceId, PDO::PARAM_INT);
+    $stmt->bindValue(':sort_order', workspaceAccountingNextSortOrder($pdo, $workspaceId, $periodKey, $entryType), PDO::PARAM_INT);
+    if (isset($recurrence['created_by']) && (int) $recurrence['created_by'] > 0) {
+        $stmt->bindValue(':created_by', (int) $recurrence['created_by'], PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':created_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':created_at', $createdAt, PDO::PARAM_STR);
+    $stmt->bindValue(':updated_at', $createdAt, PDO::PARAM_STR);
+    $stmt->execute();
+    $existingStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':due_date' => $dueDate,
+    ]);
+    return (int) $existingStmt->fetchColumn();
+}
+
+function workspaceAccountingEnsureWeeklyEntriesForPeriod(PDO $pdo, int $workspaceId, string $periodKey): void
+{
+    if ($workspaceId <= 0 || !tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id')) {
+        return;
+    }
+
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $range = accountingPeriodRangeForCycleCloseDay($periodKey, workspaceAccountingCycleCloseDay($workspaceId));
+    $startDate = dueDateForStorage((string) ($range['start_date'] ?? ''));
+    $endDate = dueDateForStorage((string) ($range['end_date'] ?? ''));
+    if ($startDate === null || $endDate === null) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT id, workspace_id, entry_type, label, amount_cents, weekday, anchor_date, end_date,
+                created_by, created_at, updated_at
+         FROM workspace_accounting_weekly_recurrences
+         WHERE workspace_id = :workspace_id
+           AND anchor_date <= :end_date
+           AND (end_date IS NULL OR end_date >= :start_date)
+         ORDER BY id ASC'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':start_date' => $startDate,
+        ':end_date' => $endDate,
+    ]);
+
+    foreach ($stmt->fetchAll() ?: [] as $recurrence) {
+        $anchorDate = dueDateForStorage((string) ($recurrence['anchor_date'] ?? ''));
+        $recurrenceEndDate = dueDateForStorage((string) ($recurrence['end_date'] ?? ''));
+        if ($anchorDate === null) {
+            continue;
+        }
+
+        $cursor = new DateTimeImmutable(max($startDate, $anchorDate));
+        $weekday = normalizeAccountingWeeklyDay($recurrence['weekday'] ?? null);
+        $offset = ($weekday - (int) $cursor->format('N') + 7) % 7;
+        $cursor = $cursor->modify('+' . $offset . ' days');
+        $limitDate = $recurrenceEndDate !== null && $recurrenceEndDate < $endDate ? $recurrenceEndDate : $endDate;
+        while ($cursor->format('Y-m-d') <= $limitDate) {
+            workspaceAccountingCreateWeeklyOccurrence($pdo, $recurrence, $cursor->format('Y-m-d'));
+            $cursor = $cursor->modify('+7 days');
+        }
+    }
+}
+
+function createWorkspaceAccountingWeeklyRecurrence(
+    PDO $pdo,
+    int $workspaceId,
+    string $periodKey,
+    string $entryType,
+    string $label,
+    $amountInput,
+    $weekdayInput,
+    ?int $createdBy = null
+): int {
+    ensureWorkspaceAccountingSchema($pdo);
+    $label = normalizeAccountingEntryLabel($label);
+    $amountCents = normalizeDueAmountCents($amountInput);
+    if ($workspaceId <= 0 || $label === '' || $amountCents === null) {
+        throw new RuntimeException('Informe os dados da recorrência semanal.');
+    }
+
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $weekday = normalizeAccountingWeeklyDay($weekdayInput);
+    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday);
+    $anchorPeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay(
+        $anchorDate,
+        workspaceAccountingCycleCloseDay($workspaceId)
+    ) ?? $periodKey;
+    $createdAt = nowIso();
+    $startedTransaction = !$pdo->inTransaction();
+    if ($startedTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+    $recurrenceInsertSql = 'INSERT INTO workspace_accounting_weekly_recurrences (
+            workspace_id, entry_type, label, amount_cents, weekday, anchor_date,
+            end_date, created_by, created_at, updated_at
+        ) VALUES (
+            :workspace_id, :entry_type, :label, :amount_cents, :weekday, :anchor_date,
+            NULL, :created_by, :created_at, :updated_at
+        )';
+    if (dbDriverName($pdo) === 'pgsql') {
+        $recurrenceInsertSql .= ' RETURNING id';
+    }
+    $stmt = $pdo->prepare($recurrenceInsertSql);
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':entry_type', normalizeAccountingEntryType($entryType), PDO::PARAM_STR);
+    $stmt->bindValue(':label', $label, PDO::PARAM_STR);
+    $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':weekday', $weekday, PDO::PARAM_INT);
+    $stmt->bindValue(':anchor_date', $anchorDate, PDO::PARAM_STR);
+    if ($createdBy !== null && $createdBy > 0) {
+        $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':created_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':created_at', $createdAt, PDO::PARAM_STR);
+    $stmt->bindValue(':updated_at', $createdAt, PDO::PARAM_STR);
+    $stmt->execute();
+    $recurrenceId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
+
+    workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $anchorPeriodKey);
+    $entryStmt = $pdo->prepare(
+        'SELECT id
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id = :weekly_recurrence_id
+           AND due_date >= :anchor_date
+         ORDER BY due_date ASC, id ASC
+         LIMIT 1'
+    );
+    $entryStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':anchor_date' => $anchorDate,
+    ]);
+    $entryId = (int) $entryStmt->fetchColumn();
+    if ($entryId <= 0) {
+        throw new RuntimeException('Não foi possível gerar a recorrência semanal.');
+    }
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+
+        return $entryId;
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $e;
+    }
+}
+
+function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
+    PDO $pdo,
+    int $workspaceId,
+    int $entryId,
+    string $label,
+    $amountInput,
+    int $isSettled
+): void {
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    $recurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
+    $dueDate = dueDateForStorage((string) ($entry['due_date'] ?? ''));
+    $label = normalizeAccountingEntryLabel($label);
+    $amountCents = normalizeDueAmountCents($amountInput);
+    if ($entry === null || $recurrenceId <= 0 || $dueDate === null || $label === '' || $amountCents === null) {
+        throw new RuntimeException('Recorrência semanal não encontrada.');
+    }
+
+    $updatedAt = nowIso();
+    $recurrenceStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_weekly_recurrences
+         SET label = :label, amount_cents = :amount_cents, updated_at = :updated_at
+         WHERE id = :id AND workspace_id = :workspace_id'
+    );
+    $recurrenceStmt->execute([
+        ':label' => $label,
+        ':amount_cents' => $amountCents,
+        ':updated_at' => $updatedAt,
+        ':id' => $recurrenceId,
+        ':workspace_id' => $workspaceId,
+    ]);
+
+    $futureStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET label = :label, amount_cents = :amount_cents, total_amount_cents = :amount_cents, updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id = :weekly_recurrence_id
+           AND due_date >= :due_date'
+    );
+    $futureStmt->execute([
+        ':label' => $label,
+        ':amount_cents' => $amountCents,
+        ':updated_at' => $updatedAt,
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':due_date' => $dueDate,
+    ]);
+
+    $statusStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_settled = :is_settled, settled_at = :settled_at, updated_at = :updated_at
+         WHERE id = :id AND workspace_id = :workspace_id'
+    );
+    $statusStmt->execute([
+        ':is_settled' => $isSettled === 1 ? 1 : 0,
+        ':settled_at' => resolveAccountingSettledAtValue($isSettled === 1 ? 1 : 0, (string) ($entry['settled_at'] ?? '')),
+        ':updated_at' => $updatedAt,
+        ':id' => $entryId,
+        ':workspace_id' => $workspaceId,
+    ]);
+}
+
+function stopWorkspaceAccountingWeeklyRecurrenceFromEntry(PDO $pdo, int $workspaceId, array $entry): void
+{
+    $recurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
+    $dueDate = dueDateForStorage((string) ($entry['due_date'] ?? ''));
+    if ($recurrenceId <= 0 || $dueDate === null) {
+        throw new RuntimeException('Recorrência semanal não encontrada.');
+    }
+
+    $endDate = (new DateTimeImmutable($dueDate))->modify('-1 day')->format('Y-m-d');
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_weekly_recurrences
+         SET end_date = :end_date, updated_at = :updated_at
+         WHERE id = :id AND workspace_id = :workspace_id'
+    );
+    $stmt->execute([
+        ':end_date' => $endDate,
+        ':updated_at' => nowIso(),
+        ':id' => $recurrenceId,
+        ':workspace_id' => $workspaceId,
+    ]);
+
+    $entryStmt = $pdo->prepare(
+        'SELECT id
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id = :weekly_recurrence_id
+           AND due_date >= :due_date
+         ORDER BY due_date DESC, id DESC'
+    );
+    $entryStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':due_date' => $dueDate,
+    ]);
+    foreach ($entryStmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $futureEntryId) {
+        workspaceAccountingDeleteEntryChain($pdo, $workspaceId, (int) $futureEntryId, true);
+    }
+
+    $remainingStmt = $pdo->prepare(
+        'SELECT COUNT(*)
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id = :weekly_recurrence_id'
+    );
+    $remainingStmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':weekly_recurrence_id' => $recurrenceId,
+    ]);
+    if ((int) $remainingStmt->fetchColumn() === 0) {
+        $deleteRecurrenceStmt = $pdo->prepare(
+            'DELETE FROM workspace_accounting_weekly_recurrences
+             WHERE id = :id AND workspace_id = :workspace_id'
+        );
+        $deleteRecurrenceStmt->execute([
+            ':id' => $recurrenceId,
+            ':workspace_id' => $workspaceId,
+        ]);
+    }
 }
 
 function createWorkspaceAccountingMonthlyDue(
@@ -10718,7 +11136,10 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
     try {
         $carrySourceEntryId = max(0, (int) ($existingEntry['carry_source_entry_id'] ?? 0));
         $sourceDueEntryId = max(0, (int) ($existingEntry['source_due_entry_id'] ?? 0));
-        if ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
+        $weeklyRecurrenceId = max(0, (int) ($existingEntry['weekly_recurrence_id'] ?? 0));
+        if ($weeklyRecurrenceId > 0) {
+            stopWorkspaceAccountingWeeklyRecurrenceFromEntry($pdo, $workspaceId, $existingEntry);
+        } elseif ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
             $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
             workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
             workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, true);
@@ -10824,10 +11245,12 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
         $paidAmountCents = normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0;
 
         if ($entryType === 'income') {
+            $receivedCents = min(
+                $amountCents,
+                max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
+            );
             $incomeTotal += $amountCents;
-            if ($isSettled) {
-                $incomeReceived += $amountCents;
-            }
+            $incomeReceived += $isSettled ? $amountCents : $receivedCents;
         } else {
             if ($isMonthlyGoal) {
                 $expenseTotal += $paidAmountCents;
@@ -10840,12 +11263,7 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
             );
             $expenseTotal += $amountCents;
             $expenseDiscount += $discountCents;
-            if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
-                $expensePaid += min(
-                    max(0, $amountCents - $discountCents),
-                    max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0)
-                );
-            } elseif ($isSettled) {
+            if ($isSettled) {
                 $expensePaid += max(0, $amountCents - $discountCents);
             }
         }
@@ -10965,10 +11383,12 @@ function workspaceAccountingNextIncomeProjectionSummary(
                     max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
                 );
                 $amountCents = max(0, $amountCents - $discountCents);
-                if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
-                    $subitemPaidCents = max(0, normalizeDueAmountCents($entry['subitem_paid_cents'] ?? null) ?? 0);
-                    $amountCents = max(0, $amountCents - $subitemPaidCents);
-                }
+            } else {
+                $receivedCents = min(
+                    $amountCents,
+                    max(0, normalizeDueAmountCents($entry['discount_total_cents'] ?? null) ?? 0)
+                );
+                $amountCents = max(0, $amountCents - $receivedCents);
             }
             if ($amountCents <= 0) {
                 continue;

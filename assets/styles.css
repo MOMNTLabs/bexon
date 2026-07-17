@@ -15423,9 +15423,13 @@ select option:checked,
     flex-wrap: wrap;
 }
 
-.accounting-create-form .accounting-installment-fields,
-.accounting-create-form .accounting-monthly-fields {
+.accounting-create-form .accounting-installment-fields {
     flex-basis: 100%;
+}
+
+.accounting-create-form .accounting-monthly-fields {
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .accounting-task-link-fields {
@@ -15672,6 +15676,12 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     color: #2f6a46;
 }
 
+.accounting-entry-badge.is-weekly {
+    border-color: rgba(61, 120, 187, 0.38);
+    background: rgba(121, 181, 241, 0.1);
+    color: #315f8d;
+}
+
 .accounting-entry-badge.is-due-date {
     border-color: rgba(61, 120, 187, 0.42);
     background: rgba(121, 181, 241, 0.12);
@@ -15852,6 +15862,10 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     background: linear-gradient(90deg, rgba(231, 177, 72, 0.72) 0%, rgba(205, 132, 25, 0.82) 100%);
 }
 
+.accounting-entry-discount-payment-progress.is-income-progress .accounting-entry-discount-payment-progress-fill {
+    background: linear-gradient(90deg, rgba(126, 190, 157, 0.68) 0%, rgba(70, 145, 108, 0.78) 100%);
+}
+
 .accounting-entry-discount-payment-progress-values {
     position: relative;
     z-index: 1;
@@ -15875,6 +15889,11 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-entry-discount-payment-progress.is-complete {
     border-color: rgba(210, 171, 84, 0.34);
     background: rgba(246, 232, 191, 0.78);
+}
+
+.accounting-entry-discount-payment-progress.is-income-progress.is-complete {
+    border-color: rgba(79, 148, 119, 0.3);
+    background: rgba(226, 242, 233, 0.78);
 }
 
 .accounting-entry-form .accounting-input-amount {
@@ -16170,6 +16189,16 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     border-radius: 8px;
     background: rgba(246, 250, 254, 0.92);
     box-shadow: inset 0 0 0 1px rgba(140, 181, 223, 0.18);
+}
+
+.accounting-entry-discounts-panel.is-receipts {
+    background: rgba(246, 251, 248, 0.94);
+    box-shadow: inset 0 0 0 1px rgba(79, 148, 119, 0.17);
+}
+
+.accounting-entry-discounts-panel.is-receipts .accounting-entry-discounts-head,
+.accounting-entry-discounts-panel.is-receipts .accounting-entry-discount-row {
+    color: #47745c;
 }
 
 .accounting-entry-row.is-subitems-open .accounting-entry-subitems-panel,

@@ -1463,7 +1463,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     <?php if (!empty($canManageWorkspace)): ?>
                         <details class="accounting-cycle-settings">
                             <summary class="accounting-cycle-settings-trigger">
-                                <span><?= $accountingCycleCloseDay > 0 ? ('Fecha ' . str_pad((string) $accountingCycleCloseDay, 2, '0', STR_PAD_LEFT)) : 'CalendÃ¡rio' ?></span>
+                                <span><?= $accountingCycleCloseDay > 0 ? ('Fecha ' . str_pad((string) $accountingCycleCloseDay, 2, '0', STR_PAD_LEFT)) : 'Calend&aacute;rio' ?></span>
                             </summary>
                             <form method="post" class="accounting-cycle-settings-panel">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -1474,7 +1474,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     class="accounting-installment-select accounting-cycle-settings-select"
                                     aria-label="Dia de fechamento financeiro"
                                 >
-                                    <option value="0" <?= (int) ($accountingCycleCloseDay ?? 0) === 0 ? 'selected' : '' ?>>CalendÃ¡rio</option>
+                                    <option value="0" <?= (int) ($accountingCycleCloseDay ?? 0) === 0 ? 'selected' : '' ?>>Calend&aacute;rio</option>
                                     <?php for ($accountingCloseDayOption = 1; $accountingCloseDayOption <= 28; $accountingCloseDayOption++): ?>
                                         <option
                                             value="<?= e((string) $accountingCloseDayOption) ?>"

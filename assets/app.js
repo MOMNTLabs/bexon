@@ -7050,6 +7050,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const typeSelect = form.querySelector("[data-accounting-type-select]");
     const installmentToggle = form.querySelector("[data-accounting-installment-toggle]");
     const monthlyToggle = form.querySelector("[data-accounting-monthly-toggle]");
+    const weeklyToggle = form.querySelector("[data-accounting-weekly-toggle]");
     const rows = getAccountingCreateSubitemRows(form);
     const hasSubitems = rows.length > 0;
     const payload = [];
@@ -7084,6 +7085,10 @@ window.addEventListener("DOMContentLoaded", () => {
     if (monthlyToggle instanceof HTMLInputElement) {
       monthlyToggle.checked = hasSubitems ? false : monthlyToggle.checked;
       monthlyToggle.disabled = hasSubitems || monthlyToggle.disabled;
+    }
+    if (weeklyToggle instanceof HTMLInputElement) {
+      weeklyToggle.checked = hasSubitems ? false : weeklyToggle.checked;
+      weeklyToggle.disabled = hasSubitems || weeklyToggle.disabled;
     }
     if (typeSelect instanceof HTMLSelectElement) {
       if (hasSubitems) {
@@ -7162,6 +7167,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const monthlyModeField = form.querySelector("[data-accounting-monthly-mode]");
     const monthlyDayFieldWrap = form.querySelector("[data-accounting-monthly-day-field]");
     const monthlyDayField = form.querySelector("[data-accounting-monthly-day]");
+    const weeklyToggle = form.querySelector("[data-accounting-weekly-toggle]");
+    const weeklyFields = form.querySelector("[data-accounting-weekly-fields]");
+    const weeklyDayField = form.querySelector("[data-accounting-weekly-day]");
     const settledCheck = form.querySelector("[data-accounting-settled-check]");
     const typeSelect = form.querySelector("[data-accounting-type-select]");
     const automationTypeField = form.querySelector("[data-accounting-automation-type]");
@@ -7184,6 +7192,12 @@ window.addEventListener("DOMContentLoaded", () => {
           monthlyToggle.checked = false;
         }
       }
+      if (weeklyToggle instanceof HTMLInputElement) {
+        weeklyToggle.checked = typeSelect.value === "weekly";
+        if (isCompletedTasksType) {
+          weeklyToggle.checked = false;
+        }
+      }
       if (isCompletedTasksType) {
         installmentToggle.checked = false;
       }
@@ -7203,6 +7217,7 @@ window.addEventListener("DOMContentLoaded", () => {
         automationTypeField.value === "completed_tasks") ||
       (typeSelect instanceof HTMLSelectElement && typeSelect.value === "completed_tasks");
     const isMonthlyDue = monthlyToggle instanceof HTMLInputElement && monthlyToggle.checked;
+    const isWeeklyDue = weeklyToggle instanceof HTMLInputElement && weeklyToggle.checked;
     const monthlyMode =
       (monthlyModeField instanceof HTMLSelectElement ||
         monthlyModeField instanceof HTMLInputElement) &&
@@ -7211,8 +7226,8 @@ window.addEventListener("DOMContentLoaded", () => {
         : "uniform";
     const isMonthlyGoal = isMonthlyDue && monthlyMode === "goal";
     if (monthlyToggle instanceof HTMLInputElement) {
-      installmentToggle.disabled = isMonthlyDue || isCompletedTasks;
-      if (isMonthlyDue || isCompletedTasks) {
+      installmentToggle.disabled = isMonthlyDue || isWeeklyDue || isCompletedTasks;
+      if (isMonthlyDue || isWeeklyDue || isCompletedTasks) {
         installmentToggle.checked = false;
       }
     }
@@ -7249,6 +7264,17 @@ window.addEventListener("DOMContentLoaded", () => {
         monthlyDayField.value = String(new Date().getDate());
       }
     }
+    if (weeklyFields instanceof HTMLElement) {
+      weeklyFields.hidden = !isWeeklyDue;
+    }
+    if (weeklyDayField instanceof HTMLSelectElement) {
+      weeklyDayField.disabled = !isWeeklyDue;
+      weeklyDayField.required = isWeeklyDue;
+      if (isWeeklyDue && !String(weeklyDayField.value || "").trim()) {
+        const browserWeekday = new Date().getDay();
+        weeklyDayField.value = String(browserWeekday === 0 ? 7 : browserWeekday);
+      }
+    }
     if (settledCheck instanceof HTMLElement) {
       settledCheck.hidden = isMonthlyGoal;
       const settledField = settledCheck.querySelector('input[name="is_settled"]');
@@ -7260,9 +7286,15 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
     if (monthlyToggle instanceof HTMLInputElement) {
-      monthlyToggle.disabled = isInstallment || isCompletedTasks;
-      if (isInstallment || isCompletedTasks) {
+      monthlyToggle.disabled = isInstallment || isWeeklyDue || isCompletedTasks;
+      if (isInstallment || isWeeklyDue || isCompletedTasks) {
         monthlyToggle.checked = false;
+      }
+    }
+    if (weeklyToggle instanceof HTMLInputElement) {
+      weeklyToggle.disabled = isInstallment || isMonthlyDue || isCompletedTasks;
+      if (isInstallment || isMonthlyDue || isCompletedTasks) {
+        weeklyToggle.checked = false;
       }
     }
     if (typeSelect instanceof HTMLSelectElement) {
@@ -7273,6 +7305,8 @@ window.addEventListener("DOMContentLoaded", () => {
           ? "installment"
           : isMonthlyGoal
             ? "goal"
+            : isWeeklyDue
+              ? "weekly"
             : isMonthlyDue
               ? "monthly"
               : "single";
@@ -7796,6 +7830,9 @@ window.addEventListener("DOMContentLoaded", () => {
     return true;
   };
 
+  const isAccountingReceiptPanel = (panel) =>
+    panel instanceof HTMLElement && panel.dataset.accountingAdjustmentKind === "receipt";
+
   const syncAccountingDiscountConfirmForm = (panel) => {
     if (!(panel instanceof HTMLElement)) return false;
 
@@ -7900,11 +7937,18 @@ window.addEventListener("DOMContentLoaded", () => {
           : 0),
       0
     );
+    const isReceipt = isAccountingReceiptPanel(panel);
 
     if (amountCents === null || amountCents <= 0) {
-      amountField.setCustomValidity("Informe um valor de abatimento válido.");
+      amountField.setCustomValidity(
+        isReceipt ? "Informe um valor recebido válido." : "Informe um valor de abatimento válido."
+      );
     } else if (amountCents + pendingCents > remainingCents) {
-      amountField.setCustomValidity("O abatimento não pode ser maior que o valor restante.");
+      amountField.setCustomValidity(
+        isReceipt
+          ? "O recebimento não pode ser maior que o valor restante."
+          : "O abatimento não pode ser maior que o valor restante."
+      );
     }
     if (typeof form.reportValidity === "function" && !form.reportValidity()) {
       amountField.setCustomValidity("");
@@ -7920,12 +7964,15 @@ window.addEventListener("DOMContentLoaded", () => {
     row.dataset.discountCents = String(amountCents);
 
     const amountLabel = document.createElement("span");
-    amountLabel.textContent = `- ${formatAccountingCentsToInputValue(amountCents)}`;
+    amountLabel.textContent = `${isReceipt ? "+" : "-"} ${formatAccountingCentsToInputValue(amountCents)}`;
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "accounting-entry-subitem-delete";
     removeButton.dataset.accountingPendingDiscountRemove = "1";
-    removeButton.setAttribute("aria-label", "Remover novo abatimento");
+    removeButton.setAttribute(
+      "aria-label",
+      isReceipt ? "Remover novo recebimento" : "Remover novo abatimento"
+    );
     removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
 
     row.append(amountLabel, removeButton);
@@ -20121,7 +20168,9 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       void submitAccountingActionForm(form, {
         showSuccess: false,
-        fallbackError: "Falha ao confirmar abatimentos.",
+        fallbackError: isAccountingReceiptPanel(panel)
+          ? "Falha ao confirmar recebimentos."
+          : "Falha ao confirmar abatimentos.",
         refresh: true,
       }).catch(() => {});
       return;
@@ -20129,9 +20178,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (form.matches(".accounting-entry-discount-delete-form")) {
       event.preventDefault();
+      const panel = form.closest(".accounting-entry-discounts-panel");
       void submitAccountingActionForm(form, {
         showSuccess: false,
-        fallbackError: "Falha ao remover abatimento.",
+        fallbackError: isAccountingReceiptPanel(panel)
+          ? "Falha ao remover recebimento."
+          : "Falha ao remover abatimento.",
         refresh: true,
       }).catch(() => {});
       return;
