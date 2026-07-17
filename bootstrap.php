@@ -7867,6 +7867,11 @@ function workspaceAccountingEntriesListRaw(
     $entryType = $entryType !== null ? normalizeAccountingEntryType($entryType) : null;
     $accountingSchema = workspaceAccountingSchemaCapabilities($pdo);
     if (!empty($accountingSchema['weekly_recurrence_id'])) {
+        workspaceReassignAccountingWeeklyEntriesForCycleCloseDay(
+            $pdo,
+            $workspaceId,
+            workspaceAccountingCycleCloseDay($workspaceId)
+        );
         workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
     }
     $dueDateSelect = !empty($accountingSchema['due_date'])
@@ -12966,24 +12971,14 @@ function workspaceUpdateSidebarToolsConfiguration(PDO $pdo, int $workspaceId, ar
     return workspaceSidebarToolsConfig($workspaceId, $workspace);
 }
 
-function workspaceReassignAccountingDatedEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
+function workspaceReassignAccountingEntryRowsForCycleCloseDay(
+    PDO $pdo,
+    int $workspaceId,
+    int $cycleCloseDay,
+    array $rows
+): void
 {
-    if ($workspaceId <= 0) {
-        return;
-    }
-
-    workspaceAccountingSchemaCapabilities($pdo);
-    $stmt = $pdo->prepare(
-        'SELECT id, period_key, due_date
-         FROM workspace_accounting_entries
-         WHERE workspace_id = :workspace_id
-           AND (is_monthly = 1 OR weekly_recurrence_id IS NOT NULL)
-           AND due_date IS NOT NULL
-         ORDER BY id ASC'
-    );
-    $stmt->execute([':workspace_id' => $workspaceId]);
-    $rows = $stmt->fetchAll() ?: [];
-    if (!$rows) {
+    if ($workspaceId <= 0 || !$rows) {
         return;
     }
 
@@ -13014,6 +13009,53 @@ function workspaceReassignAccountingDatedEntriesForCycleCloseDay(PDO $pdo, int $
             ':workspace_id' => $workspaceId,
         ]);
     }
+}
+
+function workspaceReassignAccountingWeeklyEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
+{
+    if ($workspaceId <= 0 || !tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id')) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT id, period_key, due_date
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND weekly_recurrence_id IS NOT NULL
+           AND due_date IS NOT NULL
+         ORDER BY id ASC'
+    );
+    $stmt->execute([':workspace_id' => $workspaceId]);
+    workspaceReassignAccountingEntryRowsForCycleCloseDay(
+        $pdo,
+        $workspaceId,
+        $cycleCloseDay,
+        $stmt->fetchAll() ?: []
+    );
+}
+
+function workspaceReassignAccountingDatedEntriesForCycleCloseDay(PDO $pdo, int $workspaceId, int $cycleCloseDay): void
+{
+    if ($workspaceId <= 0) {
+        return;
+    }
+
+    workspaceAccountingSchemaCapabilities($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT id, period_key, due_date
+         FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND (is_monthly = 1 OR weekly_recurrence_id IS NOT NULL)
+           AND due_date IS NOT NULL
+         ORDER BY id ASC'
+    );
+    $stmt->execute([':workspace_id' => $workspaceId]);
+    workspaceReassignAccountingEntryRowsForCycleCloseDay(
+        $pdo,
+        $workspaceId,
+        $cycleCloseDay,
+        $stmt->fetchAll() ?: []
+    );
 }
 
 function workspaceUpdateAccountingCycleCloseDay(PDO $pdo, int $workspaceId, $cycleCloseDay): int
