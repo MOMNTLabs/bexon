@@ -15458,7 +15458,7 @@ select option:checked,
 
 .accounting-create-subitem-row {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) 112px auto;
+    grid-template-columns: minmax(120px, 1fr) 112px 142px auto;
     align-items: center;
     gap: 6px;
 }
@@ -16654,7 +16654,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-entry-subitem-form,
 .accounting-entry-subitem-add-form {
     display: grid;
-    grid-template-columns: minmax(100px, 1fr) 112px auto;
+    grid-template-columns: minmax(100px, 1fr) 112px 142px auto;
     align-items: center;
     gap: 6px;
     margin: 0;

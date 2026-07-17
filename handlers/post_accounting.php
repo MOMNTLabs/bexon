@@ -264,7 +264,10 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                             $entryId,
                             (string) ($subitem['label'] ?? ''),
                             $subitem['amount_input'] ?? null,
-                            (int) ($authUser['id'] ?? 0)
+                            (int) ($authUser['id'] ?? 0),
+                            0,
+                            true,
+                            $subitem['due_date'] ?? null
                         );
                     }
                 }
@@ -385,6 +388,14 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         (string) ($_POST['monthly_mode'] ?? 'uniform'),
                         $automationConfig,
                         $_POST['recurrence_start_period'] ?? null
+                    );
+                }
+                if (!in_array($targetTypeChoice, ['monthly', 'weekly'], true)) {
+                    updateWorkspaceAccountingEntryDate(
+                        $pdo,
+                        $workspaceId,
+                        $entryId,
+                        $_POST['entry_date'] ?? null
                     );
                 }
                 if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
@@ -562,7 +573,10 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $entryId,
                     (string) ($_POST['subitem_label'] ?? ''),
                     $_POST['subitem_amount_value'] ?? null,
-                    (int) ($authUser['id'] ?? 0)
+                    (int) ($authUser['id'] ?? 0),
+                    0,
+                    true,
+                    $_POST['subitem_date'] ?? null
                 );
 
                 if (requestExpectsJson()) {
@@ -704,7 +718,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     $_POST['subitem_amount_value'] ?? null,
                     array_key_exists('is_settled', $_POST)
                         ? (((string) ($_POST['is_settled'] ?? '0')) === '1' ? 1 : 0)
-                        : null
+                        : null,
+                    $_POST['subitem_date'] ?? null
                 );
 
                 if (requestExpectsJson()) {
@@ -762,7 +777,9 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                             (string) ($subitem['label'] ?? ''),
                             $subitem['amount_input'] ?? null,
                             (int) ($authUser['id'] ?? 0),
-                            (int) ($subitem['is_settled'] ?? 0)
+                            (int) ($subitem['is_settled'] ?? 0),
+                            true,
+                            $subitem['due_date'] ?? null
                         );
                     }
 

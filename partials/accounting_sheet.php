@@ -555,6 +555,7 @@
                                     <input type="hidden" name="entry_type" value="<?= e($entryType) ?>">
                                     <input type="hidden" name="label" value="<?= e($occurrenceLabel) ?>">
                                     <input type="hidden" name="amount_value" value="<?= e($occurrenceAmount) ?>">
+                                    <input type="hidden" name="entry_date" value="<?= e((string) ($occurrence['due_date'] ?? '')) ?>">
                                     <?php if (!$isWeekly && $occurrenceIsMonthly): ?>
                                         <input type="hidden" name="is_monthly_due" value="1">
                                         <input type="hidden" name="monthly_mode" value="<?= e($occurrenceMonthlyMode) ?>">
@@ -915,6 +916,7 @@
                                                 <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                                 <input type="hidden" name="label" value="<?= e($accountingEntryLabel) ?>">
                                                 <input type="hidden" name="amount_value" value="<?= e($accountingEntryAmountInput) ?>">
+                                                <input type="hidden" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>">
                                                 <input type="hidden" name="is_installment" value="<?= $accountingEntryIsInstallment ? '1' : '0' ?>">
                                                 <input type="hidden" name="installment_progress" value="<?= e($accountingEntryInstallmentProgress) ?>">
                                                 <input type="hidden" name="total_amount_value" value="<?= e($accountingEntryTotalAmountInput) ?>">
@@ -967,6 +969,10 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
+                                            <label class="accounting-entry-date-field" title="Organize esta conta na semana em que ela ocorreu.">
+                                                <span>Data</span>
+                                                <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da conta">
+                                            </label>
                                             <?= $renderAccountingEntryTypeControls(
                                                 'expense',
                                                 $accountingEntryTypeChoice,
@@ -1056,6 +1062,7 @@
                                                             $accountingSubitemId = (int) ($accountingSubitem['id'] ?? 0);
                                                             $accountingSubitemLabel = (string) ($accountingSubitem['label'] ?? '');
                                                             $accountingSubitemAmountInput = (string) ($accountingSubitem['amount_input'] ?? 'R$ 0,00');
+                                                            $accountingSubitemDate = (string) ($accountingSubitem['due_date'] ?? $accountingEntry['due_date'] ?? '');
                                                             ?>
                                                             <div class="accounting-entry-subitem-row" data-accounting-subitem-row>
                                                                 <button
@@ -1092,6 +1099,7 @@
                                                                         autocomplete="off"
                                                                         required
                                                                     >
+                                                                    <input type="date" name="subitem_date" value="<?= e($accountingSubitemDate) ?>" class="accounting-installment-select" aria-label="Data do subitem">
                                                                     <div class="accounting-entry-subitem-editor-actions">
                                                                         <button type="submit" class="btn btn-mini">Confirmar</button>
                                                                         <button type="button" class="btn btn-mini btn-ghost" data-accounting-subitem-cancel>Cancelar</button>
@@ -1133,6 +1141,7 @@
                                                         autocomplete="off"
                                                         required
                                                     >
+                                                    <input type="date" name="subitem_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data do subitem">
                                                     <button type="submit" class="btn btn-mini">+</button>
                                                 </form>
                                                 <form method="post" class="accounting-entry-subitem-statuses-form" data-accounting-subitem-statuses-form>
@@ -1595,6 +1604,7 @@
                                             <input type="hidden" name="entry_type" value="income">
                                             <input type="hidden" name="label" value="<?= e($accountingEntryLabel) ?>">
                                             <input type="hidden" name="amount_value" value="<?= e($accountingEntryIsTaskLinked ? $accountingEntryTaskLinkRateInput : $accountingEntryAmountInput) ?>">
+                                            <input type="hidden" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>">
                                             <input type="hidden" name="is_installment" value="<?= $accountingEntryIsInstallment ? '1' : '0' ?>">
                                             <input type="hidden" name="installment_progress" value="<?= e($accountingEntryInstallmentProgress) ?>">
                                             <input type="hidden" name="total_amount_value" value="<?= e($accountingEntryTotalAmountInput) ?>">
@@ -1655,6 +1665,10 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
+                                            <label class="accounting-entry-date-field" title="Organize esta entrada na semana em que ela ocorreu.">
+                                                <span>Data</span>
+                                                <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da entrada">
+                                            </label>
                                             <?= $renderAccountingEntryTypeControls(
                                                 'income',
                                                 $accountingEntryTypeChoice,
@@ -1747,6 +1761,7 @@
                                                         $accountingSubitemId = (int) ($accountingSubitem['id'] ?? 0);
                                                         $accountingSubitemLabel = (string) ($accountingSubitem['label'] ?? '');
                                                         $accountingSubitemAmountInput = (string) ($accountingSubitem['amount_input'] ?? 'R$ 0,00');
+                                                        $accountingSubitemDate = (string) ($accountingSubitem['due_date'] ?? $accountingEntry['due_date'] ?? '');
                                                         ?>
                                                         <div class="accounting-entry-subitem-row" data-accounting-subitem-row>
                                                             <button
@@ -1767,6 +1782,7 @@
                                                                 <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                                                 <input type="text" name="subitem_label" value="<?= e($accountingSubitemLabel) ?>" maxlength="120" class="accounting-input accounting-input-label" autocomplete="off" required>
                                                                 <input type="text" name="subitem_amount_value" value="<?= e($accountingSubitemAmountInput) ?>" class="accounting-input accounting-input-amount" inputmode="numeric" autocomplete="off" required>
+                                                                <input type="date" name="subitem_date" value="<?= e($accountingSubitemDate) ?>" class="accounting-installment-select" aria-label="Data do subitem">
                                                                 <div class="accounting-entry-subitem-editor-actions">
                                                                     <button type="submit" class="btn btn-mini">Confirmar</button>
                                                                     <button type="button" class="btn btn-mini btn-ghost" data-accounting-subitem-cancel>Cancelar</button>
@@ -1790,6 +1806,7 @@
                                                     <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                                     <input type="text" name="subitem_label" maxlength="120" class="accounting-input accounting-input-label" placeholder="Subitem" autocomplete="off">
                                                     <input type="text" name="subitem_amount_value" class="accounting-input accounting-input-amount" inputmode="numeric" placeholder="0,00" autocomplete="off" required>
+                                                    <input type="date" name="subitem_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data do subitem">
                                                     <button type="submit" class="btn btn-mini">+</button>
                                                 </form>
                                                 <form method="post" class="accounting-entry-subitem-statuses-form" data-accounting-subitem-statuses-form>

@@ -2983,6 +2983,7 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
                 entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
                 label TEXT NOT NULL,
                 amount_cents BIGINT NOT NULL DEFAULT 0,
+                due_date DATE DEFAULT NULL,
                 is_settled SMALLINT NOT NULL DEFAULT 0,
                 settled_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -2999,6 +3000,7 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
                 entry_id INTEGER NOT NULL,
                 label TEXT NOT NULL,
                 amount_cents INTEGER NOT NULL DEFAULT 0,
+                due_date TEXT DEFAULT NULL,
                 is_settled INTEGER NOT NULL DEFAULT 0,
                 settled_at TEXT DEFAULT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0,
@@ -3019,12 +3021,17 @@ function ensureWorkspaceAccountingSubitemSchema(PDO $pdo): void
 
     $hadSubitemSettledColumn = tableHasColumn($pdo, 'workspace_accounting_entry_subitems', 'is_settled');
     $hadSubitemSettledAtColumn = tableHasColumn($pdo, 'workspace_accounting_entry_subitems', 'settled_at');
+    $hadSubitemDueDateColumn = tableHasColumn($pdo, 'workspace_accounting_entry_subitems', 'due_date');
     if (!$hadSubitemSettledColumn) {
         $pdo->exec('ALTER TABLE workspace_accounting_entry_subitems ADD COLUMN is_settled INTEGER NOT NULL DEFAULT 0');
     }
     if (!$hadSubitemSettledAtColumn) {
         $settledAtType = dbDriverName($pdo) === 'pgsql' ? 'TIMESTAMP WITHOUT TIME ZONE' : 'TEXT';
         $pdo->exec("ALTER TABLE workspace_accounting_entry_subitems ADD COLUMN settled_at {$settledAtType} DEFAULT NULL");
+    }
+    if (!$hadSubitemDueDateColumn) {
+        $dueDateType = dbDriverName($pdo) === 'pgsql' ? 'DATE' : 'TEXT';
+        $pdo->exec("ALTER TABLE workspace_accounting_entry_subitems ADD COLUMN due_date {$dueDateType} DEFAULT NULL");
     }
     if (!$hadSubitemSettledColumn) {
         $pdo->exec(
@@ -7409,6 +7416,7 @@ function normalizeAccountingSubitemPayloads($rawPayload): array
             'amount_cents' => $amountCents,
             'amount_input' => dueAmountLabelFromCents($amountCents),
             'is_settled' => ((int) ($item['is_settled'] ?? 0)) === 1 ? 1 : 0,
+            'due_date' => dueDateForStorage((string) ($item['due_date'] ?? '')),
         ];
     }
 
@@ -7434,6 +7442,7 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
                 entry_id,
                 label,
                 amount_cents,
+                due_date,
                 is_settled,
                 settled_at,
                 sort_order,
@@ -7465,6 +7474,7 @@ function workspaceAccountingSubitemsByEntryIds(PDO $pdo, int $workspaceId, array
             'amount_cents' => $amountCents,
             'amount_display' => dueAmountLabelFromCents($amountCents),
             'amount_input' => dueAmountLabelFromCents($amountCents),
+            'due_date' => dueDateForStorage((string) ($row['due_date'] ?? '')),
             'is_settled' => $isSettled,
             'settled_at' => accountingDateTimeForStorage($row['settled_at'] ?? null),
             'sort_order' => max(0, (int) ($row['sort_order'] ?? 0)),
@@ -7651,9 +7661,9 @@ function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int
     return $entry;
 }
 
-function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null, int $isSettled = 0, bool $detachCarried = true): int
+function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null, int $isSettled = 0, bool $detachCarried = true, ?string $dueDateInput = null): int
 {
-    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId, $detachCarried);
+    $parentEntry = workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId, $detachCarried);
     $label = normalizeAccountingSubitemLabel($label);
     if ($label === '') {
         $label = accountingSubitemFallbackLabel();
@@ -7676,24 +7686,27 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     ]);
     $sortOrder = ((int) $sortStmt->fetchColumn()) + 1;
     $createdAt = nowIso();
+    $dueDate = dueDateForStorage((string) $dueDateInput)
+        ?? dueDateForStorage((string) ($parentEntry['due_date'] ?? ''))
+        ?? (new DateTimeImmutable('today'))->format('Y-m-d');
     $isSettled = $isSettled === 1 ? 1 : 0;
     $settledAt = $isSettled === 1 ? $createdAt : null;
 
     if (dbDriverName($pdo) === 'pgsql') {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_subitems (
-                workspace_id, entry_id, label, amount_cents, sort_order, is_settled, settled_at, created_by, created_at, updated_at
+                workspace_id, entry_id, label, amount_cents, due_date, sort_order, is_settled, settled_at, created_by, created_at, updated_at
             ) VALUES (
-                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
+                :workspace_id, :entry_id, :label, :amount_cents, :due_date, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
             )
             RETURNING id'
         );
     } else {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_subitems (
-                workspace_id, entry_id, label, amount_cents, sort_order, is_settled, settled_at, created_by, created_at, updated_at
+                workspace_id, entry_id, label, amount_cents, due_date, sort_order, is_settled, settled_at, created_by, created_at, updated_at
             ) VALUES (
-                :workspace_id, :entry_id, :label, :amount_cents, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
+                :workspace_id, :entry_id, :label, :amount_cents, :due_date, :sort_order, :is_settled, :settled_at, :created_by, :created_at, :updated_at
             )'
         );
     }
@@ -7702,6 +7715,7 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $stmt->bindValue(':entry_id', $entryId, PDO::PARAM_INT);
     $stmt->bindValue(':label', $label, PDO::PARAM_STR);
     $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':due_date', $dueDate, PDO::PARAM_STR);
     $stmt->bindValue(':sort_order', $sortOrder, PDO::PARAM_INT);
     $stmt->bindValue(':is_settled', $isSettled, PDO::PARAM_INT);
     if ($settledAt !== null) {
@@ -7724,7 +7738,7 @@ function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     return $subitemId;
 }
 
-function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput, ?int $isSettled = null): void
+function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, int $subitemId, string $label, $amountInput, ?int $isSettled = null, ?string $dueDateInput = null): void
 {
     workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
     $label = normalizeAccountingSubitemLabel($label);
@@ -7741,6 +7755,7 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
         'UPDATE workspace_accounting_entry_subitems
          SET label = :label,
              amount_cents = :amount_cents,
+             due_date = COALESCE(:due_date, due_date),
              is_settled = CASE
                  WHEN :has_settled_flag = 1 THEN :is_settled
                  ELSE is_settled
@@ -7758,6 +7773,7 @@ function updateWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entry
     $stmt->execute([
         ':label' => $label,
         ':amount_cents' => $amountCents,
+        ':due_date' => dueDateForStorage((string) $dueDateInput),
         ':has_settled_flag' => $isSettled === null ? 0 : 1,
         ':preserve_settled_flag' => $isSettled === null ? 1 : 0,
         ':is_settled' => $isSettled === 1 ? 1 : 0,
@@ -11005,6 +11021,34 @@ function createWorkspaceAccountingBalanceAdjustment(
     return $entryId;
 }
 
+function updateWorkspaceAccountingEntryDate(PDO $pdo, int $workspaceId, int $entryId, ?string $dateInput): void
+{
+    $dueDate = dueDateForStorage((string) $dateInput);
+    if ($workspaceId <= 0 || $entryId <= 0 || $dueDate === null) {
+        return;
+    }
+
+    $periodKey = accountingPeriodKeyFromDateWithCycleCloseDay(
+        $dueDate,
+        workspaceAccountingCycleCloseDay($workspaceId)
+    );
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET due_date = :due_date,
+             period_key = :period_key,
+             updated_at = :updated_at
+         WHERE id = :id
+           AND workspace_id = :workspace_id'
+    );
+    $stmt->execute([
+        ':due_date' => $dueDate,
+        ':period_key' => $periodKey,
+        ':updated_at' => nowIso(),
+        ':id' => $entryId,
+        ':workspace_id' => $workspaceId,
+    ]);
+}
+
 function updateWorkspaceAccountingEntry(
     PDO $pdo,
     int $workspaceId,
@@ -12265,45 +12309,50 @@ function accountingWeeklyBalanceProjection(
     foreach ($entries as $entry) {
         $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
         $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
-        $amountCents = $isMonthlyGoal && $entryType === 'expense'
-            ? max(0, normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0)
-            : max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
-        if ($amountCents <= 0) {
-            continue;
-        }
+        $subitems = is_array($entry['subitems'] ?? null) ? $entry['subitems'] : [];
+        $eventSources = $subitems ?: [$entry];
 
-        $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
-        $settledDate = dueDateForStorage((string) ($entry['settled_at'] ?? ''));
-        $eventDate = $isSettled && $settledDate !== null
-            ? $settledDate
-            : dueDateForStorage((string) ($entry['due_date'] ?? ''));
-        $todayIsInPeriod = $today >= $periodRange['start_date'] && $today <= $periodRange['end_date'];
-        if (!$isSettled && $todayIsInPeriod && $eventDate !== null && $eventDate < $today) {
-            $eventDate = $today;
-        }
-        if ($eventDate === null || $eventDate > $periodRange['end_date']) {
-            $eventDate = $periodRange['end_date'];
-        } elseif ($eventDate < $periodRange['start_date']) {
-            $eventDate = $periodRange['start_date'];
-        }
-
-        foreach ($weeks as &$week) {
-            if ($eventDate >= $week['start_date'] && $eventDate <= $week['end_date']) {
-                $signedAmountCents = $entryType === 'income' ? $amountCents : -$amountCents;
-                $week['movement_cents'] += $signedAmountCents;
-                $week['events'][] = [
-                    'entry_type' => $entryType,
-                    'label' => normalizeAccountingEntryLabel((string) ($entry['label'] ?? '')),
-                    'amount_cents' => $amountCents,
-                    'amount_display' => dueAmountLabelFromCents($amountCents),
-                    'event_date' => $eventDate,
-                    'event_date_display' => accountingDateCompactLabel($eventDate),
-                    'is_settled' => $isSettled ? 1 : 0,
-                ];
-                break;
+        foreach ($eventSources as $eventSource) {
+            $amountCents = $isMonthlyGoal && $entryType === 'expense'
+                ? max(0, normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0)
+                : max(0, normalizeDueAmountCents($eventSource['amount_cents'] ?? $entry['amount_cents'] ?? null) ?? 0);
+            if ($amountCents <= 0) {
+                continue;
             }
+
+            $isSettled = ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
+            $settledDate = dueDateForStorage((string) ($eventSource['settled_at'] ?? $entry['settled_at'] ?? ''));
+            $eventDate = $isSettled && $settledDate !== null
+                ? $settledDate
+                : dueDateForStorage((string) ($eventSource['due_date'] ?? $entry['due_date'] ?? ''));
+            $todayIsInPeriod = $today >= $periodRange['start_date'] && $today <= $periodRange['end_date'];
+            if (!$isSettled && $todayIsInPeriod && $eventDate !== null && $eventDate < $today) {
+                $eventDate = $today;
+            }
+            if ($eventDate === null || $eventDate > $periodRange['end_date']) {
+                $eventDate = $periodRange['end_date'];
+            } elseif ($eventDate < $periodRange['start_date']) {
+                $eventDate = $periodRange['start_date'];
+            }
+
+            foreach ($weeks as &$week) {
+                if ($eventDate >= $week['start_date'] && $eventDate <= $week['end_date']) {
+                    $signedAmountCents = $entryType === 'income' ? $amountCents : -$amountCents;
+                    $week['movement_cents'] += $signedAmountCents;
+                    $week['events'][] = [
+                        'entry_type' => $entryType,
+                        'label' => normalizeAccountingEntryLabel((string) ($eventSource['label'] ?? $entry['label'] ?? '')),
+                        'amount_cents' => $amountCents,
+                        'amount_display' => dueAmountLabelFromCents($amountCents),
+                        'event_date' => $eventDate,
+                        'event_date_display' => accountingDateCompactLabel($eventDate),
+                        'is_settled' => $isSettled ? 1 : 0,
+                    ];
+                    break;
+                }
+            }
+            unset($week);
         }
-        unset($week);
     }
 
     $balanceCents = $openingBalanceCents;

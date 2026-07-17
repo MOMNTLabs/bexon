@@ -7160,13 +7160,15 @@ window.addEventListener("DOMContentLoaded", () => {
     rows.forEach((row) => {
       const labelField = row.querySelector("[data-accounting-create-subitem-label]");
       const amountField = row.querySelector("[data-accounting-create-subitem-amount]");
+      const dateField = row.querySelector("[data-accounting-create-subitem-date]");
       const label = labelField instanceof HTMLInputElement ? String(labelField.value || "").trim() : "";
       const amount = amountField instanceof HTMLInputElement ? String(amountField.value || "").trim() : "";
+      const due_date = dateField instanceof HTMLInputElement ? String(dateField.value || "").trim() : "";
       const amountCents = parseAccountingCurrencyToCents(amount);
       if (amountCents !== null) {
         totalCents += amountCents;
       }
-      payload.push({ label, amount });
+      payload.push({ label, amount, due_date });
     });
 
     hiddenField.value = JSON.stringify(payload);
@@ -7199,7 +7201,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const addAccountingCreateSubitemRow = (form, { label = "", amount = "" } = {}) => {
+  const addAccountingCreateSubitemRow = (form, { label = "", amount = "", due_date = "" } = {}) => {
     if (!(form instanceof HTMLFormElement)) return null;
 
     const list = form.querySelector("[data-accounting-create-subitems-list]");
@@ -7230,6 +7232,13 @@ window.addEventListener("DOMContentLoaded", () => {
     amountField.dataset.accountingCreateSubitemAmount = "1";
     amountField.value = amount;
 
+    const dateField = document.createElement("input");
+    dateField.type = "date";
+    dateField.className = "accounting-installment-select";
+    dateField.setAttribute("aria-label", "Data do subitem");
+    dateField.dataset.accountingCreateSubitemDate = "1";
+    dateField.value = due_date;
+
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "accounting-entry-subitem-delete";
@@ -7237,7 +7246,7 @@ window.addEventListener("DOMContentLoaded", () => {
     removeButton.setAttribute("aria-label", "Remover subitem");
     removeButton.innerHTML = '<span aria-hidden="true">&times;</span>';
 
-    row.append(labelField, amountField, removeButton);
+    row.append(labelField, amountField, dateField, removeButton);
     list.append(row);
     syncAccountingCreateSubitems(form);
     labelField.focus();
