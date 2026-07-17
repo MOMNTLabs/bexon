@@ -1102,7 +1102,6 @@
                                                         class="accounting-input accounting-input-label"
                                                         placeholder="Subitem"
                                                         autocomplete="off"
-                                                        required
                                                     >
                                                     <input
                                                         type="text"
@@ -1760,7 +1759,7 @@
                                                     <input type="hidden" name="action" value="create_accounting_subitem">
                                                     <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                                     <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
-                                                    <input type="text" name="subitem_label" maxlength="120" class="accounting-input accounting-input-label" placeholder="Subitem" autocomplete="off" required>
+                                                    <input type="text" name="subitem_label" maxlength="120" class="accounting-input accounting-input-label" placeholder="Subitem" autocomplete="off">
                                                     <input type="text" name="subitem_amount_value" class="accounting-input accounting-input-amount" inputmode="numeric" placeholder="0,00" autocomplete="off" required>
                                                     <button type="submit" class="btn btn-mini">+</button>
                                                 </form>

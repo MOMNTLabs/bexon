@@ -7191,6 +7191,9 @@ function workspaceAccountingDiscountTotalCents(PDO $pdo, int $workspaceId, int $
 function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null): int
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry !== null) {
+        $entry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $entry);
+    }
     $isIncome = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'income';
     if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
         throw new RuntimeException($isIncome ? 'Esta entrada não aceita recebimentos.' : 'Este item não aceita abatimentos.');
@@ -7265,6 +7268,9 @@ function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId
 function deleteWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, int $discountId): void
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry !== null) {
+        $entry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $entry);
+    }
     $isIncome = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'income';
     if ($entry === null || !workspaceAccountingEntrySupportsDiscounts($entry)) {
         throw new RuntimeException($isIncome ? 'Recebimento não encontrado.' : 'Abatimento não encontrado.');
@@ -7349,6 +7355,11 @@ function normalizeAccountingSubitemLabel(string $value): string
     return uppercaseFirstCharacter($value);
 }
 
+function accountingSubitemFallbackLabel(): string
+{
+    return (new DateTimeImmutable())->format('d/m/Y H:i');
+}
+
 function normalizeAccountingSubitemPayloads($rawPayload): array
 {
     if (!is_string($rawPayload) || trim($rawPayload) === '') {
@@ -7372,7 +7383,7 @@ function normalizeAccountingSubitemPayloads($rawPayload): array
             continue;
         }
         if ($label === '') {
-            throw new RuntimeException('Informe um nome para o subitem.');
+            $label = accountingSubitemFallbackLabel();
         }
 
         $amountCents = normalizeDueAmountCents($amountInput);
@@ -7611,11 +7622,14 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     $updateStmt->execute();
 }
 
-function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int $entryId): array
+function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int $entryId, bool $detachCarried = true): array
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
     if ($entry === null) {
         throw new RuntimeException('Registro não encontrado.');
+    }
+    if ($detachCarried) {
+        $entry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $entry);
     }
     if (!workspaceAccountingEntrySupportsSubitems($entry)) {
         throw new RuntimeException('Este registro não aceita subitens.');
@@ -7624,12 +7638,12 @@ function workspaceAccountingRequireSubitemParent(PDO $pdo, int $workspaceId, int
     return $entry;
 }
 
-function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null, int $isSettled = 0): int
+function createWorkspaceAccountingSubitem(PDO $pdo, int $workspaceId, int $entryId, string $label, $amountInput, ?int $createdBy = null, int $isSettled = 0, bool $detachCarried = true): int
 {
-    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId);
+    workspaceAccountingRequireSubitemParent($pdo, $workspaceId, $entryId, $detachCarried);
     $label = normalizeAccountingSubitemLabel($label);
     if ($label === '') {
-        throw new RuntimeException('Informe um nome para o subitem.');
+        $label = accountingSubitemFallbackLabel();
     }
     $amountCents = normalizeDueAmountCents($amountInput);
     if ($amountCents === null) {
@@ -8962,7 +8976,9 @@ function workspaceAccountingCopyOpenSubitemsToCarriedEntry(
             $subitem['amount_cents'] ?? 0,
             isset($subitem['created_by']) && (int) ($subitem['created_by'] ?? 0) > 0
                 ? (int) $subitem['created_by']
-                : null
+                : null,
+            0,
+            false
         );
     }
 }
@@ -9359,6 +9375,25 @@ function workspaceAccountingDetachCarriedEntry(PDO $pdo, int $workspaceId, int $
     ]);
 }
 
+function workspaceAccountingDetachCarriedEntryForDirectChange(PDO $pdo, int $workspaceId, array $entry): array
+{
+    $entryId = (int) ($entry['id'] ?? 0);
+    $carrySourceEntryId = max(0, (int) ($entry['carry_source_entry_id'] ?? 0));
+    if ($workspaceId <= 0 || $entryId <= 0 || $carrySourceEntryId <= 0) {
+        return $entry;
+    }
+
+    workspaceAccountingSetCarryStopPeriodKey(
+        $pdo,
+        $workspaceId,
+        $carrySourceEntryId,
+        normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''))
+    );
+    workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, $entryId);
+
+    return workspaceAccountingEntryById($pdo, $workspaceId, $entryId) ?? $entry;
+}
+
 function workspaceAccountingDeleteEntryChain(PDO $pdo, int $workspaceId, int $entryId, bool $includeRoot = false): void
 {
     $entryIds = [];
@@ -9420,6 +9455,18 @@ function workspaceAccountingSyncCarryEntryForSource(PDO $pdo, array $sourceEntry
     $expectedPayload = workspaceAccountingNextCarryEntryPayload($sourceEntry, $targetPeriodKey);
     $existingChildren = workspaceAccountingDirectCarryEntries($pdo, $workspaceId, $sourceEntryId, $targetPeriodKey);
     $primaryChild = $existingChildren ? array_shift($existingChildren) : null;
+
+    // Um saldo a quitar que recebeu lançamentos no período atual passa a
+    // seguir sua própria cadeia. Isso evita que o saldo do período anterior
+    // substitua os pagamentos já registrados no item atual.
+    if ($primaryChild !== null
+        && ((int) ($primaryChild['is_monthly_goal'] ?? 0)) === 1
+        && workspaceAccountingGoalPaymentTotalCents($pdo, $workspaceId, (int) ($primaryChild['id'] ?? 0)) > 0
+    ) {
+        workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $sourceEntryId, $targetPeriodKey);
+        workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, (int) ($primaryChild['id'] ?? 0));
+        return syncWorkspaceAccountingGoalPaymentHistory($pdo, $workspaceId, (int) ($primaryChild['id'] ?? 0));
+    }
 
     foreach ($existingChildren as $duplicateChild) {
         $duplicateChildId = (int) ($duplicateChild['id'] ?? 0);
@@ -11074,6 +11121,8 @@ function addWorkspaceAccountingGoalPaymentWithCarrySync(
         throw new RuntimeException('Apenas itens do tipo saldo a quitar aceitam pagamentos parciais.');
     }
 
+    $existingEntry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $existingEntry);
+
     $paymentAmountCents = normalizeDueAmountCents($paymentAmountInput);
     if ($paymentAmountCents === null || $paymentAmountCents <= 0) {
         throw new RuntimeException('Informe um valor válido para adicionar.');
@@ -11154,6 +11203,8 @@ function deleteWorkspaceAccountingGoalPaymentWithCarrySync(PDO $pdo, int $worksp
     if (((int) ($existingEntry['is_monthly_goal'] ?? 0)) !== 1) {
         throw new RuntimeException('Apenas itens do tipo saldo a quitar aceitam pagamentos parciais.');
     }
+
+    $existingEntry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $existingEntry);
 
     $futureCarryLimit = workspaceAccountingLatestDescendantPeriodKey(
         workspaceAccountingDescendantEntries($pdo, $workspaceId, $entryId)
@@ -11744,6 +11795,8 @@ function updateWorkspaceAccountingGoalPaymentWithCarrySync(
     if (((int) ($existingEntry['is_monthly_goal'] ?? 0)) !== 1) {
         throw new RuntimeException('Apenas itens do tipo saldo a quitar aceitam pagamentos parciais.');
     }
+
+    $existingEntry = workspaceAccountingDetachCarriedEntryForDirectChange($pdo, $workspaceId, $existingEntry);
 
     $futureCarryLimit = workspaceAccountingLatestDescendantPeriodKey(
         workspaceAccountingDescendantEntries($pdo, $workspaceId, $entryId)

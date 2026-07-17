@@ -7215,7 +7215,7 @@ window.addEventListener("DOMContentLoaded", () => {
     labelField.className = "accounting-input accounting-input-label";
     labelField.placeholder = "Subitem";
     labelField.autocomplete = "off";
-    labelField.required = true;
+    labelField.required = false;
     labelField.dataset.accountingCreateSubitemLabel = "1";
     labelField.value = label;
 
@@ -7945,6 +7945,12 @@ window.addEventListener("DOMContentLoaded", () => {
     return hasPendingChanges;
   };
 
+  const accountingSubitemFallbackLabel = () => {
+    const now = new Date();
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  };
+
   const stageAccountingSubitem = (form) => {
     if (!(form instanceof HTMLFormElement)) return false;
 
@@ -7973,7 +7979,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     amountField.setCustomValidity("");
 
-    const label = String(labelField.value || "").trim();
+    const label = String(labelField.value || "").trim() || accountingSubitemFallbackLabel();
     const amount = String(amountField.value || "").trim();
     const row = document.createElement("div");
     row.className = "accounting-entry-subitem-row is-pending";
