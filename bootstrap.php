@@ -6617,19 +6617,9 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
         $row['due_date'] = $row['resolved_due_date'];
     }
     $today = (new DateTimeImmutable('today'))->format('Y-m-d');
-    $row['is_auto_received'] = (
-        $row['entry_type'] === 'income'
-        && ($row['is_monthly'] === 1 || $row['is_weekly'] === 1)
-        && $row['is_monthly_goal'] !== 1
-        && $row['due_date'] !== null
-        && $row['due_date'] <= $today
-    ) ? 1 : 0;
-    if ($row['is_auto_received'] === 1) {
-        $row['is_settled'] = 1;
-        if ($row['settled_at'] === null && $row['due_date'] !== null) {
-            $row['settled_at'] = accountingDateTimeForStorage($row['due_date']);
-        }
-    }
+    // A data de vencimento é uma previsão. Entradas recorrentes só são recebidas
+    // quando o usuário confirma a ocorrência ou registra um recebimento.
+    $row['is_auto_received'] = 0;
     $row['is_overdue'] = (
         $row['entry_type'] === 'expense'
         && $row['is_monthly_goal'] !== 1
@@ -9854,12 +9844,92 @@ function workspaceAccountingEntriesByType(array $entries): array
         'income' => [],
     ];
 
+    $weeklyGroups = [];
+    $carriedGroups = [
+        'expense' => [],
+        'income' => [],
+    ];
+
     foreach ($entries as $entry) {
         $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
         if (!array_key_exists($entryType, $grouped)) {
             $grouped[$entryType] = [];
         }
+
+        $weeklyRecurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
+        if ($weeklyRecurrenceId > 0) {
+            $weeklyGroupKey = $entryType . ':' . $weeklyRecurrenceId;
+            if (!isset($weeklyGroups[$weeklyGroupKey])) {
+                $weeklyGroups[$weeklyGroupKey] = [
+                    'entry_type' => $entryType,
+                    'first_entry' => $entry,
+                    'occurrences' => [],
+                ];
+            }
+            $weeklyGroups[$weeklyGroupKey]['occurrences'][] = $entry;
+            continue;
+        }
+
+        if (((int) ($entry['is_carried'] ?? 0)) === 1) {
+            $carriedGroups[$entryType][] = $entry;
+            continue;
+        }
+
         $grouped[$entryType][] = $entry;
+    }
+
+    foreach ($weeklyGroups as $weeklyGroup) {
+        $occurrences = is_array($weeklyGroup['occurrences'] ?? null)
+            ? $weeklyGroup['occurrences']
+            : [];
+        usort($occurrences, static function (array $left, array $right): int {
+            return strcmp((string) ($left['due_date'] ?? ''), (string) ($right['due_date'] ?? ''));
+        });
+        if (!$occurrences) {
+            continue;
+        }
+
+        $entry = $occurrences[0];
+        $totalCents = 0;
+        $settledCents = 0;
+        $settledCount = 0;
+        foreach ($occurrences as $occurrence) {
+            $occurrenceAmountCents = max(0, (int) ($occurrence['amount_cents'] ?? 0));
+            $totalCents += $occurrenceAmountCents;
+            if (((int) ($occurrence['is_settled'] ?? 0)) === 1) {
+                $settledCents += $occurrenceAmountCents;
+                $settledCount += 1;
+            }
+        }
+
+        $entry['display_group'] = 'weekly';
+        $entry['weekly_occurrences'] = $occurrences;
+        $entry['weekly_occurrence_count'] = count($occurrences);
+        $entry['weekly_settled_count'] = $settledCount;
+        $entry['weekly_total_cents'] = $totalCents;
+        $entry['weekly_total_display'] = dueAmountLabelFromCents($totalCents);
+        $entry['weekly_settled_cents'] = $settledCents;
+        $entry['weekly_settled_display'] = dueAmountLabelFromCents($settledCents);
+        $grouped[(string) ($weeklyGroup['entry_type'] ?? 'expense')][] = $entry;
+    }
+
+    foreach ($carriedGroups as $entryType => $carriedEntries) {
+        if (!$carriedEntries) {
+            continue;
+        }
+
+        $totalCents = 0;
+        foreach ($carriedEntries as $carriedEntry) {
+            $totalCents += max(0, (int) ($carriedEntry['amount_cents'] ?? 0));
+        }
+        $grouped[$entryType][] = [
+            'display_group' => 'carried',
+            'entry_type' => $entryType,
+            'carried_entries' => $carriedEntries,
+            'carried_count' => count($carriedEntries),
+            'carried_total_cents' => $totalCents,
+            'carried_total_display' => dueAmountLabelFromCents($totalCents),
+        ];
     }
 
     return $grouped;

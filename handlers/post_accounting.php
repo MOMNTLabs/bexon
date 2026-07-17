@@ -269,8 +269,12 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro não encontrado.');
                 }
 
-                $isSettled = array_key_exists('is_settled', $_POST) ? 1 : 0;
                 $entryType = normalizeAccountingEntryType((string) ($existingEntry['entry_type'] ?? 'expense'));
+                $isSettled = array_key_exists('is_settled', $_POST)
+                    ? 1
+                    : (((string) ($_POST['preserve_settlement'] ?? '')) === '1'
+                        ? (((int) ($existingEntry['is_settled'] ?? 0)) === 1 ? 1 : 0)
+                        : 0);
                 $weeklyRecurrenceId = max(0, (int) ($existingEntry['weekly_recurrence_id'] ?? 0));
                 $sourceTypeChoice = workspaceAccountingEntryTypeChoice($existingEntry);
                 $targetTypeChoice = normalizeAccountingEntryTypeChoice(

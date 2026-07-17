@@ -440,6 +440,115 @@
                 | JSON_HEX_APOS
                 | JSON_HEX_QUOT
             ) ?: '{}';
+            $renderAccountingGroupedEntry = static function (array $group, string $periodKey, string $entryType) use ($renderAccountingMoney): string {
+                $displayGroup = (string) ($group['display_group'] ?? '');
+                if (!in_array($displayGroup, ['weekly', 'carried'], true)) {
+                    return '';
+                }
+
+                $isWeekly = $displayGroup === 'weekly';
+                $entries = $isWeekly
+                    ? (is_array($group['weekly_occurrences'] ?? null) ? $group['weekly_occurrences'] : [])
+                    : (is_array($group['carried_entries'] ?? null) ? $group['carried_entries'] : []);
+                if (!$entries) {
+                    return '';
+                }
+
+                $firstEntry = $entries[0];
+                $label = $isWeekly
+                    ? (string) ($firstEntry['label'] ?? '')
+                    : ($entryType === 'income' ? 'Entradas anteriores' : 'Pendências anteriores');
+                $count = $isWeekly
+                    ? max(1, (int) ($group['weekly_occurrence_count'] ?? count($entries)))
+                    : max(1, (int) ($group['carried_count'] ?? count($entries)));
+                $totalDisplay = $isWeekly
+                    ? (string) ($group['weekly_total_display'] ?? 'R$ 0,00')
+                    : (string) ($group['carried_total_display'] ?? 'R$ 0,00');
+                $settledCount = max(0, (int) ($group['weekly_settled_count'] ?? 0));
+                $typeLabel = $entryType === 'income' ? 'Recebido' : 'Pago';
+                $weeklyAmountInput = (string) ($firstEntry['amount_input'] ?? '0,00');
+                $weeklyDay = (int) (new DateTimeImmutable((string) ($firstEntry['due_date'] ?? 'today')))->format('N');
+                ob_start();
+                ?>
+                <details class="accounting-occurrence-group<?= $isWeekly ? ' is-weekly' : ' is-carried' ?>">
+                    <summary>
+                        <span class="accounting-occurrence-group-title">
+                            <strong><?= e($label) ?></strong>
+                            <span><?= $isWeekly ? e($count . ' semanas') : e($count . ' itens') ?></span>
+                            <?php if ($isWeekly): ?>
+                                <span><?= e($settledCount . '/' . $count . ' ' . strtolower($typeLabel)) ?></span>
+                            <?php endif; ?>
+                        </span>
+                        <span class="accounting-occurrence-group-total"><?= $renderAccountingMoney($totalDisplay) ?></span>
+                    </summary>
+                    <div class="accounting-occurrence-group-body">
+                        <?php if ($isWeekly): ?>
+                            <form method="post" class="accounting-occurrence-group-edit" data-accounting-form autocomplete="off">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                <input type="hidden" name="action" value="update_accounting_entry">
+                                <input type="hidden" name="entry_id" value="<?= e((string) ((int) ($firstEntry['id'] ?? 0))) ?>">
+                                <input type="hidden" name="period_key" value="<?= e($periodKey) ?>">
+                                <input type="hidden" name="entry_type" value="<?= e($entryType) ?>">
+                                <input type="hidden" name="accounting_type_choice" value="weekly">
+                                <input type="hidden" name="weekly_day" value="<?= e((string) $weeklyDay) ?>">
+                                <input type="hidden" name="preserve_settlement" value="1">
+                                <input type="text" name="label" value="<?= e((string) ($firstEntry['label'] ?? '')) ?>" class="accounting-input accounting-input-label" maxlength="120" required>
+                                <label class="accounting-occurrence-group-value">
+                                    <span>Por semana</span>
+                                    <input type="text" name="amount_value" value="<?= e($weeklyAmountInput) ?>" class="accounting-input accounting-input-amount" inputmode="numeric" required>
+                                </label>
+                                <button type="submit" class="btn btn-mini btn-ghost">Salvar recorrência</button>
+                            </form>
+                        <?php endif; ?>
+                        <div class="accounting-occurrence-list">
+                            <?php foreach ($entries as $occurrence): ?>
+                                <?php
+                                $occurrenceId = (int) ($occurrence['id'] ?? 0);
+                                $occurrenceLabel = (string) ($occurrence['label'] ?? '');
+                                $occurrenceAmount = (string) ($occurrence['amount_input'] ?? '0,00');
+                                $occurrenceDueDate = (string) ($occurrence['due_date_display'] ?? '');
+                                $occurrenceSettled = ((int) ($occurrence['is_settled'] ?? 0)) === 1;
+                                $occurrenceIsMonthly = ((int) ($occurrence['is_monthly'] ?? 0)) === 1;
+                                $occurrenceMonthlyMode = (string) ($occurrence['monthly_mode'] ?? 'uniform');
+                                $occurrenceIsGoal = ((int) ($occurrence['is_monthly_goal'] ?? 0)) === 1;
+                                $occurrenceMonthlyDay = normalizeDueMonthlyDay($occurrence['monthly_day'] ?? null);
+                                $occurrenceWeeklyDay = (int) (new DateTimeImmutable((string) ($occurrence['due_date'] ?? 'today')))->format('N');
+                                ?>
+                                <form method="post" class="accounting-occurrence-row accounting-entry-quick-status-form" data-accounting-form>
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                    <input type="hidden" name="action" value="update_accounting_entry">
+                                    <input type="hidden" name="entry_id" value="<?= e((string) $occurrenceId) ?>">
+                                    <input type="hidden" name="period_key" value="<?= e($periodKey) ?>">
+                                    <input type="hidden" name="entry_type" value="<?= e($entryType) ?>">
+                                    <input type="hidden" name="label" value="<?= e($occurrenceLabel) ?>">
+                                    <input type="hidden" name="amount_value" value="<?= e($occurrenceAmount) ?>">
+                                    <?php if (!$isWeekly && $occurrenceIsMonthly): ?>
+                                        <input type="hidden" name="is_monthly_due" value="1">
+                                        <input type="hidden" name="monthly_mode" value="<?= e($occurrenceMonthlyMode) ?>">
+                                        <input type="hidden" name="monthly_day" value="<?= e((string) ($occurrenceMonthlyDay ?? '')) ?>">
+                                    <?php endif; ?>
+                                    <?php if ($isWeekly): ?>
+                                        <input type="hidden" name="accounting_type_choice" value="weekly">
+                                        <input type="hidden" name="weekly_day" value="<?= e((string) $occurrenceWeeklyDay) ?>">
+                                    <?php endif; ?>
+                                    <span class="accounting-occurrence-row-label"><?= e($isWeekly ? ($occurrenceDueDate !== '' ? $occurrenceDueDate : 'Semana') : $occurrenceLabel) ?></span>
+                                    <span class="accounting-occurrence-row-value"><?= $renderAccountingMoney($occurrenceAmount) ?></span>
+                                    <?php if ($occurrenceIsGoal): ?>
+                                        <span class="accounting-entry-badge is-progress">Saldo a quitar</span>
+                                    <?php else: ?>
+                                        <label class="accounting-check">
+                                            <input type="checkbox" name="is_settled" value="1" <?= $occurrenceSettled ? 'checked' : '' ?>>
+                                            <span><?= e($typeLabel) ?></span>
+                                        </label>
+                                    <?php endif; ?>
+                                </form>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </details>
+                <?php
+                return (string) ob_get_clean();
+            };
             ?>
             <div class="accounting-sheet">
                 <script type="application/json" data-accounting-task-link-options><?= $accountingTaskLinkOptionsJson ?></script>
@@ -457,6 +566,10 @@
                                 <div class="accounting-empty">Nenhuma conta cadastrada neste mês.</div>
                             <?php else: ?>
                                 <?php foreach ($accountingExpenseEntries as $accountingEntry): ?>
+                                    <?php if (in_array((string) ($accountingEntry['display_group'] ?? ''), ['weekly', 'carried'], true)): ?>
+                                        <?= $renderAccountingGroupedEntry($accountingEntry, $accountingPeriod, 'expense') ?>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
                                     <?php
                                     $accountingEntryId = (int) ($accountingEntry['id'] ?? 0);
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
@@ -1272,6 +1385,10 @@
                                 <div class="accounting-empty">Nenhuma entrada cadastrada neste mês.</div>
                             <?php else: ?>
                                 <?php foreach ($accountingIncomeEntries as $accountingEntry): ?>
+                                    <?php if (in_array((string) ($accountingEntry['display_group'] ?? ''), ['weekly', 'carried'], true)): ?>
+                                        <?= $renderAccountingGroupedEntry($accountingEntry, $accountingPeriod, 'income') ?>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
                                     <?php
                                     $accountingEntryId = (int) ($accountingEntry['id'] ?? 0);
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
