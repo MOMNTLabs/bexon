@@ -16896,9 +16896,18 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     background: #f3f8ff;
     padding: 10px;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    gap: 12px 20px;
+    gap: 10px;
+}
+
+.accounting-balance-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .accounting-opening-balance-editor {
@@ -17021,8 +17030,12 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-balance-adjustment {
-    grid-column: 1 / -1;
-    justify-self: end;
+    margin-left: auto;
+}
+
+.accounting-balance-adjustment[open] {
+    flex: 1 0 100%;
+    margin-left: 0;
 }
 
 .accounting-balance-adjustment > summary {
@@ -17037,7 +17050,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-balance-adjustment-form {
     display: flex;
     align-items: end;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 7px;
     margin-top: 8px;
 }
@@ -17052,6 +17065,148 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 .accounting-balance-adjustment-form .accounting-input {
     width: 132px;
     min-height: 32px;
+}
+
+.accounting-weekly-projection {
+    border-top: 1px solid rgba(133, 178, 225, 0.32);
+    padding-top: 9px;
+    min-width: 0;
+}
+
+.accounting-weekly-projection-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 7px;
+    color: #426482;
+    font-size: 0.77rem;
+}
+
+.accounting-weekly-projection-head > span:first-child {
+    color: #294e72;
+    font-weight: 700;
+}
+
+.accounting-weekly-projection-head > span:last-child {
+    color: #7890a7;
+    font-size: 0.7rem;
+}
+
+.accounting-weekly-projection-track {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid rgba(123, 159, 196, 0.36);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.75);
+}
+
+.accounting-weekly-projection-week {
+    position: relative;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 8px 9px 7px;
+    color: #526b83;
+    background: rgba(237, 244, 251, 0.44);
+    border-left: 1px solid rgba(123, 159, 196, 0.24);
+}
+
+.accounting-weekly-projection-week:first-child {
+    border-left: 0;
+}
+
+.accounting-weekly-projection-fill {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    background: #9aaabd;
+}
+
+.accounting-weekly-projection-week.is-positive .accounting-weekly-projection-fill {
+    background: linear-gradient(90deg, #78b894, #a6d4b8);
+}
+
+.accounting-weekly-projection-week.is-negative .accounting-weekly-projection-fill {
+    background: linear-gradient(90deg, #d98c85, #efb5ab);
+}
+
+.accounting-weekly-projection-week.is-current {
+    background: #fffdf8;
+    box-shadow: inset 0 0 0 1px #c7912e;
+    z-index: 1;
+}
+
+.accounting-weekly-projection-week.is-current::after {
+    content: "Agora";
+    position: absolute;
+    top: -10px;
+    right: 7px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    background: #b87914;
+    color: #fff;
+    font-size: 0.59rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.accounting-weekly-projection-label,
+.accounting-weekly-projection-week small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.accounting-weekly-projection-label {
+    color: #5c748d;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.accounting-weekly-projection-week strong {
+    color: #2d4b6d;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.accounting-weekly-projection-week.is-positive strong {
+    color: #39795b;
+}
+
+.accounting-weekly-projection-week.is-negative strong {
+    color: #a35752;
+}
+
+.accounting-weekly-projection-week small {
+    color: #8094a9;
+    font-size: 0.64rem;
+}
+
+@media (max-width: 620px) {
+    .accounting-weekly-projection-head > span:last-child {
+        display: none;
+    }
+
+    .accounting-weekly-projection-week {
+        padding: 7px 4px 6px;
+        text-align: center;
+    }
+
+    .accounting-weekly-projection-week strong {
+        font-size: 0.7rem;
+    }
+
+    .accounting-weekly-projection-week small {
+        font-size: 0.58rem;
+    }
+
+    .accounting-weekly-projection-week.is-current::after {
+        right: 2px;
+        padding-inline: 3px;
+        font-size: 0.53rem;
+    }
 }
 
 @media (max-width: 1180px) {

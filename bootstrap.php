@@ -12228,6 +12228,82 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
     ];
 }
 
+function accountingWeeklyBalanceProjection(
+    array $entries,
+    int $openingBalanceCents,
+    array $options = []
+): array {
+    $periodKey = normalizeAccountingPeriodKey((string) ($options['period_key'] ?? ''));
+    $cycleCloseDay = normalizeWorkspaceAccountingCycleCloseDay($options['cycle_close_day'] ?? 0);
+    $periodRange = accountingPeriodRangeForCycleCloseDay($periodKey, $cycleCloseDay);
+    $startDate = new DateTimeImmutable((string) $periodRange['start_date']);
+    $endDate = new DateTimeImmutable((string) $periodRange['end_date']);
+    $today = dueDateForStorage((string) ($options['today'] ?? ''))
+        ?? (new DateTimeImmutable('today'))->format('Y-m-d');
+    $weeks = [];
+
+    for ($weekStart = $startDate, $weekIndex = 1; $weekStart <= $endDate; $weekStart = $weekStart->modify('+7 days'), $weekIndex++) {
+        $weekEnd = $weekStart->modify('+6 days');
+        if ($weekEnd > $endDate) {
+            $weekEnd = $endDate;
+        }
+        $weeks[] = [
+            'index' => $weekIndex,
+            'start_date' => $weekStart->format('Y-m-d'),
+            'end_date' => $weekEnd->format('Y-m-d'),
+            'range_display' => accountingDateCompactLabel($weekStart->format('Y-m-d')) . '–' . accountingDateCompactLabel($weekEnd->format('Y-m-d')),
+            'movement_cents' => 0,
+            'balance_cents' => 0,
+            'is_current' => $today >= $weekStart->format('Y-m-d') && $today <= $weekEnd->format('Y-m-d'),
+        ];
+    }
+
+    foreach ($entries as $entry) {
+        $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+        $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
+        $amountCents = $isMonthlyGoal && $entryType === 'expense'
+            ? max(0, normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0)
+            : max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        if ($amountCents <= 0) {
+            continue;
+        }
+
+        $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
+        $settledDate = dueDateForStorage((string) ($entry['settled_at'] ?? ''));
+        $eventDate = $isSettled && $settledDate !== null
+            ? $settledDate
+            : dueDateForStorage((string) ($entry['due_date'] ?? ''));
+        if ($eventDate === null || $eventDate > $periodRange['end_date']) {
+            $eventDate = $periodRange['end_date'];
+        } elseif ($eventDate < $periodRange['start_date']) {
+            $eventDate = $periodRange['start_date'];
+        }
+
+        foreach ($weeks as &$week) {
+            if ($eventDate >= $week['start_date'] && $eventDate <= $week['end_date']) {
+                $week['movement_cents'] += $entryType === 'income' ? $amountCents : -$amountCents;
+                break;
+            }
+        }
+        unset($week);
+    }
+
+    $balanceCents = $openingBalanceCents;
+    foreach ($weeks as &$week) {
+        $balanceCents += (int) $week['movement_cents'];
+        $week['balance_cents'] = $balanceCents;
+        $week['balance_display'] = dueAmountLabelFromSignedCents($balanceCents);
+        $week['movement_display'] = dueAmountLabelFromSignedCents((int) $week['movement_cents']);
+    }
+    unset($week);
+
+    return [
+        'weeks' => $weeks,
+        'opening_balance_cents' => $openingBalanceCents,
+        'final_balance_cents' => $balanceCents,
+    ];
+}
+
 function workspaceAccountingNextIncomeProjectionSummary(
     PDO $pdo,
     int $workspaceId,

@@ -2053,39 +2053,80 @@
                     $accountingFinalBalanceClass = $accountingFinalBalanceCents < 0
                         ? ' is-negative'
                         : ($accountingFinalBalanceCents > 0 ? ' is-positive' : '');
+                    $accountingWeeklyProjection = accountingWeeklyBalanceProjection(
+                        $accountingEntries,
+                        (int) ($accountingOpeningBalanceCents ?? 0),
+                        [
+                            'period_key' => $accountingPeriod,
+                            'cycle_close_day' => (int) ($accountingCycleCloseDay ?? 0),
+                        ]
+                    );
+                    $accountingWeeklyProjectionWeeks = is_array($accountingWeeklyProjection['weeks'] ?? null)
+                        ? $accountingWeeklyProjection['weeks']
+                        : [];
                     ?>
-                    <dl class="accounting-balance-values">
-                        <div class="is-current<?= e($accountingCurrentBalanceClass) ?>">
-                            <dt><?= $accountingCurrentBalanceLabel ?></dt>
-                            <dd><?= $renderAccountingMoney((string) ($accountingSummary['current_balance_display'] ?? 'R$ 0,00')) ?></dd>
-                        </div>
-                        <div class="is-final is-projected<?= e($accountingFinalBalanceClass) ?>">
-                            <dt>Saldo projetado</dt>
-                            <dd><?= $renderAccountingMoney((string) ($accountingSummary['final_balance_display'] ?? 'R$ 0,00')) ?></dd>
-                        </div>
-                    </dl>
-                    <?php if ($accountingIsCurrentPeriodView): ?>
-                        <details class="accounting-balance-adjustment">
-                            <summary class="btn btn-mini btn-ghost">Informar saldo real</summary>
-                            <form method="post" class="accounting-balance-adjustment-form" autocomplete="off">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                                <input type="hidden" name="action" value="create_accounting_balance_adjustment">
-                                <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
-                                <label>
-                                    <span>Saldo real atual</span>
-                                    <input
-                                        type="text"
-                                        name="actual_balance_value"
-                                        class="accounting-input accounting-input-amount"
-                                        inputmode="decimal"
-                                        placeholder="R$ 0,00"
-                                        autocomplete="off"
-                                        required
+                    <div class="accounting-balance-topline">
+                        <dl class="accounting-balance-values">
+                            <div class="is-current<?= e($accountingCurrentBalanceClass) ?>">
+                                <dt><?= $accountingCurrentBalanceLabel ?></dt>
+                                <dd><?= $renderAccountingMoney((string) ($accountingSummary['current_balance_display'] ?? 'R$ 0,00')) ?></dd>
+                            </div>
+                            <div class="is-final is-projected<?= e($accountingFinalBalanceClass) ?>">
+                                <dt>Saldo projetado</dt>
+                                <dd><?= $renderAccountingMoney((string) ($accountingSummary['final_balance_display'] ?? 'R$ 0,00')) ?></dd>
+                            </div>
+                        </dl>
+                        <?php if ($accountingIsCurrentPeriodView): ?>
+                            <details class="accounting-balance-adjustment">
+                                <summary class="btn btn-mini btn-ghost">Informar saldo real</summary>
+                                <form method="post" class="accounting-balance-adjustment-form" autocomplete="off">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                    <input type="hidden" name="action" value="create_accounting_balance_adjustment">
+                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                    <label>
+                                        <span>Saldo real atual</span>
+                                        <input
+                                            type="text"
+                                            name="actual_balance_value"
+                                            class="accounting-input accounting-input-amount"
+                                            inputmode="decimal"
+                                            placeholder="R$ 0,00"
+                                            autocomplete="off"
+                                            required
+                                        >
+                                    </label>
+                                    <button type="submit" class="btn btn-mini">Corrigir saldo</button>
+                                </form>
+                            </details>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($accountingWeeklyProjectionWeeks): ?>
+                        <div class="accounting-weekly-projection" aria-label="Saldo projetado por semana">
+                            <div class="accounting-weekly-projection-head">
+                                <span>Proje&ccedil;&atilde;o semanal</span>
+                                <span>Saldo ao fim de cada semana</span>
+                            </div>
+                            <div class="accounting-weekly-projection-track" style="grid-template-columns: repeat(<?= e((string) count($accountingWeeklyProjectionWeeks)) ?>, minmax(0, 1fr));">
+                                <?php foreach ($accountingWeeklyProjectionWeeks as $accountingWeek): ?>
+                                    <?php
+                                    $accountingWeekBalanceCents = (int) ($accountingWeek['balance_cents'] ?? 0);
+                                    $accountingWeekClass = $accountingWeekBalanceCents < 0
+                                        ? ' is-negative'
+                                        : ($accountingWeekBalanceCents > 0 ? ' is-positive' : '');
+                                    $accountingWeekIsCurrent = !empty($accountingWeek['is_current']);
+                                    ?>
+                                    <div
+                                        class="accounting-weekly-projection-week<?= e($accountingWeekClass) ?><?= $accountingWeekIsCurrent ? ' is-current' : '' ?>"
+                                        title="Semana <?= e((string) ($accountingWeek['index'] ?? '')) ?> (<?= e((string) ($accountingWeek['range_display'] ?? '')) ?>): <?= e((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?>"
                                     >
-                                </label>
-                                <button type="submit" class="btn btn-mini">Corrigir saldo</button>
-                            </form>
-                        </details>
+                                        <span class="accounting-weekly-projection-fill"></span>
+                                        <span class="accounting-weekly-projection-label">Sem. <?= e((string) ($accountingWeek['index'] ?? '')) ?></span>
+                                        <strong><?= $renderAccountingMoney((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?></strong>
+                                        <small><?= e((string) ($accountingWeek['range_display'] ?? '')) ?></small>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
                     <?php endif; ?>
                 </section>
             </div>
