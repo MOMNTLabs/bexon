@@ -17034,8 +17034,10 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-balance-adjustment[open] {
-    flex: 1 0 100%;
-    margin-left: 0;
+    display: flex;
+    align-items: end;
+    gap: 7px;
+    margin-left: auto;
 }
 
 .accounting-balance-adjustment > summary {
@@ -17053,6 +17055,10 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     justify-content: flex-start;
     gap: 7px;
     margin-top: 8px;
+}
+
+.accounting-balance-adjustment[open] .accounting-balance-adjustment-form {
+    margin-top: 0;
 }
 
 .accounting-balance-adjustment-form label {
@@ -17295,6 +17301,16 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 @media (max-width: 620px) {
+    .accounting-balance-adjustment[open] {
+        flex: 1 0 100%;
+        flex-wrap: wrap;
+        margin-left: 0;
+    }
+
+    .accounting-balance-adjustment[open] .accounting-balance-adjustment-form {
+        flex: 1 0 100%;
+    }
+
     .accounting-weekly-projection-head > span:last-child {
         display: none;
     }
