@@ -15174,7 +15174,7 @@ select option:checked,
 }
 
 .accounting-entry-row.is-balance-adjustment {
-    margin-inline: -6px;
+    margin-inline: 0;
     padding-inline: 6px;
     border-radius: 9px;
     background: linear-gradient(90deg, rgba(111, 143, 186, 0.13), rgba(111, 143, 186, 0.025));
@@ -20653,5 +20653,30 @@ body.pwa-install-modal-open {
     .account-install-actions .btn {
         flex: 1 1 180px;
         justify-content: center;
+    }
+}
+
+/* Keep accounting rows readable without clipping their actions on narrow cards. */
+@media (max-width: 620px) {
+    .accounting-entry-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "summary summary"
+            "status delete";
+        row-gap: 3px;
+    }
+
+    .accounting-entry-summary {
+        grid-area: summary;
+    }
+
+    .accounting-entry-quick-status-form {
+        grid-area: status;
+        justify-self: start;
+    }
+
+    .accounting-entry-delete-form {
+        grid-area: delete;
+        justify-self: end;
     }
 }
