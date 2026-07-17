@@ -12348,6 +12348,7 @@ function accountingWeeklyBalanceProjection(
 
             $isDiscountMovement = $discounts !== [];
             $isSettled = $isDiscountMovement || ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
+            $isWeeklyOccurrence = ((int) ($entry['is_weekly'] ?? 0)) === 1;
             $settledDate = $isDiscountMovement
                 ? null
                 : dueDateForStorage((string) ($eventSource['settled_at'] ?? $entry['settled_at'] ?? ''));
@@ -12355,7 +12356,7 @@ function accountingWeeklyBalanceProjection(
                 ? $settledDate
                 : dueDateForStorage((string) ($eventSource['due_date'] ?? $entry['due_date'] ?? ''));
             $todayIsInPeriod = $today >= $periodRange['start_date'] && $today <= $periodRange['end_date'];
-            if (!$isSettled && $todayIsInPeriod && $eventDate !== null && $eventDate < $today) {
+            if (!$isSettled && !$isWeeklyOccurrence && $todayIsInPeriod && $eventDate !== null && $eventDate < $today) {
                 $eventDate = $today;
             }
             if ($eventDate === null || $eventDate > $periodRange['end_date']) {
