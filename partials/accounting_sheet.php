@@ -1277,6 +1277,10 @@
                                                     <option value="weekly">Semanal</option>
                                                     <option value="goal">Saldo a quitar</option>
                                                 </select>
+                                                <label class="accounting-entry-date-field" title="Opcional: use quando esta conta se refere a outra data.">
+                                                    <span>Data</span>
+                                                    <input type="date" name="entry_date" class="accounting-installment-select" aria-label="Data da conta (opcional)">
+                                                </label>
                                                 <input
                                                     type="checkbox"
                                                     name="is_installment"
@@ -1905,6 +1909,10 @@
                                                     <option value="weekly">Semanal</option>
                                                     <option value="completed_tasks">Por tarefa</option>
                                                 </select>
+                                                <label class="accounting-entry-date-field" title="Opcional: use quando esta entrada se refere a outra data.">
+                                                    <span>Data</span>
+                                                    <input type="date" name="entry_date" class="accounting-installment-select" aria-label="Data da entrada (opcional)">
+                                                </label>
                                                 <input
                                                     type="checkbox"
                                                     name="is_installment"

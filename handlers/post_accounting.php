@@ -166,6 +166,15 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
+                $entryDate = dueDateForStorage((string) ($_POST['entry_date'] ?? ''))
+                    ?? (new DateTimeImmutable('today'))->format('Y-m-d');
+                $entryDatePeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay(
+                    $entryDate,
+                    workspaceAccountingCycleCloseDay($workspaceId)
+                );
+                if ($entryDatePeriodKey !== null) {
+                    $periodKey = $entryDatePeriodKey;
+                }
                 $entryType = normalizeAccountingEntryType((string) ($_POST['entry_type'] ?? 'expense'));
                 $createSubitems = normalizeAccountingSubitemPayloads($_POST['create_subitems_json'] ?? null);
                 $isSettled = array_key_exists('is_settled', $_POST) ? 1 : 0;
@@ -204,7 +213,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['amount_value'] ?? null,
                         $_POST['weekly_day'] ?? null,
                         (int) ($authUser['id'] ?? 0),
-                        $_POST['weekly_start_date'] ?? null
+                        $_POST['weekly_start_date'] ?? $entryDate
                     );
                     if ($isSettled === 1) {
                         updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
@@ -245,7 +254,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         ($isMonthlyIncome === 1 || $isMonthlyGoal) ? 1 : 0,
                         $_POST['monthly_day'] ?? null,
                         $monthlyMode,
-                        $automationConfig
+                        $automationConfig,
+                        $entryDate
                     );
                     foreach ($createSubitems as $subitem) {
                         createWorkspaceAccountingSubitem(

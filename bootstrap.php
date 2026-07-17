@@ -10692,7 +10692,8 @@ function createWorkspaceAccountingEntry(
     int $isMonthly = 0,
     $monthlyDayInput = null,
     ?string $monthlyMode = null,
-    ?array $automationConfig = null
+    ?array $automationConfig = null,
+    $entryDateInput = null
 ): int {
     if ($workspaceId <= 0) {
         throw new RuntimeException('Workspace inválido.');
@@ -10750,7 +10751,9 @@ function createWorkspaceAccountingEntry(
         $paidAmountCents = 0;
         $requestedMonthlyMode = 'uniform';
     }
-    $dueDate = null;
+    $entryDate = dueDateForStorage((string) $entryDateInput)
+        ?? (new DateTimeImmutable('today'))->format('Y-m-d');
+    $dueDate = $entryDate;
     if ($monthlyFlag === 1 && !$isGoalMonthly) {
         $monthlyDay = normalizeDueMonthlyDay($monthlyDayInput);
         if ($monthlyDay === null) {

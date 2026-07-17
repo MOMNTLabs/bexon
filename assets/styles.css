@@ -15614,6 +15614,22 @@ select option:checked,
     justify-content: flex-start;
 }
 
+.accounting-entry-date-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #627996;
+    font-size: 0.74rem;
+    white-space: nowrap;
+}
+
+.accounting-entry-date-field .accounting-installment-select {
+    min-height: 30px;
+    max-width: 132px;
+    padding-inline: 7px;
+    font-size: 0.76rem;
+}
+
 .accounting-create-form.has-task-link .accounting-create-footer {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
