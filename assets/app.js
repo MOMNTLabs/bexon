@@ -20307,15 +20307,16 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(projection instanceof HTMLElement) || weekIndex === "") return;
 
     event.preventDefault();
+    const wasSelected = weekButton.classList.contains("is-selected");
     projection.querySelectorAll("[data-accounting-weekly-projection-week]").forEach((button) => {
       if (!(button instanceof HTMLButtonElement)) return;
-      const isSelected = button === weekButton;
+      const isSelected = !wasSelected && button === weekButton;
       button.classList.toggle("is-selected", isSelected);
       button.setAttribute("aria-pressed", isSelected ? "true" : "false");
     });
     projection.querySelectorAll("[data-accounting-weekly-projection-detail]").forEach((detail) => {
       if (!(detail instanceof HTMLElement)) return;
-      detail.hidden = detail.dataset.accountingWeeklyProjectionDetail !== weekIndex;
+      detail.hidden = wasSelected || detail.dataset.accountingWeeklyProjectionDetail !== weekIndex;
     });
   });
 

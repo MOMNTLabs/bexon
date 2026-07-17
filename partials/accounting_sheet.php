@@ -2117,10 +2117,10 @@
                                     ?>
                                     <button
                                         type="button"
-                                        class="accounting-weekly-projection-week<?= e($accountingWeekClass) ?><?= $accountingWeekIsCurrent ? ' is-current is-selected' : '' ?>"
+                                        class="accounting-weekly-projection-week<?= e($accountingWeekClass) ?><?= $accountingWeekIsCurrent ? ' is-current' : '' ?>"
                                         data-accounting-weekly-projection-week
                                         data-accounting-week-index="<?= e((string) ($accountingWeek['index'] ?? '')) ?>"
-                                        aria-pressed="<?= $accountingWeekIsCurrent ? 'true' : 'false' ?>"
+                                        aria-pressed="false"
                                         title="Semana <?= e((string) ($accountingWeek['index'] ?? '')) ?> (<?= e((string) ($accountingWeek['range_display'] ?? '')) ?>): <?= e((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?>"
                                     >
                                         <span class="accounting-weekly-projection-fill"></span>
@@ -2142,7 +2142,7 @@
                                     <div
                                         class="accounting-weekly-projection-detail"
                                         data-accounting-weekly-projection-detail="<?= e($accountingWeekIndex) ?>"
-                                        <?= $accountingWeekIsCurrent ? '' : 'hidden' ?>
+                                        hidden
                                     >
                                         <div class="accounting-weekly-projection-detail-head">
                                             <span>Semana <?= e($accountingWeekIndex) ?> · <?= e((string) ($accountingWeek['range_display'] ?? '')) ?></span>
@@ -2152,8 +2152,14 @@
                                             <div class="accounting-weekly-projection-events">
                                                 <?php foreach ($accountingWeekEvents as $accountingWeekEvent): ?>
                                                     <?php $accountingWeekEventType = (string) ($accountingWeekEvent['entry_type'] ?? 'expense'); ?>
-                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?>">
-                                                        <span class="accounting-weekly-projection-event-label"><?= e((string) ($accountingWeekEvent['label'] ?? '')) ?></span>
+                                                    <?php $accountingWeekEventIsSettled = ((int) ($accountingWeekEvent['is_settled'] ?? 0)) === 1; ?>
+                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?><?= $accountingWeekEventIsSettled ? ' is-settled' : ' is-pending' ?>">
+                                                        <span class="accounting-weekly-projection-event-label">
+                                                            <span><?= e((string) ($accountingWeekEvent['label'] ?? '')) ?></span>
+                                                            <?php if (!$accountingWeekEventIsSettled): ?>
+                                                                <small>Previsto</small>
+                                                            <?php endif; ?>
+                                                        </span>
                                                         <span class="accounting-weekly-projection-event-date"><?= e((string) ($accountingWeekEvent['event_date_display'] ?? '')) ?></span>
                                                         <strong><?= $accountingWeekEventType === 'income' ? '+' : '−' ?> <?= $renderAccountingMoney((string) ($accountingWeekEvent['amount_display'] ?? 'R$ 0,00')) ?></strong>
                                                     </div>

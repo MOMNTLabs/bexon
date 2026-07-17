@@ -12274,6 +12274,10 @@ function accountingWeeklyBalanceProjection(
         $eventDate = $isSettled && $settledDate !== null
             ? $settledDate
             : dueDateForStorage((string) ($entry['due_date'] ?? ''));
+        $todayIsInPeriod = $today >= $periodRange['start_date'] && $today <= $periodRange['end_date'];
+        if (!$isSettled && $todayIsInPeriod && $eventDate !== null && $eventDate < $today) {
+            $eventDate = $today;
+        }
         if ($eventDate === null || $eventDate > $periodRange['end_date']) {
             $eventDate = $periodRange['end_date'];
         } elseif ($eventDate < $periodRange['start_date']) {
@@ -12291,6 +12295,7 @@ function accountingWeeklyBalanceProjection(
                     'amount_display' => dueAmountLabelFromCents($amountCents),
                     'event_date' => $eventDate,
                     'event_date_display' => accountingDateCompactLabel($eventDate),
+                    'is_settled' => $isSettled ? 1 : 0,
                 ];
                 break;
             }
