@@ -14944,7 +14944,9 @@ select option:checked,
 .is-dashboard .accounting-sheet {
     flex: 1;
     min-height: 0;
-    overflow: auto;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding-right: 2px;
 }
 
@@ -14952,6 +14954,7 @@ select option:checked,
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+    min-width: 0;
 }
 
 .accounting-card {
@@ -14962,6 +14965,7 @@ select option:checked,
     display: flex;
     flex-direction: column;
     gap: 8px;
+    min-width: 0;
 }
 
 .accounting-card-footer {
@@ -15019,7 +15023,9 @@ select option:checked,
     display: grid;
     gap: 0;
     max-height: 340px;
-    overflow: auto;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding-right: 2px;
     align-content: start;
     grid-auto-rows: min-content;
@@ -15042,6 +15048,8 @@ select option:checked,
     border-radius: 12px;
     background: rgba(247, 251, 255, 0.72);
     overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .accounting-occurrence-group.is-carried {
@@ -15058,6 +15066,9 @@ select option:checked,
     padding: 8px 10px;
     cursor: pointer;
     list-style: none;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .accounting-occurrence-group > summary::-webkit-details-marker {
@@ -15068,7 +15079,9 @@ select option:checked,
     display: inline-flex;
     align-items: center;
     gap: 7px;
+    flex: 1 1 auto;
     min-width: 0;
+    overflow: hidden;
     color: #29486a;
 }
 
@@ -15088,6 +15101,7 @@ select option:checked,
     color: #29486a;
     font-weight: 700;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .accounting-occurrence-group-body {
