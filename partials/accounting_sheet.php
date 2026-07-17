@@ -361,7 +361,9 @@
                 ?int $weeklyDay = null,
                 int $installmentNumber = 1,
                 int $installmentTotal = 2,
-                string $totalAmountInput = ''
+                string $totalAmountInput = '',
+                string $startPeriodKey = '',
+                string $weeklyStartDate = ''
             ): string {
                 $entryType = normalizeAccountingEntryType($entryType);
                 $selectedType = normalizeAccountingEntryTypeChoice($entryType, $selectedType);
@@ -369,6 +371,8 @@
                 $weeklyDay ??= (int) (new DateTimeImmutable('today'))->format('N');
                 $installmentNumber = max(1, $installmentNumber);
                 $installmentTotal = max(2, $installmentTotal);
+                $startPeriodKey = preg_match('/^\d{4}-\d{2}$/', $startPeriodKey) ? $startPeriodKey : '';
+                $weeklyStartDate = dueDateForStorage($weeklyStartDate) ?? '';
                 ob_start();
                 ?>
                 <div class="accounting-entry-type-controls" data-accounting-entry-type-controls>
@@ -412,6 +416,17 @@
                                 <?php endfor; ?>
                             </select>
                         </label>
+                        <label class="accounting-entry-edit-control">
+                            <span>Inicia em</span>
+                            <input
+                                type="month"
+                                name="recurrence_start_period"
+                                value="<?= e($startPeriodKey) ?>"
+                                class="accounting-installment-select"
+                                aria-label="Mês de início da recorrência mensal"
+                                data-accounting-start-period
+                            >
+                        </label>
                     </div>
                     <div class="accounting-monthly-fields" data-accounting-weekly-fields<?= $selectedType === 'weekly' ? '' : ' hidden' ?>>
                         <label class="accounting-entry-edit-control">
@@ -421,6 +436,17 @@
                                     <option value="<?= e((string) $weeklyDayOption) ?>" <?= $weeklyDayOption === $weeklyDay ? 'selected' : '' ?>><?= $weeklyDayLabel ?></option>
                                 <?php endforeach; ?>
                             </select>
+                        </label>
+                        <label class="accounting-entry-edit-control">
+                            <span>Começa em</span>
+                            <input
+                                type="date"
+                                name="weekly_start_date"
+                                value="<?= e($weeklyStartDate) ?>"
+                                class="accounting-installment-select"
+                                aria-label="Data de início da recorrência semanal"
+                                data-accounting-weekly-start-date
+                            >
                         </label>
                     </div>
                 </div>
@@ -468,6 +494,9 @@
                 $typeLabel = $entryType === 'income' ? 'Recebido' : 'Pago';
                 $weeklyAmountInput = (string) ($firstEntry['amount_input'] ?? '0,00');
                 $weeklyDay = (int) (new DateTimeImmutable((string) ($firstEntry['due_date'] ?? 'today')))->format('N');
+                $weeklyStartDate = dueDateForStorage((string) ($firstEntry['weekly_anchor_date'] ?? ''))
+                    ?? dueDateForStorage((string) ($firstEntry['due_date'] ?? ''))
+                    ?? '';
                 ob_start();
                 ?>
                 <details class="accounting-occurrence-group<?= $isWeekly ? ' is-weekly' : ' is-carried' ?>">
@@ -496,6 +525,10 @@
                                 <label class="accounting-occurrence-group-value">
                                     <span>Por semana</span>
                                     <input type="text" name="amount_value" value="<?= e($weeklyAmountInput) ?>" class="accounting-input accounting-input-amount" inputmode="numeric" required>
+                                </label>
+                                <label class="accounting-occurrence-group-value">
+                                    <span>Começa em</span>
+                                    <input type="date" name="weekly_start_date" value="<?= e($weeklyStartDate) ?>" class="accounting-input" required>
                                 </label>
                                 <button type="submit" class="btn btn-mini btn-ghost">Salvar recorrência</button>
                             </form>
@@ -900,7 +933,9 @@
                                                 $accountingEntryWeeklyDay,
                                                 max(1, (int) ($accountingEntry['installment_number'] ?? 1)),
                                                 max(2, (int) ($accountingEntry['installment_total'] ?? 2)),
-                                                $accountingEntryTotalAmountInput
+                                                $accountingEntryTotalAmountInput,
+                                                (string) ($accountingEntry['period_key'] ?? $accountingPeriod),
+                                                (string) ($accountingEntry['weekly_anchor_date'] ?? $accountingEntry['due_date'] ?? '')
                                             ) ?>
                                             <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryShowDiscountProgress): ?>
                                                 <div class="accounting-entry-meta<?= $accountingEntryShowDiscountProgress ? ' has-discount-progress' : '' ?>">
@@ -1579,7 +1614,9 @@
                                                 $accountingEntryWeeklyDay,
                                                 1,
                                                 2,
-                                                $accountingEntryTotalAmountInput
+                                                $accountingEntryTotalAmountInput,
+                                                (string) ($accountingEntry['period_key'] ?? $accountingPeriod),
+                                                (string) ($accountingEntry['weekly_anchor_date'] ?? $accountingEntry['due_date'] ?? '')
                                             ) ?>
                                             <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowReceiptProgress): ?>
                                                 <div class="accounting-entry-meta<?= $accountingEntryShowReceiptProgress ? ' has-discount-progress' : '' ?>">

@@ -174,7 +174,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         (string) ($_POST['label'] ?? ''),
                         $_POST['amount_value'] ?? null,
                         $_POST['weekly_day'] ?? null,
-                        (int) ($authUser['id'] ?? 0)
+                        (int) ($authUser['id'] ?? 0),
+                        $_POST['weekly_start_date'] ?? null
                     );
                     if ($isSettled === 1) {
                         updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
@@ -313,7 +314,9 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['weekly_day'] ?? null,
                         $automationConfig,
                         (int) ($authUser['id'] ?? 0),
-                        $shouldRebuildWeekly
+                        $shouldRebuildWeekly,
+                        $_POST['weekly_start_date'] ?? null,
+                        $_POST['recurrence_start_period'] ?? null
                     );
                 } elseif ($weeklyRecurrenceId > 0) {
                     updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
@@ -322,7 +325,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $entryId,
                         (string) ($_POST['label'] ?? ''),
                         $_POST['amount_value'] ?? null,
-                        $isSettled
+                        $isSettled,
+                        $_POST['weekly_start_date'] ?? null
                     );
                 } else {
                     updateWorkspaceAccountingEntryWithCarrySync(
@@ -340,7 +344,8 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['monthly_day'] ?? null,
                         $isMonthlyFlag,
                         (string) ($_POST['monthly_mode'] ?? 'uniform'),
-                        $automationConfig
+                        $automationConfig,
+                        $_POST['recurrence_start_period'] ?? null
                     );
                 }
                 if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {

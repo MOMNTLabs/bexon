@@ -7268,9 +7268,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const monthlyModeField = form.querySelector("[data-accounting-monthly-mode]");
     const monthlyDayFieldWrap = form.querySelector("[data-accounting-monthly-day-field]");
     const monthlyDayField = form.querySelector("[data-accounting-monthly-day]");
+    const startPeriodField = form.querySelector("[data-accounting-start-period]");
     const weeklyToggle = form.querySelector("[data-accounting-weekly-toggle]");
     const weeklyFields = form.querySelector("[data-accounting-weekly-fields]");
     const weeklyDayField = form.querySelector("[data-accounting-weekly-day]");
+    const weeklyStartDateField = form.querySelector("[data-accounting-weekly-start-date]");
     const settledCheck = form.querySelector("[data-accounting-settled-check]");
     const typeSelect = form.querySelector("[data-accounting-type-select]");
     const automationTypeField = form.querySelector("[data-accounting-automation-type]");
@@ -7365,6 +7367,10 @@ window.addEventListener("DOMContentLoaded", () => {
         monthlyDayField.value = String(new Date().getDate());
       }
     }
+    if (startPeriodField instanceof HTMLInputElement) {
+      startPeriodField.disabled = !isMonthlyDue || isMonthlyGoal;
+      startPeriodField.required = isMonthlyDue && !isMonthlyGoal;
+    }
     if (weeklyFields instanceof HTMLElement) {
       weeklyFields.hidden = !isWeeklyDue;
     }
@@ -7375,6 +7381,10 @@ window.addEventListener("DOMContentLoaded", () => {
         const browserWeekday = new Date().getDay();
         weeklyDayField.value = String(browserWeekday === 0 ? 7 : browserWeekday);
       }
+    }
+    if (weeklyStartDateField instanceof HTMLInputElement) {
+      weeklyStartDateField.disabled = !isWeeklyDue;
+      weeklyStartDateField.required = isWeeklyDue;
     }
     if (settledCheck instanceof HTMLElement) {
       settledCheck.hidden = isMonthlyGoal;

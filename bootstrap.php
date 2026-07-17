@@ -7884,6 +7884,9 @@ function workspaceAccountingEntriesListRaw(
     $weeklyRecurrenceIdSelect = !empty($accountingSchema['weekly_recurrence_id'])
         ? 'ae.weekly_recurrence_id'
         : 'NULL AS weekly_recurrence_id';
+    $weeklyAnchorDateSelect = !empty($accountingSchema['weekly_recurrence_id'])
+        ? 'wr.anchor_date AS weekly_anchor_date'
+        : 'NULL AS weekly_anchor_date';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -7923,6 +7926,9 @@ function workspaceAccountingEntriesListRaw(
     $sourceDueJoin = !empty($accountingSchema['source_due_entry_id'])
         ? ' LEFT JOIN workspace_due_entries de ON de.id = ae.source_due_entry_id'
         : '';
+    $weeklyRecurrenceJoin = !empty($accountingSchema['weekly_recurrence_id'])
+        ? ' LEFT JOIN workspace_accounting_weekly_recurrences wr ON wr.id = ae.weekly_recurrence_id'
+        : '';
 
     $sql =
         'SELECT ae.id,
@@ -7951,6 +7957,7 @@ function workspaceAccountingEntriesListRaw(
                 ' . $carrySourceEntrySelect . ',
                 ' . $carryStopPeriodKeySelect . ',
                 ' . $weeklyRecurrenceIdSelect . ',
+                ' . $weeklyAnchorDateSelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -7958,7 +7965,7 @@ function workspaceAccountingEntriesListRaw(
                 ' . $sourceDueRecurrenceSelect . ',
                 ' . $sourceDueMonthlyDaySelect . ',
                 u.name AS created_by_name
-         FROM workspace_accounting_entries ae' . $sourceDueJoin . '
+         FROM workspace_accounting_entries ae' . $sourceDueJoin . $weeklyRecurrenceJoin . '
          LEFT JOIN users u ON u.id = ae.created_by
          WHERE ae.workspace_id = :workspace_id
            AND ae.period_key = :period_key';
@@ -9982,14 +9989,24 @@ function accountingWeeklyDayLabel($value, bool $compact = false): string
     return $labels[$weekday];
 }
 
-function workspaceAccountingWeeklyAnchorDate(int $workspaceId, string $periodKey, $weekdayInput): string
+function workspaceAccountingWeeklyAnchorDate(
+    int $workspaceId,
+    string $periodKey,
+    $weekdayInput,
+    $startDateInput = null
+): string
 {
     $weekday = normalizeAccountingWeeklyDay($weekdayInput);
-    $range = accountingPeriodRangeForCycleCloseDay($periodKey, workspaceAccountingCycleCloseDay($workspaceId));
-    $startDate = new DateTimeImmutable((string) ($range['start_date'] ?? accountingPeriodStartDate($periodKey)));
-    $endDate = new DateTimeImmutable((string) ($range['end_date'] ?? $startDate->modify('+1 month -1 day')->format('Y-m-d')));
-    $today = new DateTimeImmutable('today');
-    $baseDate = $today >= $startDate && $today <= $endDate ? $today : $startDate;
+    $requestedStartDate = dueDateForStorage((string) $startDateInput);
+    if ($requestedStartDate !== null) {
+        $baseDate = new DateTimeImmutable($requestedStartDate);
+    } else {
+        $range = accountingPeriodRangeForCycleCloseDay($periodKey, workspaceAccountingCycleCloseDay($workspaceId));
+        $startDate = new DateTimeImmutable((string) ($range['start_date'] ?? accountingPeriodStartDate($periodKey)));
+        $endDate = new DateTimeImmutable((string) ($range['end_date'] ?? $startDate->modify('+1 month -1 day')->format('Y-m-d')));
+        $today = new DateTimeImmutable('today');
+        $baseDate = $today >= $startDate && $today <= $endDate ? $today : $startDate;
+    }
     $offset = ($weekday - (int) $baseDate->format('N') + 7) % 7;
     return $baseDate->modify('+' . $offset . ' days')->format('Y-m-d');
 }
@@ -10125,7 +10142,8 @@ function createWorkspaceAccountingWeeklyRecurrence(
     string $label,
     $amountInput,
     $weekdayInput,
-    ?int $createdBy = null
+    ?int $createdBy = null,
+    $startDateInput = null
 ): int {
     ensureWorkspaceAccountingSchema($pdo);
     $label = normalizeAccountingEntryLabel($label);
@@ -10136,7 +10154,7 @@ function createWorkspaceAccountingWeeklyRecurrence(
 
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     $weekday = normalizeAccountingWeeklyDay($weekdayInput);
-    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday);
+    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday, $startDateInput);
     $anchorPeriodKey = accountingPeriodKeyFromDateWithCycleCloseDay(
         $anchorDate,
         workspaceAccountingCycleCloseDay($workspaceId)
@@ -10215,7 +10233,8 @@ function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
     int $entryId,
     string $label,
     $amountInput,
-    int $isSettled
+    int $isSettled,
+    $startDateInput = null
 ): void {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
     $recurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
@@ -10226,15 +10245,37 @@ function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
         throw new RuntimeException('Recorrência semanal não encontrada.');
     }
 
+    $anchorStmt = $pdo->prepare(
+        'SELECT anchor_date
+         FROM workspace_accounting_weekly_recurrences
+         WHERE id = :id AND workspace_id = :workspace_id
+         LIMIT 1'
+    );
+    $anchorStmt->execute([
+        ':id' => $recurrenceId,
+        ':workspace_id' => $workspaceId,
+    ]);
+    $existingAnchorDate = dueDateForStorage((string) $anchorStmt->fetchColumn()) ?? $dueDate;
+    $requestedStartDate = dueDateForStorage((string) $startDateInput);
+    $anchorDate = $requestedStartDate !== null
+        ? workspaceAccountingWeeklyAnchorDate(
+            $workspaceId,
+            normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? '')),
+            (new DateTimeImmutable($dueDate))->format('N'),
+            $requestedStartDate
+        )
+        : $existingAnchorDate;
+
     $updatedAt = nowIso();
     $recurrenceStmt = $pdo->prepare(
         'UPDATE workspace_accounting_weekly_recurrences
-         SET label = :label, amount_cents = :amount_cents, updated_at = :updated_at
+         SET label = :label, amount_cents = :amount_cents, anchor_date = :anchor_date, updated_at = :updated_at
          WHERE id = :id AND workspace_id = :workspace_id'
     );
     $recurrenceStmt->execute([
         ':label' => $label,
         ':amount_cents' => $amountCents,
+        ':anchor_date' => $anchorDate,
         ':updated_at' => $updatedAt,
         ':id' => $recurrenceId,
         ':workspace_id' => $workspaceId,
@@ -10255,6 +10296,21 @@ function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
         ':weekly_recurrence_id' => $recurrenceId,
         ':due_date' => $dueDate,
     ]);
+
+    if ($requestedStartDate !== null && $anchorDate < $dueDate) {
+        $cursorPeriod = accountingPeriodKeyFromDateWithCycleCloseDay(
+            $anchorDate,
+            workspaceAccountingCycleCloseDay($workspaceId)
+        );
+        $lastPeriod = normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''));
+        while ($cursorPeriod !== null && strcmp($cursorPeriod, $lastPeriod) <= 0) {
+            workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $cursorPeriod);
+            if ($cursorPeriod === $lastPeriod) {
+                break;
+            }
+            $cursorPeriod = accountingNextPeriodKey($cursorPeriod);
+        }
+    }
 
     $statusStmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
@@ -10770,7 +10826,8 @@ function updateWorkspaceAccountingEntry(
 
     $stmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
-         SET label = :label,
+         SET period_key = :period_key,
+             label = :label,
              amount_cents = :amount_cents,
              total_amount_cents = :total_amount_cents,
              is_installment = :is_installment,
@@ -10793,6 +10850,7 @@ function updateWorkspaceAccountingEntry(
            AND workspace_id = :workspace_id'
     );
     $stmt->execute([
+        ':period_key' => $periodKey,
         ':label' => $label,
         ':amount_cents' => (int) $amountPayload['amount_cents'],
         ':total_amount_cents' => (int) $amountPayload['total_amount_cents'],
@@ -11108,11 +11166,12 @@ function workspaceAccountingAttachWeeklyRecurrenceToEntry(
     string $label,
     $amountInput,
     $weekdayInput,
-    ?int $createdBy = null
+    ?int $createdBy = null,
+    $startDateInput = null
 ): void {
     $weekday = normalizeAccountingWeeklyDay($weekdayInput);
     $periodKey = normalizeAccountingPeriodKey($periodKey);
-    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday);
+    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday, $startDateInput);
     $amountCents = normalizeDueAmountCents($amountInput);
     $label = normalizeAccountingEntryLabel($label);
     if ($amountCents === null || $label === '') {
@@ -11282,7 +11341,9 @@ function convertWorkspaceAccountingEntryType(
     $weeklyDayInput = null,
     ?array $automationConfig = null,
     ?int $createdBy = null,
-    bool $force = false
+    bool $force = false,
+    $weeklyStartDateInput = null,
+    $startPeriodInput = null
 ): void {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
     if ($entry === null) {
@@ -11316,6 +11377,13 @@ function convertWorkspaceAccountingEntryType(
     }
 
     $periodKey = normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''));
+    $requestedStartPeriod = trim((string) $startPeriodInput);
+    if (
+        in_array($targetChoice, ['monthly', 'weekly'], true)
+        && preg_match('/^\d{4}-\d{2}$/', $requestedStartPeriod)
+    ) {
+        $periodKey = normalizeAccountingPeriodKey($requestedStartPeriod);
+    }
     $startedTransaction = !$pdo->inTransaction();
     if ($startedTransaction) {
         $pdo->beginTransaction();
@@ -11389,7 +11457,8 @@ function convertWorkspaceAccountingEntryType(
                 $label,
                 $amountInput,
                 $weeklyDayInput,
-                $createdBy
+                $createdBy,
+                $weeklyStartDateInput
             );
         }
 
@@ -11420,7 +11489,8 @@ function updateWorkspaceAccountingEntryWithCarrySync(
     $monthlyDayInput = null,
     ?int $isMonthlyInput = null,
     ?string $monthlyModeInput = null,
-    ?array $automationConfig = null
+    ?array $automationConfig = null,
+    $startPeriodInput = null
 ): void
 {
     $existingEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
@@ -11460,7 +11530,16 @@ function updateWorkspaceAccountingEntryWithCarrySync(
                 $monthlyFlag,
                 0
             );
-        $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
+        $existingPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
+        $entryPeriodKey = $existingPeriodKey;
+        $requestedStartPeriod = trim((string) $startPeriodInput);
+        if (
+            ($monthlyFlag === 1 || $sourceDueEntryId > 0)
+            && preg_match('/^\d{4}-\d{2}$/', $requestedStartPeriod)
+        ) {
+            $entryPeriodKey = normalizeAccountingPeriodKey($requestedStartPeriod);
+        }
+        $hasMovedStartPeriod = $entryPeriodKey !== $existingPeriodKey;
         $resolvedMonthlyDay = $monthlyDayInput;
         if ($monthlyFlag === 1 && normalizeDueMonthlyDay($resolvedMonthlyDay) === null) {
             $resolvedMonthlyDay = normalizeDueMonthlyDay($existingEntry['monthly_day'] ?? null)
@@ -11471,7 +11550,7 @@ function updateWorkspaceAccountingEntryWithCarrySync(
             && workspaceAccountingHasCarrySourceColumn($pdo)
             && workspaceAccountingHasCarryStopPeriodColumn($pdo)
         ) {
-            workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
+            workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $existingPeriodKey);
             workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, $entryId);
             $sourceDueEntryId = 0;
         }
@@ -11487,8 +11566,25 @@ function updateWorkspaceAccountingEntryWithCarrySync(
                 $pdo,
                 $workspaceId,
                 $sourceDueEntryId,
-                $currentPeriodKey
+                $existingPeriodKey
             ) ?? $currentPeriodKey;
+            if (strcmp($linkedFutureLimit, $currentPeriodKey) < 0) {
+                $linkedFutureLimit = $currentPeriodKey;
+            }
+            if ($hasMovedStartPeriod) {
+                workspaceAccountingDetachDueLinkedEntriesBeforePeriod(
+                    $pdo,
+                    $workspaceId,
+                    $sourceDueEntryId,
+                    $existingPeriodKey
+                );
+                workspaceAccountingDeleteDueLinkedEntriesFromPeriod(
+                    $pdo,
+                    $workspaceId,
+                    $sourceDueEntryId,
+                    $existingPeriodKey
+                );
+            }
             $dueEntry = updateWorkspaceDueEntryFromAccounting(
                 $pdo,
                 $workspaceId,
@@ -11508,6 +11604,9 @@ function updateWorkspaceAccountingEntryWithCarrySync(
             );
             $updatedEntry = workspaceAccountingDueLinkedEntryForPeriod($pdo, $workspaceId, $sourceDueEntryId, $currentPeriodKey);
         } else {
+            if ($hasMovedStartPeriod) {
+                workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, false);
+            }
             updateWorkspaceAccountingEntry(
                 $pdo,
                 $workspaceId,
