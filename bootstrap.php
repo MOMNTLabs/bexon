@@ -7184,16 +7184,28 @@ function workspaceAccountingAttachDiscounts(PDO $pdo, int $workspaceId, array $e
         $entryId = (int) ($entry['id'] ?? 0);
         $discounts = $discountsByEntryId[$entryId] ?? [];
         $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
-        $discountTotalCents = min(
+        $discountScheduledTotalCents = min(
             $amountCents,
             array_sum(array_map(static fn (array $discount): int => (int) ($discount['amount_cents'] ?? 0), $discounts))
         );
+        $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+        $discountTotalCents = min(
+            $amountCents,
+            array_sum(array_map(
+                static fn (array $discount): int => (string) ($discount['due_date'] ?? '') <= $today
+                    ? (int) ($discount['amount_cents'] ?? 0)
+                    : 0,
+                $discounts
+            ))
+        );
         $hasSubitems = ((int) ($entry['has_subitems'] ?? 0)) === 1;
         $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
-        $remainingCents = $isSettled ? 0 : max(0, $amountCents - $discountTotalCents);
+        $remainingCents = $isSettled ? 0 : max(0, $amountCents - $discountScheduledTotalCents);
 
         $entry['discounts'] = $discounts;
         $entry['discount_count'] = count($discounts);
+        $entry['discount_scheduled_total_cents'] = $discountScheduledTotalCents;
+        $entry['discount_scheduled_total_display'] = dueAmountLabelFromCents($discountScheduledTotalCents);
         $entry['discount_total_cents'] = $discountTotalCents;
         $entry['discount_total_display'] = dueAmountLabelFromCents($discountTotalCents);
         $entry['discount_remaining_cents'] = $remainingCents;
@@ -7201,7 +7213,7 @@ function workspaceAccountingAttachDiscounts(PDO $pdo, int $workspaceId, array $e
         $entry['effective_amount_cents'] = max(0, $amountCents - $discountTotalCents);
         $entry['effective_amount_display'] = dueAmountLabelFromCents(max(0, $amountCents - $discountTotalCents));
         $entry['supports_discounts'] = workspaceAccountingEntrySupportsDiscounts($entry) ? 1 : 0;
-        if ($hasSubitems && $amountCents > 0 && $remainingCents <= 0) {
+        if ($hasSubitems && $amountCents > 0 && $discountTotalCents >= $amountCents) {
             $entry['is_settled'] = 1;
         }
     }
@@ -7229,6 +7241,84 @@ function workspaceAccountingDiscountTotalCents(PDO $pdo, int $workspaceId, int $
     ]);
 
     return max(0, (int) $stmt->fetchColumn());
+}
+
+function workspaceAccountingRealizedDiscountTotalCents(PDO $pdo, int $workspaceId, int $entryId): int
+{
+    if ($workspaceId <= 0 || $entryId <= 0) {
+        return 0;
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $stmt = $pdo->prepare(
+        'SELECT COALESCE(SUM(amount_cents), 0)
+         FROM workspace_accounting_entry_discounts
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id
+           AND due_date <= :today'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+        ':today' => (new DateTimeImmutable('today'))->format('Y-m-d'),
+    ]);
+
+    return max(0, (int) $stmt->fetchColumn());
+}
+
+function workspaceAccountingRefreshAutomaticEntrySettlements(PDO $pdo, int $workspaceId): void
+{
+    if ($workspaceId <= 0) {
+        return;
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $today = (new DateTimeImmutable('today'))->format('Y-m-d');
+    $stmt = $pdo->prepare(
+        'SELECT ae.id,
+                ae.amount_cents,
+                ae.due_date,
+                COUNT(ad.id) AS receipt_count,
+                COALESCE(SUM(CASE WHEN ad.due_date <= :today THEN ad.amount_cents ELSE 0 END), 0) AS realized_cents
+         FROM workspace_accounting_entries ae
+         LEFT JOIN workspace_accounting_entry_discounts ad
+           ON ad.workspace_id = ae.workspace_id
+          AND ad.entry_id = ae.id
+         WHERE ae.workspace_id = :workspace_id
+           AND ae.entry_type = \'income\'
+           AND ae.is_settled = 0
+           AND ae.due_date IS NOT NULL
+           AND ae.due_date <= :today
+         GROUP BY ae.id, ae.amount_cents, ae.due_date'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':today' => $today,
+    ]);
+
+    $settleStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_settled = 1,
+             settled_at = COALESCE(settled_at, :settled_at),
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :entry_id'
+    );
+    foreach ($stmt->fetchAll() ?: [] as $entry) {
+        $receiptCount = max(0, (int) ($entry['receipt_count'] ?? 0));
+        $amountCents = max(0, (int) ($entry['amount_cents'] ?? 0));
+        $realizedCents = max(0, (int) ($entry['realized_cents'] ?? 0));
+        if ($receiptCount > 0 && $realizedCents < $amountCents) {
+            continue;
+        }
+
+        $settleStmt->execute([
+            ':settled_at' => nowIso(),
+            ':updated_at' => nowIso(),
+            ':workspace_id' => $workspaceId,
+            ':entry_id' => (int) ($entry['id'] ?? 0),
+        ]);
+    }
 }
 
 function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null, ?string $dueDateInput = null): int
@@ -7290,7 +7380,7 @@ function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId
     $discountId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
     if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
         workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
-    } elseif (((int) ($entry['discount_total_cents'] ?? 0)) + $amountCents >= (int) ($entry['amount_cents'] ?? 0)) {
+    } elseif (workspaceAccountingRealizedDiscountTotalCents($pdo, $workspaceId, $entryId) >= (int) ($entry['amount_cents'] ?? 0)) {
         $settleStmt = $pdo->prepare(
             'UPDATE workspace_accounting_entries
              SET is_settled = 1,
@@ -7379,7 +7469,7 @@ function validateWorkspaceAccountingSubitemCoverage(PDO $pdo, int $workspaceId, 
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $totalCents = max(0, (int) ($row['total_cents'] ?? 0));
     $paidCents = max(0, (int) ($row['paid_cents'] ?? 0));
-    $discountCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+    $discountCents = workspaceAccountingRealizedDiscountTotalCents($pdo, $workspaceId, $entryId);
     if ($paidCents + $discountCents > $totalCents) {
         throw new RuntimeException('Os pagamentos e abatimentos ultrapassam o valor total do item.');
     }
@@ -7646,7 +7736,7 @@ function workspaceAccountingSyncEntrySettlementFromSubitems(PDO $pdo, int $works
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $subitemCount = max(0, (int) ($row['subitem_count'] ?? 0));
     $totalCents = max(0, (int) ($row['total_cents'] ?? 0));
-    $discountCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+    $discountCents = workspaceAccountingRealizedDiscountTotalCents($pdo, $workspaceId, $entryId);
     $isSettled = $subitemCount > 0 && $totalCents > 0 && $discountCents >= $totalCents;
     $settledAt = $isSettled ? nowIso() : null;
 
@@ -7942,6 +8032,7 @@ function workspaceAccountingEntriesListRaw(
         );
         workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
     }
+    workspaceAccountingRefreshAutomaticEntrySettlements($pdo, $workspaceId);
     $dueDateSelect = !empty($accountingSchema['due_date'])
         ? 'ae.due_date'
         : 'NULL AS due_date';
@@ -12347,7 +12438,9 @@ function accountingWeeklyBalanceProjection(
             }
 
             $isDiscountMovement = $discounts !== [];
-            $isSettled = $isDiscountMovement || ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
+            $isSettled = $isDiscountMovement
+                ? (dueDateForStorage((string) ($eventSource['due_date'] ?? '')) ?? '') <= $today
+                : ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
             $isWeeklyOccurrence = ((int) ($entry['is_weekly'] ?? 0)) === 1;
             $settledDate = $isDiscountMovement
                 ? null
