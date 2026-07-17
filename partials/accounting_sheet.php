@@ -969,7 +969,7 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <?php if (!$accountingEntryDiscounts): ?>
+                                            <?php if (!$accountingEntryDiscounts && !$accountingEntryIsInstallment && !$accountingEntryIsMonthlyGoal && $accountingEntryMonthlyBadge === '' && $accountingEntryWeeklyBadge === ''): ?>
                                                 <label class="accounting-entry-date-field" title="Organize esta conta na semana em que ela ocorreu.">
                                                     <span>Data</span>
                                                     <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da conta">
@@ -1668,7 +1668,7 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <?php if (!$accountingEntryReceipts): ?>
+                                            <?php if (!$accountingEntryReceipts && !$accountingEntryIsInstallment && $accountingEntryMonthlyBadge === '' && $accountingEntryWeeklyBadge === ''): ?>
                                                 <label class="accounting-entry-date-field" title="Organize esta entrada na semana em que ela ocorreu.">
                                                     <span>Data</span>
                                                     <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da entrada">

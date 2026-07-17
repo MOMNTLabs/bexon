@@ -390,7 +390,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['recurrence_start_period'] ?? null
                     );
                 }
-                if (!in_array($targetTypeChoice, ['monthly', 'weekly'], true)) {
+                if (!in_array($targetTypeChoice, ['monthly', 'weekly', 'installment', 'goal', 'completed_tasks'], true)) {
                     updateWorkspaceAccountingEntryDate(
                         $pdo,
                         $workspaceId,
