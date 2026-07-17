@@ -264,17 +264,54 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro não encontrado.');
                 }
 
+                $existingEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+                if ($existingEntry === null) {
+                    throw new RuntimeException('Registro não encontrado.');
+                }
+
                 $isSettled = array_key_exists('is_settled', $_POST) ? 1 : 0;
-                $entryType = normalizeAccountingEntryType((string) ($entryRow['entry_type'] ?? 'expense'));
-                $weeklyRecurrenceId = max(0, (int) ($entryRow['weekly_recurrence_id'] ?? 0));
-                $isInstallment = $entryType === 'expense' && ((string) ($_POST['is_installment'] ?? '0')) === '1' ? 1 : 0;
-                $isMonthlyFlag = ((string) ($_POST['is_monthly_due'] ?? '0')) === '1' ? 1 : 0;
+                $entryType = normalizeAccountingEntryType((string) ($existingEntry['entry_type'] ?? 'expense'));
+                $weeklyRecurrenceId = max(0, (int) ($existingEntry['weekly_recurrence_id'] ?? 0));
+                $sourceTypeChoice = workspaceAccountingEntryTypeChoice($existingEntry);
+                $targetTypeChoice = normalizeAccountingEntryTypeChoice(
+                    $entryType,
+                    (string) ($_POST['accounting_type_choice'] ?? $sourceTypeChoice)
+                );
+                $isInstallment = $entryType === 'expense' && $targetTypeChoice === 'installment' ? 1 : 0;
+                $isMonthlyFlag = in_array($targetTypeChoice, ['monthly', 'goal'], true) ? 1 : 0;
                 $automationConfig = accountingAutomationConfigFromRequest(
                     $pdo,
                     (int) ($authUser['id'] ?? 0),
                     $entryType
                 );
-                if ($weeklyRecurrenceId > 0) {
+                $currentWeeklyDay = $weeklyRecurrenceId > 0
+                    ? normalizeAccountingWeeklyDay((new DateTimeImmutable((string) ($existingEntry['due_date'] ?? 'today')))->format('N'))
+                    : 0;
+                $requestedWeeklyDay = normalizeAccountingWeeklyDay($_POST['weekly_day'] ?? null);
+                $shouldRebuildWeekly = $sourceTypeChoice === 'weekly'
+                    && $targetTypeChoice === 'weekly'
+                    && $currentWeeklyDay !== $requestedWeeklyDay;
+
+                if ($sourceTypeChoice !== $targetTypeChoice || $shouldRebuildWeekly) {
+                    convertWorkspaceAccountingEntryType(
+                        $pdo,
+                        $workspaceId,
+                        $entryId,
+                        $targetTypeChoice,
+                        (string) ($_POST['label'] ?? ''),
+                        $_POST['amount_value'] ?? null,
+                        $isSettled,
+                        accountingInstallmentProgressFromRequest($_POST),
+                        $_POST['total_amount_value'] ?? null,
+                        $_POST['installment_number'] ?? null,
+                        $_POST['installment_total'] ?? null,
+                        $_POST['monthly_day'] ?? null,
+                        $_POST['weekly_day'] ?? null,
+                        $automationConfig,
+                        (int) ($authUser['id'] ?? 0),
+                        $shouldRebuildWeekly
+                    );
+                } elseif ($weeklyRecurrenceId > 0) {
                     updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
                         $pdo,
                         $workspaceId,

@@ -354,6 +354,79 @@
 
                 return (string) ob_get_clean();
             };
+            $renderAccountingEntryTypeControls = static function (
+                string $entryType,
+                string $selectedType,
+                ?int $monthlyDay = null,
+                ?int $weeklyDay = null,
+                int $installmentNumber = 1,
+                int $installmentTotal = 2,
+                string $totalAmountInput = ''
+            ): string {
+                $entryType = normalizeAccountingEntryType($entryType);
+                $selectedType = normalizeAccountingEntryTypeChoice($entryType, $selectedType);
+                $monthlyDay ??= (int) (new DateTimeImmutable('today'))->format('j');
+                $weeklyDay ??= (int) (new DateTimeImmutable('today'))->format('N');
+                $installmentNumber = max(1, $installmentNumber);
+                $installmentTotal = max(2, $installmentTotal);
+                ob_start();
+                ?>
+                <div class="accounting-entry-type-controls" data-accounting-entry-type-controls>
+                    <select
+                        name="accounting_type_choice"
+                        class="accounting-installment-select accounting-entry-type-select"
+                        aria-label="Tipo do registro"
+                        data-accounting-type-select
+                    >
+                        <option value="single" <?= $selectedType === 'single' ? 'selected' : '' ?>>&Uacute;nica</option>
+                        <option value="monthly" <?= $selectedType === 'monthly' ? 'selected' : '' ?>>Mensal</option>
+                        <option value="weekly" <?= $selectedType === 'weekly' ? 'selected' : '' ?>>Semanal</option>
+                        <?php if ($entryType === 'expense'): ?>
+                            <option value="installment" <?= $selectedType === 'installment' ? 'selected' : '' ?>>Parcelada</option>
+                            <option value="goal" <?= $selectedType === 'goal' ? 'selected' : '' ?>>Saldo a quitar</option>
+                        <?php else: ?>
+                            <option value="completed_tasks" <?= $selectedType === 'completed_tasks' ? 'selected' : '' ?>>Por tarefa</option>
+                        <?php endif; ?>
+                    </select>
+                    <input type="checkbox" name="is_installment" value="1" class="accounting-hidden-toggle" data-accounting-installment-toggle tabindex="-1" aria-hidden="true" <?= $selectedType === 'installment' ? 'checked' : '' ?>>
+                    <input type="checkbox" name="is_monthly_due" value="1" class="accounting-hidden-toggle" data-accounting-monthly-toggle tabindex="-1" aria-hidden="true" <?= in_array($selectedType, ['monthly', 'goal'], true) ? 'checked' : '' ?>>
+                    <input type="checkbox" name="is_weekly_due" value="1" class="accounting-hidden-toggle" data-accounting-weekly-toggle tabindex="-1" aria-hidden="true" <?= $selectedType === 'weekly' ? 'checked' : '' ?>>
+                    <input type="hidden" name="monthly_mode" value="<?= $selectedType === 'goal' ? 'goal' : 'uniform' ?>" data-accounting-monthly-mode>
+                    <div class="accounting-installment-fields" data-accounting-installment-fields<?= $selectedType === 'installment' ? '' : ' hidden' ?>>
+                        <select name="installment_number" class="accounting-installment-select" aria-label="Parcela atual" data-accounting-installment-number>
+                            <option value="<?= e((string) $installmentNumber) ?>"><?= e((string) $installmentNumber) ?></option>
+                        </select>
+                        <span>de</span>
+                        <select name="installment_total" class="accounting-installment-select" aria-label="Total de parcelas" data-accounting-installment-total-count>
+                            <option value="<?= e((string) $installmentTotal) ?>"><?= e((string) $installmentTotal) ?></option>
+                        </select>
+                        <input type="hidden" name="installment_progress" value="<?= e($installmentNumber . '/' . $installmentTotal) ?>" data-accounting-installment-progress>
+                        <input type="text" name="total_amount_value" value="<?= e($totalAmountInput) ?>" class="accounting-input accounting-input-amount accounting-input-installment-total" inputmode="numeric" placeholder="Total" autocomplete="off" data-accounting-installment-total-amount>
+                    </div>
+                    <div class="accounting-monthly-fields" data-accounting-monthly-fields<?= $selectedType === 'monthly' ? '' : ' hidden' ?>>
+                        <label class="accounting-entry-edit-control" data-accounting-monthly-day-field>
+                            <span>Dia</span>
+                            <select name="monthly_day" class="accounting-installment-select accounting-monthly-day-select" aria-label="Dia da recorrência mensal" data-accounting-monthly-day>
+                                <?php for ($monthlyDayOption = 1; $monthlyDayOption <= 31; $monthlyDayOption++): ?>
+                                    <option value="<?= e((string) $monthlyDayOption) ?>" <?= $monthlyDayOption === $monthlyDay ? 'selected' : '' ?>><?= e(str_pad((string) $monthlyDayOption, 2, '0', STR_PAD_LEFT)) ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="accounting-monthly-fields" data-accounting-weekly-fields<?= $selectedType === 'weekly' ? '' : ' hidden' ?>>
+                        <label class="accounting-entry-edit-control">
+                            <span>Toda</span>
+                            <select name="weekly_day" class="accounting-installment-select accounting-monthly-day-select" aria-label="Dia da recorrência semanal" data-accounting-weekly-day>
+                                <?php foreach ([1 => 'Segunda', 2 => 'Ter&ccedil;a', 3 => 'Quarta', 4 => 'Quinta', 5 => 'Sexta', 6 => 'S&aacute;bado', 7 => 'Domingo'] as $weeklyDayOption => $weeklyDayLabel): ?>
+                                    <option value="<?= e((string) $weeklyDayOption) ?>" <?= $weeklyDayOption === $weeklyDay ? 'selected' : '' ?>><?= $weeklyDayLabel ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <?php
+                return (string) ob_get_clean();
+            };
             $accountingTaskLinkOptionsJson = json_encode(
                 [
                     'workspaces' => $accountingTaskLinkWorkspaces,
@@ -400,6 +473,10 @@
                                     $accountingEntryIsMonthlyDue = $accountingEntrySourceDueId > 0;
                                     $accountingEntryIsMonthlyGoal = ((int) ($accountingEntry['is_monthly_goal'] ?? 0)) === 1;
                                     $accountingEntryIsWeekly = ((int) ($accountingEntry['is_weekly'] ?? 0)) === 1;
+                                    $accountingEntryTypeChoice = workspaceAccountingEntryTypeChoice($accountingEntry);
+                                    $accountingEntryWeeklyDay = $accountingEntryIsWeekly
+                                        ? (int) (new DateTimeImmutable((string) ($accountingEntry['due_date'] ?? 'today')))->format('N')
+                                        : (int) (new DateTimeImmutable('today'))->format('N');
                                     $accountingEntryMonthlyDay = normalizeDueMonthlyDay($accountingEntry['source_due_monthly_day'] ?? null);
                                     $accountingEntryDueDateDisplay = (string) ($accountingEntry['due_date_display'] ?? '');
                                     $accountingEntryGoalPaymentInput = (string) ($accountingEntry['goal_payment_input'] ?? '0,00');
@@ -703,6 +780,15 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
+                                            <?= $renderAccountingEntryTypeControls(
+                                                'expense',
+                                                $accountingEntryTypeChoice,
+                                                $accountingEntryMonthlyDay,
+                                                $accountingEntryWeeklyDay,
+                                                max(1, (int) ($accountingEntry['installment_number'] ?? 1)),
+                                                max(2, (int) ($accountingEntry['installment_total'] ?? 2)),
+                                                $accountingEntryTotalAmountInput
+                                            ) ?>
                                             <?php if ($accountingEntryIsMonthlyGoal || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryShowDiscountProgress): ?>
                                                 <div class="accounting-entry-meta<?= $accountingEntryShowDiscountProgress ? ' has-discount-progress' : '' ?>">
                                                     <?php if ($accountingEntryShowDiscountProgress): ?>
@@ -719,16 +805,7 @@
                                                         </span>
                                                     <?php endif; ?>
                                                     <?php if ($accountingEntryMonthlyBadge !== ''): ?>
-                                                        <label class="accounting-entry-edit-control is-monthly">
-                                                            <span>Mensal -</span>
-                                                            <select name="monthly_day" class="accounting-installment-select" aria-label="Dia do vencimento mensal">
-                                                                <?php for ($monthlyDayOption = 1; $monthlyDayOption <= 31; $monthlyDayOption++): ?>
-                                                                    <option value="<?= e((string) $monthlyDayOption) ?>" <?= $monthlyDayOption === $accountingEntryMonthlyDay ? 'selected' : '' ?>>
-                                                                        <?= e(str_pad((string) $monthlyDayOption, 2, '0', STR_PAD_LEFT)) ?>
-                                                                    </option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </label>
+                                                        <span class="accounting-entry-badge is-monthly">Mensal</span>
                                                     <?php elseif ($accountingEntryWeeklyBadge !== ''): ?>
                                                         <span class="accounting-entry-badge is-weekly"><?= e($accountingEntryWeeklyBadge) ?></span>
                                                     <?php elseif ($accountingEntryIsInstallment): ?>
@@ -739,7 +816,7 @@
                                                     <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
-                                            <div class="accounting-entry-status">
+                                            <div class="accounting-entry-status" data-accounting-settled-check>
                                                 <?php if (!$accountingEntryIsMonthlyGoal): ?>
                                                     <label class="accounting-check">
                                                         <input
@@ -756,26 +833,6 @@
                                                 <button type="submit" class="btn btn-mini">Salvar</button>
                                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-entry-cancel>Cancelar</button>
                                             </div>
-                                            <input
-                                                type="hidden"
-                                                name="is_installment"
-                                                value="<?= $accountingEntryIsInstallment ? '1' : '0' ?>"
-                                            >
-                                            <input
-                                                type="hidden"
-                                                name="installment_progress"
-                                                value="<?= e($accountingEntryInstallmentProgress) ?>"
-                                            >
-                                            <input
-                                                type="hidden"
-                                                name="total_amount_value"
-                                                value="<?= e($accountingEntryTotalAmountInput) ?>"
-                                            >
-                                            <input type="hidden" name="is_monthly_due" value="<?= ($accountingEntryIsMonthlyDue || $accountingEntryIsMonthlyGoal) ? '1' : '0' ?>">
-                                            <input type="hidden" name="monthly_mode" value="<?= $accountingEntryIsMonthlyGoal ? 'goal' : 'uniform' ?>">
-                                            <?php if (!$accountingEntryIsMonthlyDue): ?>
-                                                <input type="hidden" name="monthly_day" value="">
-                                            <?php endif; ?>
                                         </form>
                                         <?php if ($accountingEntrySupportsSubitems || $accountingEntrySupportsDiscounts): ?>
                                             <div class="accounting-entry-detail-actions">
@@ -1250,6 +1307,10 @@
                                         : 'Parcela';
                                     $accountingEntryIsMonthly = ((int) ($accountingEntry['is_monthly'] ?? 0)) === 1;
                                     $accountingEntryIsWeekly = ((int) ($accountingEntry['is_weekly'] ?? 0)) === 1;
+                                    $accountingEntryTypeChoice = workspaceAccountingEntryTypeChoice($accountingEntry);
+                                    $accountingEntryWeeklyDay = $accountingEntryIsWeekly
+                                        ? (int) (new DateTimeImmutable((string) ($accountingEntry['due_date'] ?? 'today')))->format('N')
+                                        : (int) (new DateTimeImmutable('today'))->format('N');
                                     $accountingEntryMonthlyDay = normalizeDueMonthlyDay($accountingEntry['monthly_day'] ?? null);
                                     $accountingEntryMonthlyBadge = $accountingEntryIsMonthly && $accountingEntryMonthlyDay !== null
                                         ? ('Mensal - ' . str_pad((string) $accountingEntryMonthlyDay, 2, '0', STR_PAD_LEFT))
@@ -1394,6 +1455,15 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
+                                            <?= $renderAccountingEntryTypeControls(
+                                                'income',
+                                                $accountingEntryTypeChoice,
+                                                $accountingEntryMonthlyDay,
+                                                $accountingEntryWeeklyDay,
+                                                1,
+                                                2,
+                                                $accountingEntryTotalAmountInput
+                                            ) ?>
                                             <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowReceiptProgress): ?>
                                                 <div class="accounting-entry-meta<?= $accountingEntryShowReceiptProgress ? ' has-discount-progress' : '' ?>">
                                                     <?php if ($accountingEntryShowReceiptProgress): ?>
@@ -1412,16 +1482,7 @@
                                                     <?php if ($accountingEntryIsTaskLinked): ?>
                                                         <span class="accounting-entry-badge is-monthly">Por tarefa</span>
                                                     <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
-                                                        <label class="accounting-entry-edit-control is-monthly">
-                                                            <span>Mensal -</span>
-                                                            <select name="monthly_day" class="accounting-installment-select" aria-label="Dia do recebimento mensal">
-                                                                <?php for ($monthlyDayOption = 1; $monthlyDayOption <= 31; $monthlyDayOption++): ?>
-                                                                    <option value="<?= e((string) $monthlyDayOption) ?>" <?= $monthlyDayOption === $accountingEntryMonthlyDay ? 'selected' : '' ?>>
-                                                                        <?= e(str_pad((string) $monthlyDayOption, 2, '0', STR_PAD_LEFT)) ?>
-                                                                    </option>
-                                                                <?php endfor; ?>
-                                                            </select>
-                                                        </label>
+                                                        <span class="accounting-entry-badge is-monthly">Mensal</span>
                                                     <?php elseif ($accountingEntryWeeklyBadge !== ''): ?>
                                                         <span class="accounting-entry-badge is-weekly"><?= e($accountingEntryWeeklyBadge) ?></span>
                                                     <?php elseif ($accountingEntryIsInstallment): ?>
@@ -1429,16 +1490,14 @@
                                                     <?php endif; ?>
                                                 </div>
                                             <?php endif; ?>
-                                            <?php if ($accountingEntryIsTaskLinked): ?>
-                                                <?= $renderAccountingTaskLinkFields(
-                                                    $accountingEntryTaskLinkWorkspaceId,
-                                                    $accountingEntryTaskLinkGroupNames,
-                                                    $accountingEntryTaskLinkAssigneeIds,
-                                                    false,
-                                                    false
-                                                ) ?>
-                                            <?php endif; ?>
-                                            <div class="accounting-entry-status">
+                                            <?= $renderAccountingTaskLinkFields(
+                                                $accountingEntryTaskLinkWorkspaceId,
+                                                $accountingEntryTaskLinkGroupNames,
+                                                $accountingEntryTaskLinkAssigneeIds,
+                                                !$accountingEntryIsTaskLinked,
+                                                !$accountingEntryIsTaskLinked
+                                            ) ?>
+                                            <div class="accounting-entry-status" data-accounting-settled-check>
                                                 <label class="accounting-check">
                                                     <input
                                                         type="checkbox"
@@ -1453,25 +1512,6 @@
                                                 <button type="submit" class="btn btn-mini">Salvar</button>
                                                 <button type="button" class="btn btn-mini btn-ghost" data-accounting-entry-cancel>Cancelar</button>
                                             </div>
-                                            <input
-                                                type="hidden"
-                                                name="is_installment"
-                                                value="<?= $accountingEntryIsInstallment ? '1' : '0' ?>"
-                                            >
-                                            <input
-                                                type="hidden"
-                                                name="installment_progress"
-                                                value="<?= e($accountingEntryInstallmentProgress) ?>"
-                                            >
-                                            <input
-                                                type="hidden"
-                                                name="total_amount_value"
-                                                value="<?= e($accountingEntryTotalAmountInput) ?>"
-                                            >
-                                            <input type="hidden" name="is_monthly_due" value="<?= (!$accountingEntryIsTaskLinked && $accountingEntryIsMonthly) ? '1' : '0' ?>">
-                                            <?php if ($accountingEntryIsTaskLinked || !$accountingEntryIsMonthly): ?>
-                                                <input type="hidden" name="monthly_day" value="">
-                                            <?php endif; ?>
                                         </form>
                                         <?php if ($accountingEntrySupportsSubitems || $accountingEntrySupportsReceipts): ?>
                                             <div class="accounting-entry-detail-actions">

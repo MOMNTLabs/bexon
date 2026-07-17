@@ -6352,6 +6352,41 @@ function normalizeAccountingAutomationType(string $value): string
         : 'manual';
 }
 
+function normalizeAccountingEntryTypeChoice(string $entryType, string $value): string
+{
+    $entryType = normalizeAccountingEntryType($entryType);
+    $value = mb_strtolower(trim($value));
+    $allowedChoices = $entryType === 'income'
+        ? ['single', 'monthly', 'weekly', 'completed_tasks']
+        : ['single', 'monthly', 'weekly', 'installment', 'goal'];
+
+    return in_array($value, $allowedChoices, true) ? $value : 'single';
+}
+
+function workspaceAccountingEntryTypeChoice(array $entry): string
+{
+    $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+    if ($entryType === 'income'
+        && normalizeAccountingAutomationType((string) ($entry['automation_type'] ?? 'manual')) === 'completed_tasks') {
+        return 'completed_tasks';
+    }
+    if (((int) ($entry['is_weekly'] ?? 0)) === 1 || max(0, (int) ($entry['weekly_recurrence_id'] ?? 0)) > 0) {
+        return 'weekly';
+    }
+    if (((int) ($entry['is_installment'] ?? 0)) === 1) {
+        return 'installment';
+    }
+    if (((int) ($entry['is_monthly_goal'] ?? 0)) === 1) {
+        return 'goal';
+    }
+    if (((int) ($entry['is_monthly'] ?? 0)) === 1
+        || max(0, (int) ($entry['source_due_entry_id'] ?? 0)) > 0) {
+        return 'monthly';
+    }
+
+    return 'single';
+}
+
 function normalizeAccountingTaskLinkGroupNames($value, ?string $fallbackGroupName = null): array
 {
     $rawGroupNames = [];
@@ -10961,6 +10996,312 @@ function deleteWorkspaceAccountingEntry(PDO $pdo, int $workspaceId, int $entryId
 
     if ($stmt->rowCount() <= 0) {
         throw new RuntimeException('Registro não encontrado.');
+    }
+}
+
+function workspaceAccountingAttachWeeklyRecurrenceToEntry(
+    PDO $pdo,
+    int $workspaceId,
+    int $entryId,
+    string $periodKey,
+    string $entryType,
+    string $label,
+    $amountInput,
+    $weekdayInput,
+    ?int $createdBy = null
+): void {
+    $weekday = normalizeAccountingWeeklyDay($weekdayInput);
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    $anchorDate = workspaceAccountingWeeklyAnchorDate($workspaceId, $periodKey, $weekday);
+    $amountCents = normalizeDueAmountCents($amountInput);
+    $label = normalizeAccountingEntryLabel($label);
+    if ($amountCents === null || $label === '') {
+        throw new RuntimeException('Informe os dados da recorrência semanal.');
+    }
+
+    $createdAt = nowIso();
+    $sql = 'INSERT INTO workspace_accounting_weekly_recurrences (
+                workspace_id, entry_type, label, amount_cents, weekday, anchor_date,
+                end_date, created_by, created_at, updated_at
+            ) VALUES (
+                :workspace_id, :entry_type, :label, :amount_cents, :weekday, :anchor_date,
+                NULL, :created_by, :created_at, :updated_at
+            )';
+    if (dbDriverName($pdo) === 'pgsql') {
+        $sql .= ' RETURNING id';
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
+    $stmt->bindValue(':entry_type', normalizeAccountingEntryType($entryType), PDO::PARAM_STR);
+    $stmt->bindValue(':label', $label, PDO::PARAM_STR);
+    $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':weekday', $weekday, PDO::PARAM_INT);
+    $stmt->bindValue(':anchor_date', $anchorDate, PDO::PARAM_STR);
+    if ($createdBy !== null && $createdBy > 0) {
+        $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
+    } else {
+        $stmt->bindValue(':created_by', null, PDO::PARAM_NULL);
+    }
+    $stmt->bindValue(':created_at', $createdAt, PDO::PARAM_STR);
+    $stmt->bindValue(':updated_at', $createdAt, PDO::PARAM_STR);
+    $stmt->execute();
+    $recurrenceId = dbDriverName($pdo) === 'pgsql' ? (int) $stmt->fetchColumn() : (int) $pdo->lastInsertId();
+
+    $linkStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET due_date = :due_date,
+             weekly_recurrence_id = :weekly_recurrence_id,
+             updated_at = :updated_at
+         WHERE id = :id
+           AND workspace_id = :workspace_id'
+    );
+    $linkStmt->execute([
+        ':due_date' => $anchorDate,
+        ':weekly_recurrence_id' => $recurrenceId,
+        ':updated_at' => nowIso(),
+        ':id' => $entryId,
+        ':workspace_id' => $workspaceId,
+    ]);
+
+    workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
+}
+
+function workspaceAccountingPrepareEntryTypeConversion(PDO $pdo, int $workspaceId, array $entry): void
+{
+    $entryId = (int) ($entry['id'] ?? 0);
+    $periodKey = normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''));
+    $carrySourceEntryId = max(0, (int) ($entry['carry_source_entry_id'] ?? 0));
+    $sourceDueEntryId = max(0, (int) ($entry['source_due_entry_id'] ?? 0));
+    $weeklyRecurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
+    $dueDate = dueDateForStorage((string) ($entry['due_date'] ?? ''));
+
+    workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, false);
+
+    if ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
+        workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $periodKey);
+    }
+
+    if ($weeklyRecurrenceId > 0) {
+        if ($dueDate !== null) {
+            $stopStmt = $pdo->prepare(
+                'UPDATE workspace_accounting_weekly_recurrences
+                 SET end_date = :end_date,
+                     updated_at = :updated_at
+                 WHERE id = :id
+                   AND workspace_id = :workspace_id'
+            );
+            $stopStmt->execute([
+                ':end_date' => (new DateTimeImmutable($dueDate))->modify('-1 day')->format('Y-m-d'),
+                ':updated_at' => nowIso(),
+                ':id' => $weeklyRecurrenceId,
+                ':workspace_id' => $workspaceId,
+            ]);
+        }
+
+        $futureStmt = $pdo->prepare(
+            'SELECT id
+             FROM workspace_accounting_entries
+             WHERE workspace_id = :workspace_id
+               AND weekly_recurrence_id = :weekly_recurrence_id
+               AND id <> :entry_id
+               AND due_date >= :due_date'
+        );
+        $futureStmt->execute([
+            ':workspace_id' => $workspaceId,
+            ':weekly_recurrence_id' => $weeklyRecurrenceId,
+            ':entry_id' => $entryId,
+            ':due_date' => $dueDate ?? $periodKey . '-01',
+        ]);
+        foreach ($futureStmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $futureEntryId) {
+            workspaceAccountingDeleteEntryChain($pdo, $workspaceId, (int) $futureEntryId, true);
+        }
+    }
+
+    if ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
+        $futureStmt = $pdo->prepare(
+            'SELECT id
+             FROM workspace_accounting_entries
+             WHERE workspace_id = :workspace_id
+               AND source_due_entry_id = :source_due_entry_id
+               AND period_key > :period_key'
+        );
+        $futureStmt->execute([
+            ':workspace_id' => $workspaceId,
+            ':source_due_entry_id' => $sourceDueEntryId,
+            ':period_key' => $periodKey,
+        ]);
+        foreach ($futureStmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $futureEntryId) {
+            workspaceAccountingDeleteEntryChain($pdo, $workspaceId, (int) $futureEntryId, true);
+        }
+
+        $detachStmt = $pdo->prepare(
+            'UPDATE workspace_accounting_entries
+             SET source_due_entry_id = NULL,
+                 updated_at = :updated_at
+             WHERE workspace_id = :workspace_id
+               AND source_due_entry_id = :source_due_entry_id'
+        );
+        $detachStmt->execute([
+            ':updated_at' => nowIso(),
+            ':workspace_id' => $workspaceId,
+            ':source_due_entry_id' => $sourceDueEntryId,
+        ]);
+        deleteWorkspaceDueEntry($pdo, $workspaceId, $sourceDueEntryId);
+    }
+
+    $clearStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET weekly_recurrence_id = NULL,
+             source_due_entry_id = NULL,
+             carry_source_entry_id = NULL,
+             due_date = NULL,
+             updated_at = :updated_at
+         WHERE id = :id
+           AND workspace_id = :workspace_id'
+    );
+    $clearStmt->execute([
+        ':updated_at' => nowIso(),
+        ':id' => $entryId,
+        ':workspace_id' => $workspaceId,
+    ]);
+}
+
+function convertWorkspaceAccountingEntryType(
+    PDO $pdo,
+    int $workspaceId,
+    int $entryId,
+    string $targetChoice,
+    string $label,
+    $amountInput,
+    int $isSettled = 0,
+    ?string $installmentProgress = null,
+    $totalAmountInput = null,
+    $installmentNumberInput = null,
+    $installmentTotalInput = null,
+    $monthlyDayInput = null,
+    $weeklyDayInput = null,
+    ?array $automationConfig = null,
+    ?int $createdBy = null,
+    bool $force = false
+): void {
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry === null) {
+        throw new RuntimeException('Registro não encontrado.');
+    }
+
+    $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+    $sourceChoice = workspaceAccountingEntryTypeChoice($entry);
+    $targetChoice = normalizeAccountingEntryTypeChoice($entryType, $targetChoice);
+    if ($sourceChoice === $targetChoice && !$force) {
+        return;
+    }
+
+    if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
+        throw new RuntimeException('Remova os subitens antes de alterar o tipo deste item.');
+    }
+
+    $discountTotalCents = workspaceAccountingDiscountTotalCents($pdo, $workspaceId, $entryId);
+    $goalPaymentTotalCents = workspaceAccountingGoalPaymentTotalCents($pdo, $workspaceId, $entryId);
+    if ($goalPaymentTotalCents > 0 && $targetChoice !== 'goal') {
+        throw new RuntimeException('Remova os pagamentos do saldo a quitar antes de alterar o tipo.');
+    }
+    if ($discountTotalCents > 0 && in_array($targetChoice, ['goal', 'completed_tasks'], true)) {
+        throw new RuntimeException('Remova os abatimentos ou recebimentos antes de alterar para este tipo.');
+    }
+
+    $comparisonAmountInput = $targetChoice === 'installment' ? $totalAmountInput : $amountInput;
+    $comparisonAmountCents = normalizeDueAmountCents($comparisonAmountInput);
+    if ($discountTotalCents > 0 && ($comparisonAmountCents === null || $comparisonAmountCents < $discountTotalCents)) {
+        throw new RuntimeException('O novo valor não pode ser menor que o total já abatido ou recebido.');
+    }
+
+    $periodKey = normalizeAccountingPeriodKey((string) ($entry['period_key'] ?? ''));
+    $startedTransaction = !$pdo->inTransaction();
+    if ($startedTransaction) {
+        $pdo->beginTransaction();
+    }
+
+    try {
+        workspaceAccountingPrepareEntryTypeConversion($pdo, $workspaceId, $entry);
+
+        $isInstallment = $entryType === 'expense' && $targetChoice === 'installment' ? 1 : 0;
+        $isMonthly = in_array($targetChoice, ['monthly', 'goal'], true) ? 1 : 0;
+        $monthlyMode = $targetChoice === 'goal' ? 'goal' : 'uniform';
+        $isTaskLinked = $targetChoice === 'completed_tasks';
+
+        if ($targetChoice === 'monthly' && $entryType === 'expense') {
+            $dueEntryId = createWorkspaceDueEntryFromAccounting(
+                $pdo,
+                $workspaceId,
+                $label,
+                $periodKey,
+                $amountInput,
+                $monthlyDayInput,
+                'Contabilidade',
+                $createdBy
+            );
+            $dueEntry = workspaceDueEntryById($pdo, $workspaceId, $dueEntryId);
+            $payload = $dueEntry !== null
+                ? workspaceAccountingBuildDueLinkedPayload($dueEntry, $periodKey)
+                : null;
+            if ($payload === null) {
+                throw new RuntimeException('Não foi possível iniciar a recorrência mensal.');
+            }
+            workspaceAccountingUpdateDueLinkedEntry(
+                $pdo,
+                $workspaceId,
+                $entryId,
+                $payload,
+                $isSettled === 1 ? 1 : 0,
+                (string) ($entry['settled_at'] ?? '')
+            );
+        } else {
+            updateWorkspaceAccountingEntry(
+                $pdo,
+                $workspaceId,
+                $entryId,
+                $label,
+                $amountInput,
+                $isSettled,
+                $isInstallment,
+                $installmentProgress,
+                $totalAmountInput,
+                $installmentNumberInput,
+                $installmentTotalInput,
+                $isMonthly,
+                $monthlyDayInput,
+                $periodKey,
+                $entryType,
+                $monthlyMode,
+                $targetChoice === 'goal' ? 0 : null,
+                (string) ($entry['settled_at'] ?? ''),
+                $isTaskLinked ? $automationConfig : null
+            );
+        }
+
+        if ($targetChoice === 'weekly') {
+            workspaceAccountingAttachWeeklyRecurrenceToEntry(
+                $pdo,
+                $workspaceId,
+                $entryId,
+                $periodKey,
+                $entryType,
+                $label,
+                $amountInput,
+                $weeklyDayInput,
+                $createdBy
+            );
+        }
+
+        if ($startedTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($startedTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        throw $e;
     }
 }
 
