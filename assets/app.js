@@ -6767,6 +6767,84 @@ window.addEventListener("DOMContentLoaded", () => {
       });
   };
 
+  const persistWorkspaceSidebarToolsForm = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+    if (form.dataset.submitting === "1") return;
+
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit();
+    } else {
+      form.submit();
+    }
+  };
+
+  const clearWorkspaceSidebarToolDragState = (form) => {
+    if (!(form instanceof HTMLFormElement)) return;
+    form.querySelectorAll(".workspace-sidebar-tool-item.is-dragging, .workspace-sidebar-tool-item.is-drop-target")
+      .forEach((row) => {
+        row.classList.remove("is-dragging", "is-drop-target");
+      });
+  };
+
+  document.addEventListener("dragstart", (event) => {
+    const target = getEventTargetElement(event);
+    const row = target?.closest?.("[data-sidebar-tool-key]");
+    const form = row?.closest?.("[data-sidebar-tools-form]");
+    if (!(row instanceof HTMLElement) || !(form instanceof HTMLFormElement)) return;
+
+    clearWorkspaceSidebarToolDragState(form);
+    row.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", row.dataset.sidebarToolKey || "");
+    }
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const target = getEventTargetElement(event);
+    const targetRow = target?.closest?.("[data-sidebar-tool-key]");
+    const form = targetRow?.closest?.("[data-sidebar-tools-form]");
+    const sourceRow = form?.querySelector?.("[data-sidebar-tool-key].is-dragging");
+    if (!(targetRow instanceof HTMLElement) || !(form instanceof HTMLFormElement) || !(sourceRow instanceof HTMLElement) || sourceRow === targetRow) {
+      return;
+    }
+
+    event.preventDefault();
+    form.querySelectorAll("[data-sidebar-tool-key].is-drop-target").forEach((row) => {
+      row.classList.remove("is-drop-target");
+    });
+    targetRow.classList.add("is-drop-target");
+  });
+
+  document.addEventListener("drop", (event) => {
+    const target = getEventTargetElement(event);
+    const targetRow = target?.closest?.("[data-sidebar-tool-key]");
+    const form = targetRow?.closest?.("[data-sidebar-tools-form]");
+    const sourceRow = form?.querySelector?.("[data-sidebar-tool-key].is-dragging");
+    if (!(targetRow instanceof HTMLElement) || !(form instanceof HTMLFormElement) || !(sourceRow instanceof HTMLElement) || sourceRow === targetRow) {
+      return;
+    }
+
+    event.preventDefault();
+    const list = targetRow.parentElement;
+    if (list instanceof HTMLElement) {
+      const targetBounds = targetRow.getBoundingClientRect();
+      const insertAfter = event.clientY > targetBounds.top + targetBounds.height / 2;
+      list.insertBefore(sourceRow, insertAfter ? targetRow.nextElementSibling : targetRow);
+      syncWorkspaceSidebarToolsFormState(form);
+      persistWorkspaceSidebarToolsForm(form);
+    }
+    clearWorkspaceSidebarToolDragState(form);
+  });
+
+  document.addEventListener("dragend", (event) => {
+    const target = getEventTargetElement(event);
+    const form = target?.closest?.("[data-sidebar-tools-form]");
+    if (form instanceof HTMLFormElement) {
+      clearWorkspaceSidebarToolDragState(form);
+    }
+  });
+
   const workspaceUsersActionNames = new Set([
     "workspace_update_profile",
     "workspace_update_name",
@@ -6778,6 +6856,7 @@ window.addEventListener("DOMContentLoaded", () => {
     "workspace_promote_member",
     "workspace_demote_member",
     "workspace_remove_member",
+    "workspace_update_sidebar_tools",
   ]);
 
   const submitWorkspaceUsersActionForm = async (
@@ -18126,11 +18205,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       syncWorkspaceSidebarToolsFormState(form);
       if (form.dataset.sidebarToolsAutosaveAdd === "1") {
-        if (typeof form.requestSubmit === "function") {
-          form.requestSubmit();
-        } else {
-          form.submit();
-        }
+        persistWorkspaceSidebarToolsForm(form);
       }
       return;
     }
@@ -18149,6 +18224,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       syncWorkspaceSidebarToolsFormState(form);
+      persistWorkspaceSidebarToolsForm(form);
       return;
     }
 
@@ -18157,8 +18233,18 @@ window.addEventListener("DOMContentLoaded", () => {
       const row = sidebarToolsRemoveButton.closest("[data-sidebar-tool-key]");
       const form = sidebarToolsRemoveButton.closest("[data-sidebar-tools-form]");
       if (!(row instanceof HTMLElement) || !(form instanceof HTMLFormElement)) return;
-      row.remove();
-      syncWorkspaceSidebarToolsFormState(form);
+      const toolLabel = row.querySelector(".workspace-sidebar-tool-item-label")?.textContent?.trim() || "esta ferramenta";
+      openConfirmModal({
+        title: "Remover ferramenta",
+        message: `Remover ${toolLabel} do sidebar?`,
+        confirmLabel: "Remover",
+        confirmVariant: "danger",
+        onConfirm: async () => {
+          row.remove();
+          syncWorkspaceSidebarToolsFormState(form);
+          persistWorkspaceSidebarToolsForm(form);
+        },
+      });
       return;
     }
 

@@ -2794,6 +2794,32 @@ body.is-dashboard.dashboard-sidebar-open .workspace-mobile-menu-button {
     grid-column: 1 / -1;
 }
 
+.workspace-sidebar-tools-card .workspace-settings-card-head h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.workspace-sidebar-tools-card .workspace-settings-card-head p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.workspace-sidebar-tools-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(120, 166, 212, 0.1);
+    color: #54779d;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
 .workspace-sidebar-tools-add-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -2811,14 +2837,42 @@ body.is-dashboard.dashboard-sidebar-open .workspace-mobile-menu-button {
 
 .workspace-sidebar-tool-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
     align-items: center;
-    min-height: 44px;
-    padding: 8px 10px;
+    min-height: 40px;
+    padding: 7px 10px;
     border-radius: 12px;
     border: 1px solid rgba(132, 166, 205, 0.24);
     background: rgba(245, 250, 255, 0.72);
+    transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+
+.workspace-sidebar-tool-item:hover {
+    border-color: rgba(115, 156, 199, 0.38);
+    background: rgba(250, 253, 255, 0.96);
+}
+
+.workspace-sidebar-tool-item.is-dragging {
+    opacity: 0.46;
+}
+
+.workspace-sidebar-tool-item.is-drop-target {
+    border-color: rgba(105, 103, 174, 0.6);
+    background: rgba(223, 233, 247, 0.68);
+}
+
+.workspace-sidebar-tool-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 26px;
+    color: #8ba2bb;
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
 }
 
 .workspace-sidebar-tool-item-label {
@@ -2830,7 +2884,7 @@ body.is-dashboard.dashboard-sidebar-open .workspace-mobile-menu-button {
 .workspace-sidebar-tool-item-actions {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .workspace-sidebar-tool-action {
@@ -2859,6 +2913,12 @@ body.is-dashboard.dashboard-sidebar-open .workspace-mobile-menu-button {
 .workspace-sidebar-tool-action.is-remove {
     min-width: 72px;
     padding: 0 10px;
+}
+
+.workspace-sidebar-tools-save-state {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
 }
 
 .workspace-sidebar-tools-empty {
