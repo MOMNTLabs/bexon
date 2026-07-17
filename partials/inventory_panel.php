@@ -262,6 +262,9 @@
                         </details>
                     <?php endif; ?>
                     <form method="get" action="<?= e(appPath('#accounting')) ?>" class="accounting-period-form">
+                        <?php if (!empty($accountingShowFutureCarryover)): ?>
+                            <input type="hidden" name="accounting_forecast_carry" value="1">
+                        <?php endif; ?>
                         <a
                             href="<?= e($accountingPreviousPeriodPath) ?>"
                             class="accounting-period-nav"
@@ -289,6 +292,13 @@
                             </svg>
                         </a>
                     </form>
+                    <?php if (!empty($accountingCanPreviewFutureCarryover)): ?>
+                        <a
+                            href="<?= e($accountingFutureCarryoverTogglePath) ?>"
+                            class="accounting-future-carry-toggle<?= !empty($accountingShowFutureCarryover) ? ' is-active' : '' ?>"
+                            aria-pressed="<?= !empty($accountingShowFutureCarryover) ? 'true' : 'false' ?>"
+                        ><?= !empty($accountingShowFutureCarryover) ? 'Pendências previstas' : 'Simular pendências' ?></a>
+                    <?php endif; ?>
                 </div>
             </div>
 

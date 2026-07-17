@@ -629,6 +629,8 @@
                                     $accountingEntryAmountInput = (string) ($accountingEntry['amount_input'] ?? '0,00');
                                     $accountingEntryTotalAmountInput = (string) ($accountingEntry['total_amount_input'] ?? $accountingEntryAmountInput);
                                     $accountingEntryIsSettled = ((int) ($accountingEntry['is_settled'] ?? 0)) === 1;
+                                    $accountingEntryIsBalanceAdjustment = ((int) ($accountingEntry['is_balance_adjustment'] ?? 0)) === 1;
+                                    $accountingEntryIsForecastCarry = ((int) ($accountingEntry['is_forecast_carry'] ?? 0)) === 1;
                                     $accountingEntryIsInstallment = ((int) ($accountingEntry['is_installment'] ?? 0)) === 1;
                                     $accountingEntryInstallmentProgress = (string) ($accountingEntry['installment_progress'] ?? '');
                                     $accountingEntryInstallmentBadge = $accountingEntryInstallmentProgress !== ''
@@ -709,8 +711,25 @@
                                     $accountingEntryDiscountRemainingDisplay = (string) ($accountingEntry['discount_remaining_display'] ?? $accountingEntryAmountInput);
                                     $accountingEntryShowDiscountSummaryProgress = $accountingEntryShowDiscountProgress
                                         && !$accountingEntryIsSettled;
+                                    if ($accountingEntryIsForecastCarry):
                                     ?>
-                                    <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?>">
+                                        <div class="accounting-entry-row is-forecast-carry">
+                                            <div class="accounting-entry-summary" aria-label="Pendência prevista <?= e($accountingEntryLabel) ?>, <?= e($accountingEntryAmountInput) ?>">
+                                                <span class="accounting-entry-summary-main">
+                                                    <span class="accounting-entry-summary-head">
+                                                        <span class="accounting-entry-summary-title" title="<?= e($accountingEntryLabel) ?>"><?= e($accountingEntryLabel) ?></span>
+                                                        <span class="accounting-entry-summary-meta">
+                                                            <span class="accounting-entry-badge is-forecast-carry">Previsto</span>
+                                                        </span>
+                                                    </span>
+                                                </span>
+                                                <span class="accounting-entry-summary-amount"><?= $renderAccountingMoney($accountingEntryAmountInput) ?></span>
+                                            </div>
+                                        </div>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
+                                    ?>
+                                    <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?><?= $accountingEntryIsBalanceAdjustment ? ' is-balance-adjustment' : '' ?>">
                                         <button
                                             type="button"
                                             class="accounting-entry-summary"
@@ -754,8 +773,11 @@
                                                                 </span>
                                                             </span>
                                                         </span>
-                                                    <?php elseif ($accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryDueDateBadge !== '' || $accountingEntryIsOverdue): ?>
+                                                    <?php elseif ($accountingEntryIsBalanceAdjustment || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment || $accountingEntryShowPendingBadge || $accountingEntryDueDateBadge !== '' || $accountingEntryIsOverdue): ?>
                                                         <span class="accounting-entry-summary-meta">
+                                                            <?php if ($accountingEntryIsBalanceAdjustment): ?>
+                                                                <span class="accounting-entry-badge is-balance-adjustment">Ajuste</span>
+                                                            <?php endif; ?>
                                                             <?php if ($accountingEntryMonthlyBadge !== ''): ?>
                                                                 <span class="accounting-entry-badge is-monthly"><?= e($accountingEntryMonthlyBadge) ?></span>
                                                             <?php elseif ($accountingEntryWeeklyBadge !== ''): ?>
@@ -1446,6 +1468,7 @@
                                     <?php
                                     $accountingEntryId = (int) ($accountingEntry['id'] ?? 0);
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
+                                    $accountingEntryIsBalanceAdjustment = ((int) ($accountingEntry['is_balance_adjustment'] ?? 0)) === 1;
                                     $accountingEntryAmountInput = (string) ($accountingEntry['amount_input'] ?? '0,00');
                                     $accountingEntryTotalAmountInput = (string) ($accountingEntry['total_amount_input'] ?? $accountingEntryAmountInput);
                                     $accountingEntryAutomationType = normalizeAccountingAutomationType((string) ($accountingEntry['automation_type'] ?? 'manual'));
@@ -1518,7 +1541,7 @@
                                     $accountingEntryShowReceiptSummaryProgress = $accountingEntryShowReceiptProgress
                                         && !$accountingEntryIsSettled;
                                     ?>
-                                    <div class="accounting-entry-row">
+                                    <div class="accounting-entry-row<?= $accountingEntryIsBalanceAdjustment ? ' is-balance-adjustment' : '' ?>">
                                         <button
                                             type="button"
                                             class="accounting-entry-summary"
@@ -1541,8 +1564,11 @@
                                                             </span>
                                                         </span>
                                                     <?php endif; ?>
-                                                    <?php if ($accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment): ?>
+                                                    <?php if ($accountingEntryIsBalanceAdjustment || $accountingEntryIsTaskLinked || $accountingEntryMonthlyBadge !== '' || $accountingEntryWeeklyBadge !== '' || $accountingEntryIsInstallment): ?>
                                                         <span class="accounting-entry-summary-meta">
+                                                            <?php if ($accountingEntryIsBalanceAdjustment): ?>
+                                                                <span class="accounting-entry-badge is-balance-adjustment">Ajuste</span>
+                                                            <?php endif; ?>
                                                             <?php if ($accountingEntryIsTaskLinked): ?>
                                                                 <span class="accounting-entry-badge is-monthly">Por tarefa</span>
                                                             <?php elseif ($accountingEntryMonthlyBadge !== ''): ?>
@@ -2028,16 +2054,6 @@
                     $accountingFinalBalanceClass = $accountingFinalBalanceCents < 0
                         ? ' is-negative'
                         : ($accountingFinalBalanceCents > 0 ? ' is-positive' : '');
-                    $accountingCashProjectionAvailable = !empty($accountingNextIncomeProjection['available']);
-                    $accountingCashProjectionBalanceCents = $accountingCashProjectionAvailable
-                        ? (int) ($accountingNextIncomeProjection['balance_after_next_income_cents'] ?? 0)
-                        : 0;
-                    $accountingCashProjectionClass = $accountingCashProjectionBalanceCents < 0
-                        ? ' is-negative'
-                        : ($accountingCashProjectionBalanceCents > 0 ? ' is-positive' : '');
-                    $accountingCashProjectionShortfallCents = $accountingCashProjectionAvailable
-                        ? max(0, (int) ($accountingNextIncomeProjection['shortfall_cents'] ?? 0))
-                        : 0;
                     ?>
                     <dl class="accounting-balance-values">
                         <div class="is-current<?= e($accountingCurrentBalanceClass) ?>">
@@ -2049,21 +2065,28 @@
                             <dd><?= $renderAccountingMoney((string) ($accountingSummary['final_balance_display'] ?? 'R$ 0,00')) ?></dd>
                         </div>
                     </dl>
-                    <?php if ($accountingCashProjectionAvailable): ?>
-                        <div class="accounting-balance-cashflow<?= e($accountingCashProjectionClass) ?>">
-                            <div class="accounting-balance-cashflow-copy">
-                                <span class="accounting-balance-cashflow-kicker">Saldo ap&oacute;s pr&oacute;xima entrada</span>
-                                <strong><?= e((string) ($accountingNextIncomeProjection['next_income_date_display'] ?? '')) ?></strong>
-                            </div>
-                            <div class="accounting-balance-cashflow-value">
-                                <?= $renderAccountingMoney((string) ($accountingNextIncomeProjection['balance_after_next_income_display'] ?? 'R$ 0,00')) ?>
-                            </div>
-                            <?php if ($accountingCashProjectionShortfallCents > 0): ?>
-                                <p class="accounting-balance-cashflow-warning">
-                                    Antes dela, pode faltar <?= e((string) ($accountingNextIncomeProjection['shortfall_display'] ?? 'R$ 0,00')) ?>
-                                </p>
-                            <?php endif; ?>
-                        </div>
+                    <?php if ($accountingIsCurrentPeriodView): ?>
+                        <details class="accounting-balance-adjustment">
+                            <summary class="btn btn-mini btn-ghost">Informar saldo real</summary>
+                            <form method="post" class="accounting-balance-adjustment-form" autocomplete="off">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                <input type="hidden" name="action" value="create_accounting_balance_adjustment">
+                                <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                <label>
+                                    <span>Saldo real atual</span>
+                                    <input
+                                        type="text"
+                                        name="actual_balance_value"
+                                        class="accounting-input accounting-input-amount"
+                                        inputmode="decimal"
+                                        placeholder="R$ 0,00"
+                                        autocomplete="off"
+                                        required
+                                    >
+                                </label>
+                                <button type="submit" class="btn btn-mini">Corrigir saldo</button>
+                            </form>
+                        </details>
                     <?php endif; ?>
                 </section>
             </div>

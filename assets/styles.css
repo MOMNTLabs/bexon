@@ -14802,6 +14802,30 @@ select option:checked,
     flex-wrap: wrap;
 }
 
+.accounting-future-carry-toggle {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 11px;
+    border: 1px solid rgba(119, 145, 176, 0.52);
+    border-radius: 999px;
+    background: #f8fbff;
+    color: #526d8a;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.accounting-future-carry-toggle:hover,
+.accounting-future-carry-toggle:focus-visible,
+.accounting-future-carry-toggle.is-active {
+    border-color: rgba(77, 124, 174, 0.66);
+    background: #eaf3ff;
+    color: #315f8d;
+}
+
 .accounting-cycle-settings {
     position: relative;
 }
@@ -15133,6 +15157,21 @@ select option:checked,
     gap: 8px;
     align-items: center;
     padding: 7px 0;
+}
+
+.accounting-entry-row.is-balance-adjustment {
+    margin-inline: -6px;
+    padding-inline: 6px;
+    border-radius: 9px;
+    background: linear-gradient(90deg, rgba(111, 143, 186, 0.13), rgba(111, 143, 186, 0.025));
+    box-shadow: inset 2px 0 0 rgba(83, 119, 166, 0.58);
+}
+
+.accounting-entry-row.is-forecast-carry {
+    opacity: 0.82;
+    border-style: dashed;
+    border-width: 1px 0;
+    border-color: rgba(106, 145, 188, 0.28);
 }
 
 .accounting-entry-summary {
@@ -15900,6 +15939,18 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     border-color: rgba(61, 120, 187, 0.38);
     background: rgba(121, 181, 241, 0.1);
     color: #315f8d;
+}
+
+.accounting-entry-badge.is-balance-adjustment {
+    border-color: rgba(83, 119, 166, 0.4);
+    background: rgba(111, 143, 186, 0.14);
+    color: #3d638d;
+}
+
+.accounting-entry-badge.is-forecast-carry {
+    border-color: rgba(75, 125, 177, 0.34);
+    background: rgba(104, 158, 214, 0.11);
+    color: #396b9a;
 }
 
 .accounting-entry-badge.is-due-date {
@@ -16955,61 +17006,38 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     color: #a45a56;
 }
 
-.accounting-balance-cashflow {
+.accounting-balance-adjustment {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 6px 14px;
-    align-items: center;
-    padding: 9px 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(133, 178, 225, 0.16);
-    background: rgba(255, 255, 255, 0.82);
+    justify-self: end;
 }
 
-.accounting-balance-cashflow-copy {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
+.accounting-balance-adjustment > summary {
+    list-style: none;
+    cursor: pointer;
 }
 
-.accounting-balance-cashflow-kicker {
+.accounting-balance-adjustment > summary::-webkit-details-marker {
+    display: none;
+}
+
+.accounting-balance-adjustment-form {
+    display: flex;
+    align-items: end;
+    justify-content: flex-end;
+    gap: 7px;
+    margin-top: 8px;
+}
+
+.accounting-balance-adjustment-form label {
+    display: grid;
+    gap: 3px;
     color: #617893;
-    font-size: 0.76rem;
-    line-height: 1.15;
+    font-size: 0.72rem;
 }
 
-.accounting-balance-cashflow-copy strong {
-    color: #29486a;
-    font-size: 0.92rem;
-    line-height: 1.1;
-}
-
-.accounting-balance-cashflow-value {
-    margin: 0;
-    color: #29486a;
-    font-weight: 700;
-    font-size: 0.98rem;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-}
-
-.accounting-balance-cashflow.is-positive .accounting-balance-cashflow-copy strong,
-.accounting-balance-cashflow.is-positive .accounting-balance-cashflow-value {
-    color: #3e8061;
-}
-
-.accounting-balance-cashflow.is-negative .accounting-balance-cashflow-copy strong,
-.accounting-balance-cashflow.is-negative .accounting-balance-cashflow-value {
-    color: #a45a56;
-}
-
-.accounting-balance-cashflow-warning {
-    grid-column: 1 / -1;
-    margin: 0;
-    color: #8f6251;
-    font-size: 0.76rem;
-    line-height: 1.25;
+.accounting-balance-adjustment-form .accounting-input {
+    width: 132px;
+    min-height: 32px;
 }
 
 @media (max-width: 1180px) {
@@ -17898,22 +17926,20 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
         font-size: 0.86rem;
     }
 
-    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow {
-        grid-template-columns: minmax(0, 1fr);
-        justify-items: stretch;
-        gap: 6px;
-        padding: 8px 10px;
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-adjustment {
+        justify-self: stretch;
     }
 
-    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-value {
-        text-align: left;
-        font-size: 0.9rem;
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-adjustment-form {
+        justify-content: stretch;
     }
 
-    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-copy strong,
-    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-kicker,
-    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-cashflow-warning {
-        font-size: 0.72rem;
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-adjustment-form label {
+        flex: 1 1 auto;
+    }
+
+    body.is-dashboard[data-dashboard-view="accounting"] .accounting-balance-adjustment-form .accounting-input {
+        width: 100%;
     }
 
     body.is-dashboard[data-dashboard-view="accounting"] .accounting-opening-balance-form {

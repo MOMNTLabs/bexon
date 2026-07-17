@@ -2408,6 +2408,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 source_due_entry_id BIGINT DEFAULT NULL REFERENCES workspace_due_entries(id) ON DELETE SET NULL,
                 carry_source_entry_id BIGINT DEFAULT NULL REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL,
                 weekly_recurrence_id BIGINT DEFAULT NULL,
+                is_balance_adjustment SMALLINT NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
@@ -2479,6 +2480,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 source_due_entry_id INTEGER DEFAULT NULL,
                 carry_source_entry_id INTEGER DEFAULT NULL,
                 weekly_recurrence_id INTEGER DEFAULT NULL,
+                is_balance_adjustment INTEGER NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
@@ -2653,6 +2655,13 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN weekly_recurrence_id BIGINT DEFAULT NULL");
         } else {
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN weekly_recurrence_id INTEGER DEFAULT NULL");
+        }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'is_balance_adjustment')) {
+        if (dbDriverName($pdo) === 'pgsql') {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN is_balance_adjustment SMALLINT NOT NULL DEFAULT 0");
+        } else {
+            $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN is_balance_adjustment INTEGER NOT NULL DEFAULT 0");
         }
     }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'sort_order')) {
@@ -3283,6 +3292,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         'carry_source_entry_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id'),
         'carry_stop_period_key' => tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key'),
         'weekly_recurrence_id' => tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id'),
+        'is_balance_adjustment' => tableHasColumn($pdo, 'workspace_accounting_entries', 'is_balance_adjustment'),
         'is_monthly' => tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly'),
         'monthly_mode' => tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode'),
         'paid_amount_cents' => tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents'),
@@ -3301,6 +3311,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         || !$capabilities['carry_source_entry_id']
         || !$capabilities['carry_stop_period_key']
         || !$capabilities['weekly_recurrence_id']
+        || !$capabilities['is_balance_adjustment']
         || !$capabilities['is_monthly']
         || !$capabilities['monthly_mode']
         || !$capabilities['paid_amount_cents']
@@ -3323,6 +3334,7 @@ function workspaceAccountingSchemaCapabilities(PDO $pdo): array
         $capabilities['carry_source_entry_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_source_entry_id');
         $capabilities['carry_stop_period_key'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'carry_stop_period_key');
         $capabilities['weekly_recurrence_id'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'weekly_recurrence_id');
+        $capabilities['is_balance_adjustment'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'is_balance_adjustment');
         $capabilities['is_monthly'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'is_monthly');
         $capabilities['monthly_mode'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'monthly_mode');
         $capabilities['paid_amount_cents'] = tableHasColumn($pdo, 'workspace_accounting_entries', 'paid_amount_cents');
@@ -6552,6 +6564,7 @@ function workspaceAccountingNormalizeEntryRow(array $row, string $defaultPeriodK
     $row['created_at'] = accountingDateTimeForStorage($row['created_at'] ?? null) ?? '';
     $row['updated_at'] = accountingDateTimeForStorage($row['updated_at'] ?? null) ?? '';
     $row['is_settled'] = ((int) ($row['is_settled'] ?? 0)) === 1 ? 1 : 0;
+    $row['is_balance_adjustment'] = ((int) ($row['is_balance_adjustment'] ?? 0)) === 1 ? 1 : 0;
     $row['settled_at'] = accountingDateTimeForStorage($row['settled_at'] ?? null);
     $row['due_date'] = dueDateForStorage((string) ($row['due_date'] ?? ''));
     $row['is_monthly'] = ((int) ($row['is_monthly'] ?? 0)) === 1 ? 1 : 0;
@@ -7903,6 +7916,9 @@ function workspaceAccountingEntriesListRaw(
     $weeklyRecurrenceIdSelect = !empty($accountingSchema['weekly_recurrence_id'])
         ? 'ae.weekly_recurrence_id'
         : 'NULL AS weekly_recurrence_id';
+    $balanceAdjustmentSelect = !empty($accountingSchema['is_balance_adjustment'])
+        ? 'ae.is_balance_adjustment'
+        : '0 AS is_balance_adjustment';
     $weeklyAnchorDateSelect = !empty($accountingSchema['weekly_recurrence_id'])
         ? 'wr.anchor_date AS weekly_anchor_date'
         : 'NULL AS weekly_anchor_date';
@@ -7976,6 +7992,7 @@ function workspaceAccountingEntriesListRaw(
                 ' . $carrySourceEntrySelect . ',
                 ' . $carryStopPeriodKeySelect . ',
                 ' . $weeklyRecurrenceIdSelect . ',
+                ' . $balanceAdjustmentSelect . ',
                 ' . $weeklyAnchorDateSelect . ',
                 ae.sort_order,
                 ae.created_by,
@@ -8047,6 +8064,9 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
     $weeklyRecurrenceIdSelect = !empty($accountingSchema['weekly_recurrence_id'])
         ? 'ae.weekly_recurrence_id'
         : 'NULL AS weekly_recurrence_id';
+    $balanceAdjustmentSelect = !empty($accountingSchema['is_balance_adjustment'])
+        ? 'ae.is_balance_adjustment'
+        : '0 AS is_balance_adjustment';
     $isMonthlySelect = !empty($accountingSchema['is_monthly'])
         ? 'ae.is_monthly'
         : '0 AS is_monthly';
@@ -8114,6 +8134,7 @@ function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId):
                 ' . $carrySourceEntrySelect . ',
                 ' . $carryStopPeriodKeySelect . ',
                 ' . $weeklyRecurrenceIdSelect . ',
+                ' . $balanceAdjustmentSelect . ',
                 ae.sort_order,
                 ae.created_by,
                 ae.created_at,
@@ -8993,6 +9014,9 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
     $sourceEntryId = (int) ($sourceEntry['id'] ?? 0);
     $entryType = normalizeAccountingEntryType((string) ($sourceEntry['entry_type'] ?? 'expense'));
     if ($workspaceId <= 0 || $sourceEntryId <= 0) {
+        return null;
+    }
+    if (((int) ($sourceEntry['is_balance_adjustment'] ?? 0)) === 1) {
         return null;
     }
     if (((int) ($sourceEntry['is_weekly'] ?? 0)) === 1) {
@@ -9966,6 +9990,76 @@ function workspaceAccountingEntriesList(
     );
 }
 
+/**
+ * Monta uma prévia somente visual das contas pendentes que chegarão a um
+ * período futuro. Não cria registros nem altera a cadeia real de pendências.
+ */
+function workspaceAccountingFutureCarryoverPreviewEntries(
+    PDO $pdo,
+    int $workspaceId,
+    string $targetPeriodKey
+): array {
+    if ($workspaceId <= 0) {
+        return [];
+    }
+
+    $targetPeriodKey = normalizeAccountingPeriodKey($targetPeriodKey);
+    $currentPeriodKey = accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
+    if (strcmp($targetPeriodKey, $currentPeriodKey) <= 0) {
+        return [];
+    }
+
+    $currentEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $currentPeriodKey);
+    $previewEntries = [];
+    foreach ($currentEntries as $entry) {
+        $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+        $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
+        $isRecurring = ((int) ($entry['is_monthly'] ?? 0)) === 1
+            || ((int) ($entry['is_weekly'] ?? 0)) === 1
+            || ((int) ($entry['is_installment'] ?? 0)) === 1
+            || ((int) ($entry['is_monthly_goal'] ?? 0)) === 1
+            || max(0, (int) ($entry['source_due_entry_id'] ?? 0)) > 0;
+        if ($entryType !== 'expense' || $isSettled || $isRecurring || ((int) ($entry['is_balance_adjustment'] ?? 0)) === 1) {
+            continue;
+        }
+
+        $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        $remainingCents = max(0, min(
+            $amountCents,
+            normalizeDueAmountCents($entry['discount_remaining_cents'] ?? null) ?? $amountCents
+        ));
+        if ($remainingCents <= 0) {
+            continue;
+        }
+
+        $preview = $entry;
+        $preview['id'] = 0;
+        $preview['period_key'] = $targetPeriodKey;
+        $preview['amount_cents'] = $remainingCents;
+        $preview['total_amount_cents'] = $remainingCents;
+        $preview['amount_display'] = dueAmountLabelFromCents($remainingCents);
+        $preview['amount_input'] = dueAmountLabelFromCents($remainingCents);
+        $preview['total_amount_display'] = dueAmountLabelFromCents($remainingCents);
+        $preview['total_amount_input'] = dueAmountLabelFromCents($remainingCents);
+        $preview['is_settled'] = 0;
+        $preview['settled_at'] = null;
+        $preview['is_carried'] = 0;
+        $preview['carry_source_entry_id'] = null;
+        $preview['is_forecast_carry'] = 1;
+        $preview['subitems'] = [];
+        $preview['discounts'] = [];
+        $preview['discount_total_cents'] = 0;
+        $preview['discount_total_display'] = dueAmountLabelFromCents(0);
+        $preview['discount_remaining_cents'] = $remainingCents;
+        $preview['discount_remaining_display'] = dueAmountLabelFromCents($remainingCents);
+        $preview['supports_subitems'] = 0;
+        $preview['supports_discounts'] = 0;
+        $previewEntries[] = $preview;
+    }
+
+    return $previewEntries;
+}
+
 function workspaceAccountingEntriesByType(array $entries): array
 {
     $grouped = [
@@ -10828,6 +10922,61 @@ function createWorkspaceAccountingEntry(
     }
 
     return (int) $pdo->lastInsertId();
+}
+
+function createWorkspaceAccountingBalanceAdjustment(
+    PDO $pdo,
+    int $workspaceId,
+    ?string $periodKey,
+    $actualBalanceInput,
+    ?int $createdBy = null
+): ?int {
+    if ($workspaceId <= 0) {
+        throw new RuntimeException('Workspace inválido.');
+    }
+
+    $actualBalanceCents = normalizeSignedDueAmountCents($actualBalanceInput);
+    if ($actualBalanceCents === null) {
+        throw new RuntimeException('Informe um saldo real válido.');
+    }
+
+    $periodKey = normalizeAccountingPeriodKey($periodKey);
+    workspaceAccountingEnsureCarryoverUpTo($pdo, $workspaceId, $periodKey);
+    $entries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $periodKey);
+    $summary = accountingSummary(
+        $entries,
+        workspaceAccountingOpeningBalanceCents($workspaceId, $periodKey)
+    );
+    $currentBalanceCents = (int) ($summary['current_balance_cents'] ?? 0);
+    $differenceCents = $actualBalanceCents - $currentBalanceCents;
+    if ($differenceCents === 0) {
+        return null;
+    }
+
+    $entryId = createWorkspaceAccountingEntry(
+        $pdo,
+        $workspaceId,
+        $periodKey,
+        $differenceCents > 0 ? 'income' : 'expense',
+        'Ajuste de saldo',
+        dueAmountLabelFromCents(abs($differenceCents)),
+        1,
+        $createdBy
+    );
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_balance_adjustment = 1,
+             updated_at = :updated_at
+         WHERE id = :id
+           AND workspace_id = :workspace_id'
+    );
+    $stmt->execute([
+        ':updated_at' => nowIso(),
+        ':id' => $entryId,
+        ':workspace_id' => $workspaceId,
+    ]);
+
+    return $entryId;
 }
 
 function updateWorkspaceAccountingEntry(

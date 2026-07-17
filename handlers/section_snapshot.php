@@ -186,8 +186,16 @@ function respondAccountingPanelSnapshot(): void
     $workspaceId = (int) $ctx['workspace_id'];
     $userId = (int) $ctx['user_id'];
     $accountingPeriod = normalizeAccountingPeriodKey((string) ($_GET['accounting_period'] ?? ''));
-    $accountingCurrentPeriodKey = normalizeAccountingPeriodKey((new DateTimeImmutable('today'))->format('Y-m'));
+    $accountingCurrentPeriodKey = accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
+    $accountingShowFutureCarryover = ((string) ($_GET['accounting_forecast_carry'] ?? '')) === '1'
+        && strcmp($accountingPeriod, $accountingCurrentPeriodKey) > 0;
     $accountingEntries = workspaceAccountingEntriesList($workspaceId, $accountingPeriod);
+    if ($accountingShowFutureCarryover) {
+        $accountingEntries = array_merge(
+            $accountingEntries,
+            workspaceAccountingFutureCarryoverPreviewEntries(db(), $workspaceId, $accountingPeriod)
+        );
+    }
     $accountingEntriesByType = workspaceAccountingEntriesByType($accountingEntries);
     $accountingExpenseEntries = $accountingEntriesByType['expense'] ?? [];
     $accountingIncomeEntries = $accountingEntriesByType['income'] ?? [];

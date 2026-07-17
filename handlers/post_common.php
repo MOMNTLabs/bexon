@@ -163,9 +163,13 @@ function accountingRedirectPathFromRequest(?array $get = null, ?array $post = nu
         : accountingCycleCurrentPeriodKey(
             workspaceAccountingCycleCloseDay(activeWorkspaceId())
         );
-    $query = http_build_query([
+    $queryParams = [
         'accounting_period' => $periodKey,
-    ]);
+    ];
+    if ((string) ($get['accounting_forecast_carry'] ?? '') === '1') {
+        $queryParams['accounting_forecast_carry'] = '1';
+    }
+    $query = http_build_query($queryParams);
 
     return appPath('?' . $query . '#accounting');
 }

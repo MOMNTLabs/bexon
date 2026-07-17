@@ -672,12 +672,25 @@ $accountingPeriodDate = DateTimeImmutable::createFromFormat('!Y-m', $accountingP
 $accountingCurrentPeriodKey = accountingCycleCurrentPeriodKey($accountingCycleCloseDay);
 $accountingPreviousPeriod = $accountingPeriodDate->modify('-1 month')->format('Y-m');
 $accountingNextPeriod = $accountingPeriodDate->modify('+1 month')->format('Y-m');
+$accountingShowFutureCarryover = ((string) ($_GET['accounting_forecast_carry'] ?? '')) === '1'
+    && strcmp($accountingPeriod, $accountingCurrentPeriodKey) > 0;
+$accountingCanPreviewFutureCarryover = strcmp($accountingPeriod, $accountingCurrentPeriodKey) > 0;
 $accountingPreviousPeriodPath = accountingRedirectPathFromRequest(['accounting_period' => $accountingPreviousPeriod], []);
 $accountingNextPeriodPath = accountingRedirectPathFromRequest(['accounting_period' => $accountingNextPeriod], []);
+$accountingFutureCarryoverTogglePath = accountingRedirectPathFromRequest([
+    'accounting_period' => $accountingPeriod,
+    'accounting_forecast_carry' => $accountingShowFutureCarryover ? '0' : '1',
+], []);
 $accountingEntries = [];
 if ($currentUser && $currentWorkspaceId !== null) {
     try {
         $accountingEntries = workspaceAccountingEntriesList($currentWorkspaceId, $accountingPeriod);
+        if ($accountingShowFutureCarryover) {
+            $accountingEntries = array_merge(
+                $accountingEntries,
+                workspaceAccountingFutureCarryoverPreviewEntries($pdo, $currentWorkspaceId, $accountingPeriod)
+            );
+        }
     } catch (Throwable $e) {
         $appendDashboardLoadError('Não foi possível carregar a contabilidade deste workspace.', $e);
     }

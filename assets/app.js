@@ -7779,6 +7779,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (normalizedAccountingPeriod !== "") {
       snapshotParams.accounting_period = normalizedAccountingPeriod;
     }
+    if (new URLSearchParams(window.location.search).get("accounting_forecast_carry") === "1") {
+      snapshotParams.accounting_forecast_carry = "1";
+    }
 
     try {
       snapshotData = await fetchPanelSnapshot(

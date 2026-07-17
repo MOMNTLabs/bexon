@@ -129,6 +129,35 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 flash('success', 'Saldo atualizado.');
                 redirectTo(accountingRedirectPathFromRequest());
 
+            case 'create_accounting_balance_adjustment':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo não encontrado.');
+                }
+
+                $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
+                $entryId = createWorkspaceAccountingBalanceAdjustment(
+                    $pdo,
+                    $workspaceId,
+                    $periodKey,
+                    $_POST['actual_balance_value'] ?? null,
+                    (int) ($authUser['id'] ?? 0)
+                );
+                $message = $entryId === null
+                    ? 'O saldo informado já está correto.'
+                    : 'Ajuste de saldo criado.';
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => $message,
+                    ]);
+                }
+
+                flash('success', $message);
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'create_accounting_entry':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
@@ -795,6 +824,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
     return in_array($action, [
         'set_accounting_balance_snapshot',
         'set_accounting_opening_balance',
+        'create_accounting_balance_adjustment',
         'create_accounting_entry',
         'update_accounting_entry',
         'update_accounting_goal_payment',
