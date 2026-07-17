@@ -12254,6 +12254,7 @@ function accountingWeeklyBalanceProjection(
             'range_display' => accountingDateCompactLabel($weekStart->format('Y-m-d')) . '–' . accountingDateCompactLabel($weekEnd->format('Y-m-d')),
             'movement_cents' => 0,
             'balance_cents' => 0,
+            'events' => [],
             'is_current' => $today >= $weekStart->format('Y-m-d') && $today <= $weekEnd->format('Y-m-d'),
         ];
     }
@@ -12281,7 +12282,16 @@ function accountingWeeklyBalanceProjection(
 
         foreach ($weeks as &$week) {
             if ($eventDate >= $week['start_date'] && $eventDate <= $week['end_date']) {
-                $week['movement_cents'] += $entryType === 'income' ? $amountCents : -$amountCents;
+                $signedAmountCents = $entryType === 'income' ? $amountCents : -$amountCents;
+                $week['movement_cents'] += $signedAmountCents;
+                $week['events'][] = [
+                    'entry_type' => $entryType,
+                    'label' => normalizeAccountingEntryLabel((string) ($entry['label'] ?? '')),
+                    'amount_cents' => $amountCents,
+                    'amount_display' => dueAmountLabelFromCents($amountCents),
+                    'event_date' => $eventDate,
+                    'event_date_display' => accountingDateCompactLabel($eventDate),
+                ];
                 break;
             }
         }
@@ -12290,6 +12300,14 @@ function accountingWeeklyBalanceProjection(
 
     $balanceCents = $openingBalanceCents;
     foreach ($weeks as &$week) {
+        usort($week['events'], static function (array $left, array $right): int {
+            $dateComparison = strcmp((string) ($left['event_date'] ?? ''), (string) ($right['event_date'] ?? ''));
+            if ($dateComparison !== 0) {
+                return $dateComparison;
+            }
+
+            return strcmp((string) ($left['label'] ?? ''), (string) ($right['label'] ?? ''));
+        });
         $balanceCents += (int) $week['movement_cents'];
         $week['balance_cents'] = $balanceCents;
         $week['balance_display'] = dueAmountLabelFromSignedCents($balanceCents);

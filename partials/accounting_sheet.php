@@ -2115,14 +2115,53 @@
                                         : ($accountingWeekBalanceCents > 0 ? ' is-positive' : '');
                                     $accountingWeekIsCurrent = !empty($accountingWeek['is_current']);
                                     ?>
-                                    <div
-                                        class="accounting-weekly-projection-week<?= e($accountingWeekClass) ?><?= $accountingWeekIsCurrent ? ' is-current' : '' ?>"
+                                    <button
+                                        type="button"
+                                        class="accounting-weekly-projection-week<?= e($accountingWeekClass) ?><?= $accountingWeekIsCurrent ? ' is-current is-selected' : '' ?>"
+                                        data-accounting-weekly-projection-week
+                                        data-accounting-week-index="<?= e((string) ($accountingWeek['index'] ?? '')) ?>"
+                                        aria-pressed="<?= $accountingWeekIsCurrent ? 'true' : 'false' ?>"
                                         title="Semana <?= e((string) ($accountingWeek['index'] ?? '')) ?> (<?= e((string) ($accountingWeek['range_display'] ?? '')) ?>): <?= e((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?>"
                                     >
                                         <span class="accounting-weekly-projection-fill"></span>
                                         <span class="accounting-weekly-projection-label">Sem. <?= e((string) ($accountingWeek['index'] ?? '')) ?></span>
                                         <strong><?= $renderAccountingMoney((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?></strong>
                                         <small><?= e((string) ($accountingWeek['range_display'] ?? '')) ?></small>
+                                    </button>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="accounting-weekly-projection-details" data-accounting-weekly-projection-details>
+                                <?php foreach ($accountingWeeklyProjectionWeeks as $accountingWeek): ?>
+                                    <?php
+                                    $accountingWeekIndex = (string) ($accountingWeek['index'] ?? '');
+                                    $accountingWeekEvents = is_array($accountingWeek['events'] ?? null)
+                                        ? $accountingWeek['events']
+                                        : [];
+                                    $accountingWeekIsCurrent = !empty($accountingWeek['is_current']);
+                                    ?>
+                                    <div
+                                        class="accounting-weekly-projection-detail"
+                                        data-accounting-weekly-projection-detail="<?= e($accountingWeekIndex) ?>"
+                                        <?= $accountingWeekIsCurrent ? '' : 'hidden' ?>
+                                    >
+                                        <div class="accounting-weekly-projection-detail-head">
+                                            <span>Semana <?= e($accountingWeekIndex) ?> · <?= e((string) ($accountingWeek['range_display'] ?? '')) ?></span>
+                                            <strong><?= $renderAccountingMoney((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?></strong>
+                                        </div>
+                                        <?php if ($accountingWeekEvents): ?>
+                                            <div class="accounting-weekly-projection-events">
+                                                <?php foreach ($accountingWeekEvents as $accountingWeekEvent): ?>
+                                                    <?php $accountingWeekEventType = (string) ($accountingWeekEvent['entry_type'] ?? 'expense'); ?>
+                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?>">
+                                                        <span class="accounting-weekly-projection-event-label"><?= e((string) ($accountingWeekEvent['label'] ?? '')) ?></span>
+                                                        <span class="accounting-weekly-projection-event-date"><?= e((string) ($accountingWeekEvent['event_date_display'] ?? '')) ?></span>
+                                                        <strong><?= $accountingWeekEventType === 'income' ? '+' : '−' ?> <?= $renderAccountingMoney((string) ($accountingWeekEvent['amount_display'] ?? 'R$ 0,00')) ?></strong>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="accounting-weekly-projection-empty">Nenhum lan&ccedil;amento previsto nesta semana.</span>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
                             </div>

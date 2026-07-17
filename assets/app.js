@@ -20299,6 +20299,30 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = getEventTargetElement(event);
     if (!(target instanceof HTMLElement)) return;
 
+    const weekButton = target.closest("[data-accounting-weekly-projection-week]");
+    if (!(weekButton instanceof HTMLButtonElement)) return;
+
+    const projection = weekButton.closest(".accounting-weekly-projection");
+    const weekIndex = String(weekButton.dataset.accountingWeekIndex || "");
+    if (!(projection instanceof HTMLElement) || weekIndex === "") return;
+
+    event.preventDefault();
+    projection.querySelectorAll("[data-accounting-weekly-projection-week]").forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      const isSelected = button === weekButton;
+      button.classList.toggle("is-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    });
+    projection.querySelectorAll("[data-accounting-weekly-projection-detail]").forEach((detail) => {
+      if (!(detail instanceof HTMLElement)) return;
+      detail.hidden = detail.dataset.accountingWeeklyProjectionDetail !== weekIndex;
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    const target = getEventTargetElement(event);
+    if (!(target instanceof HTMLElement)) return;
+
     const editButton = target.closest("[data-accounting-entry-toggle], [data-accounting-entry-edit]");
     if (!(editButton instanceof HTMLElement)) return;
 
