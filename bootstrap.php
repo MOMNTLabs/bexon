@@ -10009,27 +10009,26 @@ function workspaceAccountingFutureCarryoverPreviewEntries(
         return [];
     }
 
-    $currentEntries = workspaceAccountingEntriesListRaw($pdo, $workspaceId, $currentPeriodKey);
     $previewEntries = [];
-    foreach ($currentEntries as $entry) {
-        $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
-        $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
-        $isRecurring = ((int) ($entry['is_monthly'] ?? 0)) === 1
-            || ((int) ($entry['is_weekly'] ?? 0)) === 1
-            || ((int) ($entry['is_installment'] ?? 0)) === 1
-            || ((int) ($entry['is_monthly_goal'] ?? 0)) === 1
-            || max(0, (int) ($entry['source_due_entry_id'] ?? 0)) > 0;
-        if ($entryType !== 'expense' || $isSettled || $isRecurring || ((int) ($entry['is_balance_adjustment'] ?? 0)) === 1) {
-            continue;
-        }
+    $previewIndexes = [];
+    $appendPreview = static function (array $entry, int $remainingCents, string $sourcePeriodKey) use (&$previewEntries, &$previewIndexes, $targetPeriodKey): void {
+        $weeklyRecurrenceId = max(0, (int) ($entry['weekly_recurrence_id'] ?? 0));
+        $entryId = max(0, (int) ($entry['id'] ?? 0));
+        $previewKey = $weeklyRecurrenceId > 0
+            ? ('weekly:' . $weeklyRecurrenceId)
+            : ('entry:' . $sourcePeriodKey . ':' . $entryId);
 
-        $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
-        $remainingCents = max(0, min(
-            $amountCents,
-            normalizeDueAmountCents($entry['discount_remaining_cents'] ?? null) ?? $amountCents
-        ));
-        if ($remainingCents <= 0) {
-            continue;
+        if (isset($previewIndexes[$previewKey])) {
+            $index = $previewIndexes[$previewKey];
+            $previewEntries[$index]['amount_cents'] += $remainingCents;
+            $previewEntries[$index]['total_amount_cents'] += $remainingCents;
+            $previewEntries[$index]['amount_display'] = dueAmountLabelFromCents($previewEntries[$index]['amount_cents']);
+            $previewEntries[$index]['amount_input'] = dueAmountLabelFromCents($previewEntries[$index]['amount_cents']);
+            $previewEntries[$index]['total_amount_display'] = dueAmountLabelFromCents($previewEntries[$index]['total_amount_cents']);
+            $previewEntries[$index]['total_amount_input'] = dueAmountLabelFromCents($previewEntries[$index]['total_amount_cents']);
+            $previewEntries[$index]['discount_remaining_cents'] = $previewEntries[$index]['amount_cents'];
+            $previewEntries[$index]['discount_remaining_display'] = dueAmountLabelFromCents($previewEntries[$index]['amount_cents']);
+            return;
         }
 
         $preview = $entry;
@@ -10045,6 +10044,7 @@ function workspaceAccountingFutureCarryoverPreviewEntries(
         $preview['settled_at'] = null;
         $preview['is_carried'] = 0;
         $preview['carry_source_entry_id'] = null;
+        $preview['weekly_recurrence_id'] = null;
         $preview['is_forecast_carry'] = 1;
         $preview['subitems'] = [];
         $preview['discounts'] = [];
@@ -10054,7 +10054,30 @@ function workspaceAccountingFutureCarryoverPreviewEntries(
         $preview['discount_remaining_display'] = dueAmountLabelFromCents($remainingCents);
         $preview['supports_subitems'] = 0;
         $preview['supports_discounts'] = 0;
+        $previewIndexes[$previewKey] = count($previewEntries);
         $previewEntries[] = $preview;
+    };
+
+    for ($periodKey = $currentPeriodKey; strcmp($periodKey, $targetPeriodKey) < 0; $periodKey = accountingNextPeriodKey($periodKey)) {
+        foreach (workspaceAccountingEntriesListRaw($pdo, $workspaceId, $periodKey) as $entry) {
+            $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
+            $isSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
+            $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
+            if ($entryType !== 'expense' || $isSettled || $isMonthlyGoal || ((int) ($entry['is_balance_adjustment'] ?? 0)) === 1) {
+                continue;
+            }
+
+            $amountCents = max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+            $remainingCents = max(0, min(
+                $amountCents,
+                normalizeDueAmountCents($entry['discount_remaining_cents'] ?? null) ?? $amountCents
+            ));
+            if ($remainingCents <= 0) {
+                continue;
+            }
+
+            $appendPreview($entry, $remainingCents, $periodKey);
+        }
     }
 
     return $previewEntries;
