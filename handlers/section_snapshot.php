@@ -205,17 +205,6 @@ function respondAccountingPanelSnapshot(): void
         'period_key' => $accountingPeriod,
         'current_period_key' => $accountingCurrentPeriodKey,
     ]);
-    $accountingNextIncomeProjection = workspaceAccountingNextIncomeProjectionSummary(
-        db(),
-        $workspaceId,
-        $accountingPeriod,
-        $accountingOpeningBalanceCents,
-        [
-            'period_key' => $accountingPeriod,
-            'current_period_key' => $accountingCurrentPeriodKey,
-        ]
-    );
-
     ob_start();
     include __DIR__ . '/../partials/accounting_sheet.php';
     $accountingSheetHtml = (string) ob_get_clean();
