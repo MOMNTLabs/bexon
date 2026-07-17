@@ -728,7 +728,6 @@
                                         </div>
                                         <?php continue; ?>
                                     <?php endif; ?>
-                                    ?>
                                     <div class="accounting-entry-row<?= $accountingEntryIsMonthlyGoal ? ' is-goal-entry' : '' ?><?= $accountingEntryIsBalanceAdjustment ? ' is-balance-adjustment' : '' ?>">
                                         <button
                                             type="button"
