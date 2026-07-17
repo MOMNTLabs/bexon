@@ -7982,6 +7982,16 @@ function workspaceAccountingEntriesListRaw(
     }
     unset($row);
 
+    // Pendências geradas por versões anteriores não devem aparecer (nem
+    // entrar nos totais) antes de o período correspondente começar.
+    $currentPeriodKey = accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
+    if (strcmp($periodKey, $currentPeriodKey) > 0) {
+        $rows = array_values(array_filter(
+            $rows,
+            static fn (array $entry): bool => !workspaceAccountingIsPendingCarryoverEntry($entry)
+        ));
+    }
+
     $rows = workspaceAccountingApplyAutomations($pdo, $rows);
     $rows = workspaceAccountingAttachSubitems($pdo, $workspaceId, $rows);
     $rows = workspaceAccountingAttachDiscounts($pdo, $workspaceId, $rows);
@@ -9043,6 +9053,14 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
         ];
     }
 
+    // Pendências não devem ser antecipadas para períodos que ainda não
+    // começaram. Recorrências mensais de entrada e parcelas, tratadas acima,
+    // continuam como lançamentos previstos normais.
+    $currentPeriodKey = accountingCycleCurrentPeriodKey(workspaceAccountingCycleCloseDay($workspaceId));
+    if (strcmp($targetPeriodKey, $currentPeriodKey) > 0) {
+        return null;
+    }
+
     if ($isSettled) {
         return null;
     }
@@ -9870,7 +9888,7 @@ function workspaceAccountingEntriesByType(array $entries): array
             continue;
         }
 
-        if (((int) ($entry['is_carried'] ?? 0)) === 1) {
+        if (workspaceAccountingIsPendingCarryoverEntry($entry)) {
             $carriedGroups[$entryType][] = $entry;
             continue;
         }
@@ -9933,6 +9951,18 @@ function workspaceAccountingEntriesByType(array $entries): array
     }
 
     return $grouped;
+}
+
+/**
+ * Distingue uma pendência financeira real de um lançamento recorrente que
+ * usa internamente a mesma cadeia de registros. Entradas mensais e parcelas
+ * precisam aparecer como itens normais no período, não como "anteriores".
+ */
+function workspaceAccountingIsPendingCarryoverEntry(array $entry): bool
+{
+    return ((int) ($entry['is_carried'] ?? 0)) === 1
+        && normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
+        && ((int) ($entry['is_installment'] ?? 0)) !== 1;
 }
 
 function normalizeAccountingWeeklyDay($value): int
@@ -11761,16 +11791,16 @@ function accountingSummary(array $entries, int $openingBalanceCents, array $opti
             );
             $expenseTotal += $amountCents;
             $expenseDiscount += $discountCents;
-            if ($isSettled) {
-                $expensePaid += max(0, $amountCents - $discountCents);
-            }
+            // "Abater" é um pagamento parcial: ele deve ser refletido no
+            // total já pago mesmo antes de o item ser quitado por completo.
+            $expensePaid += $isSettled ? $amountCents : $discountCents;
         }
     }
 
-    $expenseRemaining = max(0, $expenseTotal - $expensePaid - $expenseDiscount);
+    $expenseRemaining = max(0, $expenseTotal - $expensePaid);
     $incomeRemaining = max(0, $incomeTotal - $incomeReceived);
     $monthMovement = $incomeReceived - $expensePaid;
-    $projectedMovement = $incomeTotal - max(0, $expenseTotal - $expenseDiscount);
+    $projectedMovement = $incomeTotal - $expenseTotal;
     $currentBalance = $openingBalanceCents + $monthMovement;
     $finalBalance = $openingBalanceCents + $projectedMovement;
     $postSnapshotMovementCents = 0;
