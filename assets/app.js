@@ -4343,11 +4343,33 @@ window.addEventListener("DOMContentLoaded", () => {
     const summary = details?.querySelector?.("summary");
     if (!(summary instanceof HTMLElement)) return;
 
+    if (details.matches("[data-accounting-task-link-groups]")) {
+      const allGroupCheckboxes = Array.from(
+        details.querySelectorAll('input[name="task_link_group_names[]"]')
+      );
+      const checkedGroupNames = allGroupCheckboxes
+        .filter((checkbox) => checkbox instanceof HTMLInputElement && checkbox.checked)
+        .map((checkbox) => String(checkbox.dataset.projectName || checkbox.value || "").trim())
+        .filter(Boolean);
+      const summaryText =
+        checkedGroupNames.length > 0 && checkedGroupNames.length === allGroupCheckboxes.length
+          ? "Todos"
+          : checkedGroupNames.length > 1
+            ? `${checkedGroupNames[0]} +${checkedGroupNames.length - 1}`
+            : checkedGroupNames[0] || "Selecionar projetos";
+      summary.textContent = summaryText;
+      summary.title = checkedGroupNames.join(", ");
+      summary.setAttribute("aria-label", summaryText);
+      return;
+    }
+
     const checkedAssignees = getCheckedAssigneeData(details);
     const checkedNames = checkedAssignees.map((assignee) => assignee.name).filter(Boolean);
-    const emptyText = details.classList.contains("row-assignee-picker")
-      ? "Sem responsavel"
-      : "Selecionar";
+    const emptyText = details.matches("[data-accounting-task-link-assignees]")
+      ? "Todos"
+      : details.classList.contains("row-assignee-picker")
+        ? "Sem responsavel"
+        : "Selecionar";
 
     summary.innerHTML = renderAssigneeSummaryMarkup(checkedAssignees, emptyText);
 
@@ -7459,6 +7481,56 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const syncAccountingTaskLinkGroupPicker = (
+    picker,
+    groupNames,
+    selectedGroupNames,
+    disabled
+  ) => {
+    if (!(picker instanceof HTMLElement)) return;
+
+    const menu = picker.querySelector("[data-accounting-task-link-group-menu]");
+    if (!(menu instanceof HTMLElement)) return;
+
+    const normalizedGroups = Array.isArray(groupNames)
+      ? Array.from(
+          new Set(groupNames.map((groupName) => String(groupName || "").trim()).filter(Boolean))
+        )
+      : [];
+    const selectedLookup = new Set(
+      Array.isArray(selectedGroupNames)
+        ? selectedGroupNames.map((groupName) => String(groupName || "").trim()).filter(Boolean)
+        : []
+    );
+    const resolvedSelectedGroups = normalizedGroups.filter((groupName) =>
+      selectedLookup.has(groupName)
+    );
+    if (!resolvedSelectedGroups.length) {
+      resolvedSelectedGroups.push(...normalizedGroups);
+    }
+    const resolvedLookup = new Set(resolvedSelectedGroups);
+
+    if (!normalizedGroups.length) {
+      menu.innerHTML = '<p class="assignee-picker-empty">Nenhum projeto dispon\u00edvel.</p>';
+      updateAssigneePickerSummaryVisual(picker);
+      return;
+    }
+
+    menu.innerHTML = normalizedGroups
+      .map((groupName) => {
+        const checked = resolvedLookup.has(groupName) ? " checked" : "";
+        const disabledAttr = disabled ? " disabled" : "";
+        return `<label class="assignee-option"><input type="checkbox" name="task_link_group_names[]" value="${escapeHtml(
+          groupName
+        )}" data-project-name="${escapeHtml(groupName)}"${checked}${disabledAttr}><span class="assignee-option-text">${escapeHtml(
+          groupName
+        )}</span></label>`;
+      })
+      .join("");
+
+    updateAssigneePickerSummaryVisual(picker);
+  };
+
   const syncAccountingTaskLinkAssigneeOptions = (
     picker,
     users,
@@ -7535,10 +7607,12 @@ window.addEventListener("DOMContentLoaded", () => {
         automationTypeField.value === "completed_tasks");
 
     automationTypeField.value = isCompletedTasks ? "completed_tasks" : "manual";
+    form.classList.toggle("has-task-link", isCompletedTasks);
     taskLinkFields.hidden = !isCompletedTasks;
 
     const workspaceField = form.querySelector("[data-accounting-task-link-workspace]");
-    const groupField = form.querySelector("[data-accounting-task-link-group]");
+    const groupPicker = form.querySelector("[data-accounting-task-link-groups]");
+    const legacyGroupField = form.querySelector("[data-accounting-task-link-group-legacy]");
     const picker = form.querySelector("[data-accounting-task-link-assignees]");
     const controls = taskLinkFields.querySelectorAll("select, input[type='checkbox']");
     const options = getAccountingTaskLinkOptions(form);
@@ -7565,6 +7639,12 @@ window.addEventListener("DOMContentLoaded", () => {
             picker.querySelectorAll('input[name="task_link_assignee_ids[]"]:checked')
           ).map((checkbox) => checkbox.value)
         : [];
+    const previousSelectedGroupNames =
+      groupPicker instanceof HTMLElement
+        ? Array.from(
+            groupPicker.querySelectorAll('input[name="task_link_group_names[]"]:checked')
+          ).map((checkbox) => checkbox.value)
+        : [];
     const groupOptions =
       selectedWorkspaceId && Array.isArray(options.groups_by_workspace?.[selectedWorkspaceId])
         ? options.groups_by_workspace[selectedWorkspaceId]
@@ -7574,12 +7654,20 @@ window.addEventListener("DOMContentLoaded", () => {
         ? options.users_by_workspace[selectedWorkspaceId]
         : [];
 
-    syncAccountingTaskLinkGroupOptions(
-      groupField,
+    syncAccountingTaskLinkGroupPicker(
+      groupPicker,
       groupOptions,
-      groupField instanceof HTMLSelectElement ? groupField.value : "",
+      previousSelectedGroupNames,
       !isCompletedTasks
     );
+    if (legacyGroupField instanceof HTMLSelectElement && groupPicker instanceof HTMLElement) {
+      const primarySelectedGroup = groupPicker.querySelector(
+        'input[name="task_link_group_names[]"]:checked'
+      );
+      if (primarySelectedGroup instanceof HTMLInputElement) {
+        legacyGroupField.value = primarySelectedGroup.value;
+      }
+    }
     syncAccountingTaskLinkAssigneeOptions(
       picker,
       userOptions,
@@ -7590,7 +7678,6 @@ window.addEventListener("DOMContentLoaded", () => {
     controls.forEach((control) => {
       if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) return;
       if (control === workspaceField) return;
-      if (control === groupField) return;
       control.disabled = !isCompletedTasks;
     });
   };
@@ -19647,6 +19734,7 @@ window.addEventListener("DOMContentLoaded", () => {
         "monthly_day",
         "task_link_workspace_id",
         "task_link_group_name",
+        "task_link_group_names[]",
         "task_link_assignee_ids[]",
         "automation_type",
       ].includes(target.name)
@@ -19680,6 +19768,7 @@ window.addEventListener("DOMContentLoaded", () => {
         "monthly_mode",
         "task_link_workspace_id",
         "task_link_group_name",
+        "task_link_group_names[]",
         "task_link_assignee_ids[]",
         "automation_type",
       ].includes(target.name)

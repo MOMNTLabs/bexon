@@ -15386,6 +15386,21 @@ select option:checked,
     justify-content: flex-start;
 }
 
+.accounting-create-form.has-task-link .accounting-create-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.accounting-create-form.has-task-link .accounting-create-meta,
+.accounting-create-form.has-task-link .accounting-entry-options {
+    width: 100%;
+}
+
+.accounting-create-form.has-task-link .accounting-create-actions {
+    width: 100%;
+    justify-content: flex-end;
+}
+
 .accounting-entry-type-select {
     flex: 0 0 auto;
     width: auto;
@@ -15434,7 +15449,7 @@ select option:checked,
 
 .accounting-task-link-fields {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     width: 100%;
     flex-basis: 100%;
@@ -15449,13 +15464,43 @@ select option:checked,
     min-width: 0;
 }
 
+.accounting-task-link-fields .accounting-entry-edit-control > span {
+    color: #858585;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 .accounting-task-link-fields .accounting-help-row,
 body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-fields .accounting-help-row {
     grid-column: 1 / -1;
 }
 
 .accounting-task-link-picker-wrap {
-    grid-column: 1 / -1;
+    grid-column: auto;
+    min-width: 0;
+}
+
+.accounting-task-link-picker-wrap .assignee-picker,
+.accounting-task-link-picker-wrap .assignee-picker > summary {
+    min-width: 0;
+    width: 100%;
+}
+
+.accounting-task-link-picker-wrap .assignee-picker > summary {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+    .accounting-task-link-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .accounting-task-link-picker-wrap {
+        grid-column: 1 / -1;
+    }
 }
 
 .accounting-task-link-picker-wrap .assignee-picker-label,

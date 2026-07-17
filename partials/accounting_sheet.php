@@ -186,10 +186,52 @@
 
                 return (string) ob_get_clean();
             };
+            $renderAccountingTaskLinkGroupPicker = static function (?int $workspaceId = null, array $selectedGroupNames = [], bool $disabled = false) use ($accountingTaskLinkGroupsForWorkspace): string {
+                $groupNames = $accountingTaskLinkGroupsForWorkspace($workspaceId);
+                $selectedGroupNames = normalizeAccountingTaskLinkGroupNames($selectedGroupNames);
+                if (!$selectedGroupNames) {
+                    $selectedGroupNames = $groupNames;
+                }
+                $selectedLookup = array_fill_keys($selectedGroupNames, true);
+                $summaryLabel = count($selectedGroupNames) === count($groupNames)
+                    ? 'Todos'
+                    : (count($selectedGroupNames) === 1
+                        ? (string) $selectedGroupNames[0]
+                        : ((string) ($selectedGroupNames[0] ?? 'Projetos') . ' +' . max(0, count($selectedGroupNames) - 1)));
+                ob_start();
+                ?>
+                <div class="assignee-picker-wrap task-detail-inline-field accounting-task-link-picker-wrap accounting-task-link-project-picker-wrap">
+                    <span class="assignee-picker-label">Projetos</span>
+                    <details class="assignee-picker row-assignee-picker accounting-task-link-project-picker" data-accounting-task-link-groups>
+                        <summary><?= e($summaryLabel) ?></summary>
+                        <div class="assignee-picker-menu" aria-label="Selecionar projetos" data-sheet-title="Projetos" data-accounting-task-link-group-menu>
+                            <?php if (!$groupNames): ?>
+                                <p class="assignee-picker-empty">Nenhum projeto dispon&iacute;vel.</p>
+                            <?php else: ?>
+                                <?php foreach ($groupNames as $groupName): ?>
+                                    <label class="assignee-option">
+                                        <input
+                                            type="checkbox"
+                                            name="task_link_group_names[]"
+                                            value="<?= e($groupName) ?>"
+                                            data-project-name="<?= e($groupName) ?>"
+                                            <?= isset($selectedLookup[$groupName]) ? 'checked' : '' ?>
+                                            <?= $disabled ? 'disabled' : '' ?>
+                                        >
+                                        <span class="assignee-option-text"><?= e($groupName) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </details>
+                </div>
+                <?php
+                return (string) ob_get_clean();
+            };
             $accountingTaskLinkAssigneeSummary = static function (?int $workspaceId = null, array $selectedAssigneeIds = []) use ($accountingTaskLinkUsersForWorkspace): string {
                 $selectedLookup = array_fill_keys(normalizeAssigneeIds($selectedAssigneeIds), true);
                 if (!$selectedLookup) {
-                    return 'Todos os responsáveis';
+                    return 'Todos';
                 }
 
                 $selectedNames = [];
@@ -201,7 +243,7 @@
                     $selectedNames[] = normalizeUserDisplayName((string) ($workspaceUser['name'] ?? 'Usuário'));
                 }
 
-                return $selectedNames ? implode(', ', $selectedNames) : 'Todos os responsáveis';
+                return $selectedNames ? implode(', ', $selectedNames) : 'Todos';
             };
             $renderAccountingTaskLinkAssigneePicker = static function (?int $workspaceId = null, array $selectedAssigneeIds = [], bool $disabled = false) use ($accountingTaskLinkUsersForWorkspace, $accountingTaskLinkAssigneeSummary): string {
                 $workspaceUsers = $accountingTaskLinkUsersForWorkspace($workspaceId);
@@ -244,13 +286,14 @@
             };
             $renderAccountingTaskLinkFields = static function (
                 ?int $workspaceId = null,
-                ?string $groupName = null,
+                array $selectedGroupNames = [],
                 array $selectedAssigneeIds = [],
                 bool $hidden = true,
                 bool $disabled = true
             ) use (
                 $renderAccountingTaskLinkWorkspaceOptions,
                 $renderAccountingTaskLinkGroupOptions,
+                $renderAccountingTaskLinkGroupPicker,
                 $renderAccountingTaskLinkAssigneePicker,
                 $renderAccountingHelpTooltip
             ): string {
@@ -269,16 +312,17 @@
                             <?= $renderAccountingTaskLinkWorkspaceOptions($workspaceId) ?>
                         </select>
                     </label>
-                    <label class="accounting-entry-edit-control">
+                    <?= $renderAccountingTaskLinkGroupPicker($workspaceId, $selectedGroupNames, $disabled) ?>
+                    <label class="accounting-entry-edit-control" hidden>
                         <span>Projeto</span>
                         <select
                             name="task_link_group_name"
                             class="accounting-installment-select"
                             aria-label="Projeto das tarefas concluídas"
-                            data-accounting-task-link-group
+                            data-accounting-task-link-group-legacy
                             <?= $disabled ? 'disabled' : '' ?>
                         >
-                            <?= $renderAccountingTaskLinkGroupOptions($workspaceId, $groupName) ?>
+                            <?= $renderAccountingTaskLinkGroupOptions($workspaceId, $selectedGroupNames[0] ?? null) ?>
                         </select>
                     </label>
                     <?= $renderAccountingTaskLinkAssigneePicker($workspaceId, $selectedAssigneeIds, $disabled) ?>
@@ -298,6 +342,14 @@
                 ob_start();
                 foreach ($selectedAssigneeIds as $selectedAssigneeId) {
                     echo '<input type="hidden" name="task_link_assignee_ids[]" value="' . e((string) $selectedAssigneeId) . '">';
+                }
+
+                return (string) ob_get_clean();
+            };
+            $renderAccountingTaskLinkHiddenGroupInputs = static function (array $selectedGroupNames = []): string {
+                ob_start();
+                foreach (normalizeAccountingTaskLinkGroupNames($selectedGroupNames) as $selectedGroupName) {
+                    echo '<input type="hidden" name="task_link_group_names[]" value="' . e($selectedGroupName) . '">';
                 }
 
                 return (string) ob_get_clean();
@@ -1177,6 +1229,10 @@
                                         ? $accountingEntryTaskLinkWorkspaceId
                                         : $accountingTaskLinkDefaultWorkspaceId;
                                     $accountingEntryTaskLinkGroupName = (string) ($accountingEntry['task_link_group_name'] ?? '');
+                                    $accountingEntryTaskLinkGroupNames = normalizeAccountingTaskLinkGroupNames(
+                                        $accountingEntry['task_link_group_names'] ?? null,
+                                        $accountingEntryTaskLinkGroupName
+                                    );
                                     $accountingEntryTaskLinkAssigneeIds = normalizeAssigneeIds(
                                         is_array($accountingEntry['task_link_assignee_ids'] ?? null)
                                             ? $accountingEntry['task_link_assignee_ids']
@@ -1285,6 +1341,7 @@
                                             <?php if ($accountingEntryIsTaskLinked): ?>
                                                 <input type="hidden" name="task_link_workspace_id" value="<?= e((string) ($accountingEntryTaskLinkWorkspaceId ?? 0)) ?>">
                                                 <input type="hidden" name="task_link_group_name" value="<?= e($accountingEntryTaskLinkGroupName) ?>">
+                                                <?= $renderAccountingTaskLinkHiddenGroupInputs($accountingEntryTaskLinkGroupNames) ?>
                                                 <?= $renderAccountingTaskLinkHiddenAssigneeInputs($accountingEntryTaskLinkAssigneeIds) ?>
                                             <?php endif; ?>
                                             <input type="hidden" name="is_monthly_due" value="<?= (!$accountingEntryIsTaskLinked && $accountingEntryIsMonthly) ? '1' : '0' ?>">
@@ -1375,7 +1432,7 @@
                                             <?php if ($accountingEntryIsTaskLinked): ?>
                                                 <?= $renderAccountingTaskLinkFields(
                                                     $accountingEntryTaskLinkWorkspaceId,
-                                                    $accountingEntryTaskLinkGroupName,
+                                                    $accountingEntryTaskLinkGroupNames,
                                                     $accountingEntryTaskLinkAssigneeIds,
                                                     false,
                                                     false
@@ -1698,8 +1755,8 @@
                                                 <?= $renderAccountingTaskLinkFields(
                                                     $accountingTaskLinkDefaultWorkspaceId,
                                                     $accountingTaskLinkDefaultWorkspaceId !== null
-                                                        ? ($accountingTaskLinkGroupsForWorkspace($accountingTaskLinkDefaultWorkspaceId)[0] ?? '')
-                                                        : '',
+                                                        ? $accountingTaskLinkGroupsForWorkspace($accountingTaskLinkDefaultWorkspaceId)
+                                                        : [],
                                                     [],
                                                     true,
                                                     true

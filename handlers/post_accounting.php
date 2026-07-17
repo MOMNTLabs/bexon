@@ -22,7 +22,11 @@ function accountingAutomationConfigFromRequest(PDO $pdo, int $userId, string $en
         throw new RuntimeException('Selecione um workspace de tarefas concluídas que você possa acessar.');
     }
 
-    $taskGroupName = normalizeTaskGroupName((string) ($_POST['task_link_group_name'] ?? ''));
+    $submittedGroupNames = normalizeAccountingTaskLinkGroupNames(
+        is_array($_POST['task_link_group_names'] ?? null) ? $_POST['task_link_group_names'] : [],
+        isset($_POST['task_link_group_name']) ? (string) $_POST['task_link_group_name'] : null
+    );
+    $taskGroupName = $submittedGroupNames[0] ?? normalizeTaskGroupName((string) ($_POST['task_link_group_name'] ?? ''));
     $availableGroupNames = array_values(array_unique(array_map(
         static fn ($groupName): string => normalizeTaskGroupName((string) $groupName),
         taskGroupsList($sourceWorkspaceId)
@@ -32,6 +36,14 @@ function accountingAutomationConfigFromRequest(PDO $pdo, int $userId, string $en
     }
     if (!userCanViewTaskGroup($userId, $sourceWorkspaceId, $taskGroupName)) {
         throw new RuntimeException('Você não possui acesso ao projeto selecionado.');
+    }
+
+    $selectedGroupNames = $submittedGroupNames ?: [$taskGroupName];
+    foreach ($selectedGroupNames as $selectedGroupName) {
+        if (!in_array($selectedGroupName, $availableGroupNames, true)
+            || !userCanViewTaskGroup($userId, $sourceWorkspaceId, $selectedGroupName)) {
+            throw new RuntimeException('Um ou mais projetos selecionados são inválidos ou não estão acessíveis.');
+        }
     }
 
     $rawAssigneeIds = is_array($_POST['task_link_assignee_ids'] ?? null)
@@ -56,6 +68,7 @@ function accountingAutomationConfigFromRequest(PDO $pdo, int $userId, string $en
         'automation_type' => 'completed_tasks',
         'task_link_workspace_id' => $sourceWorkspaceId,
         'task_link_group_name' => $taskGroupName,
+        'task_link_group_names' => $selectedGroupNames,
         'task_link_assignee_ids' => $selectedAssigneeIds,
         'task_link_rate_cents' => $taskLinkRateCents,
     ];
