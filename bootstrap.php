@@ -8928,6 +8928,45 @@ function workspaceAccountingCreateCarriedEntry(PDO $pdo, array $payload): int
     return (int) $pdo->lastInsertId();
 }
 
+function workspaceAccountingCopyOpenSubitemsToCarriedEntry(
+    PDO $pdo,
+    int $workspaceId,
+    array $sourceEntry,
+    int $carriedEntryId
+): void {
+    if ($workspaceId <= 0 || $carriedEntryId <= 0) {
+        return;
+    }
+
+    $sourceSubitems = is_array($sourceEntry['subitems'] ?? null)
+        ? $sourceEntry['subitems']
+        : [];
+    if (!$sourceSubitems || max(0, (int) ($sourceEntry['discount_total_cents'] ?? 0)) > 0) {
+        return;
+    }
+
+    $openSubitems = array_values(array_filter(
+        $sourceSubitems,
+        static fn (array $subitem): bool => ((int) ($subitem['is_settled'] ?? 0)) !== 1
+    ));
+    if (!$openSubitems) {
+        return;
+    }
+
+    foreach ($openSubitems as $subitem) {
+        createWorkspaceAccountingSubitem(
+            $pdo,
+            $workspaceId,
+            $carriedEntryId,
+            (string) ($subitem['label'] ?? ''),
+            $subitem['amount_cents'] ?? 0,
+            isset($subitem['created_by']) && (int) ($subitem['created_by'] ?? 0) > 0
+                ? (int) $subitem['created_by']
+                : null
+        );
+    }
+}
+
 function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $targetPeriodKey): ?array
 {
     $sourceEntry = workspaceAccountingNormalizeEntryRow(
@@ -8959,6 +8998,14 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
     $installmentTotal = (int) ($sourceEntry['installment_total'] ?? 0);
     $totalAmountCents = normalizeDueAmountCents($sourceEntry['total_amount_cents'] ?? null) ?? 0;
     $amountCents = normalizeDueAmountCents($sourceEntry['amount_cents'] ?? null) ?? 0;
+    $remainingAmountCents = max(0, min(
+        $amountCents,
+        normalizeDueAmountCents($sourceEntry['discount_remaining_cents'] ?? null) ?? $amountCents
+    ));
+    $remainingAmountCents = max(0, $remainingAmountCents - max(
+        0,
+        normalizeDueAmountCents($sourceEntry['subitem_paid_cents'] ?? null) ?? 0
+    ));
     $monthlyMode = normalizeAccountingMonthlyMode(
         (string) ($sourceEntry['monthly_mode'] ?? 'uniform'),
         $entryType,
@@ -9077,13 +9124,17 @@ function workspaceAccountingNextCarryEntryPayload(array $sourceEntry, string $ta
         return null;
     }
 
+    if ($remainingAmountCents <= 0) {
+        return null;
+    }
+
     return [
         'workspace_id' => $workspaceId,
         'period_key' => $targetPeriodKey,
         'entry_type' => 'expense',
         'label' => normalizeAccountingEntryLabel((string) ($sourceEntry['label'] ?? '')),
-        'amount_cents' => $amountCents,
-        'total_amount_cents' => $amountCents,
+        'amount_cents' => $remainingAmountCents,
+        'total_amount_cents' => $remainingAmountCents,
         'is_installment' => 0,
         'is_monthly' => 0,
         'monthly_mode' => 'uniform',
@@ -9390,6 +9441,7 @@ function workspaceAccountingSyncCarryEntryForSource(PDO $pdo, array $sourceEntry
 
     if ($primaryChild === null) {
         $newEntryId = workspaceAccountingCreateCarriedEntry($pdo, $expectedPayload);
+        workspaceAccountingCopyOpenSubitemsToCarriedEntry($pdo, $workspaceId, $sourceEntry, $newEntryId);
         return workspaceAccountingEntryById($pdo, $workspaceId, $newEntryId);
     }
 
@@ -9953,12 +10005,18 @@ function workspaceAccountingEntriesByType(array $entries): array
             $totalCents += max(0, (int) ($carriedEntry['amount_cents'] ?? 0));
         }
         $grouped[$entryType][] = [
-            'display_group' => 'carried',
+            'display_group' => 'carried_header',
             'entry_type' => $entryType,
-            'carried_entries' => $carriedEntries,
             'carried_count' => count($carriedEntries),
             'carried_total_cents' => $totalCents,
             'carried_total_display' => dueAmountLabelFromCents($totalCents),
+        ];
+        foreach ($carriedEntries as $carriedEntry) {
+            $grouped[$entryType][] = $carriedEntry;
+        }
+        $grouped[$entryType][] = [
+            'display_group' => 'carried_footer',
+            'entry_type' => $entryType,
         ];
     }
 
@@ -9974,7 +10032,8 @@ function workspaceAccountingIsPendingCarryoverEntry(array $entry): bool
 {
     return ((int) ($entry['is_carried'] ?? 0)) === 1
         && normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense')) === 'expense'
-        && ((int) ($entry['is_installment'] ?? 0)) !== 1;
+        && ((int) ($entry['is_installment'] ?? 0)) !== 1
+        && ((int) ($entry['is_monthly_goal'] ?? 0)) !== 1;
 }
 
 function normalizeAccountingWeeklyDay($value): int

@@ -599,8 +599,28 @@
                                 <div class="accounting-empty">Nenhuma conta cadastrada neste mês.</div>
                             <?php else: ?>
                                 <?php foreach ($accountingExpenseEntries as $accountingEntry): ?>
-                                    <?php if (in_array((string) ($accountingEntry['display_group'] ?? ''), ['weekly', 'carried'], true)): ?>
+                                    <?php $accountingDisplayGroup = (string) ($accountingEntry['display_group'] ?? ''); ?>
+                                    <?php if ($accountingDisplayGroup === 'weekly'): ?>
                                         <?= $renderAccountingGroupedEntry($accountingEntry, $accountingPeriod, 'expense') ?>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
+                                    <?php if ($accountingDisplayGroup === 'carried_header'): ?>
+                                        <details class="accounting-occurrence-group is-carried">
+                                            <summary>
+                                                <span class="accounting-occurrence-group-title">
+                                                    <strong>Pend&ecirc;ncias anteriores</strong>
+                                                    <span><?= e((string) ((int) ($accountingEntry['carried_count'] ?? 0))) ?> itens</span>
+                                                </span>
+                                                <span class="accounting-occurrence-group-total"><?= $renderAccountingMoney((string) ($accountingEntry['carried_total_display'] ?? 'R$ 0,00')) ?></span>
+                                            </summary>
+                                            <div class="accounting-occurrence-group-body">
+                                                <div class="accounting-occurrence-list accounting-carried-entry-list">
+                                        <?php continue; ?>
+                                    <?php endif; ?>
+                                    <?php if ($accountingDisplayGroup === 'carried_footer'): ?>
+                                                </div>
+                                            </div>
+                                        </details>
                                         <?php continue; ?>
                                     <?php endif; ?>
                                     <?php
