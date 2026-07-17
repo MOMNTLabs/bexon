@@ -969,10 +969,12 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <label class="accounting-entry-date-field" title="Organize esta conta na semana em que ela ocorreu.">
-                                                <span>Data</span>
-                                                <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da conta">
-                                            </label>
+                                            <?php if (!$accountingEntryDiscounts): ?>
+                                                <label class="accounting-entry-date-field" title="Organize esta conta na semana em que ela ocorreu.">
+                                                    <span>Data</span>
+                                                    <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da conta">
+                                                </label>
+                                            <?php endif; ?>
                                             <?= $renderAccountingEntryTypeControls(
                                                 'expense',
                                                 $accountingEntryTypeChoice,
@@ -1174,7 +1176,7 @@
                                                             $accountingDiscountAmountDisplay = (string) ($accountingDiscount['amount_display'] ?? 'R$ 0,00');
                                                             ?>
                                                             <div class="accounting-entry-discount-row">
-                                                                <span>- <?= $renderAccountingMoney($accountingDiscountAmountDisplay) ?></span>
+                                                            <span>- <?= $renderAccountingMoney($accountingDiscountAmountDisplay) ?><?= !empty($accountingDiscount['due_date']) ? ' · ' . e(accountingDateCompactLabel((string) $accountingDiscount['due_date'])) : '' ?></span>
                                                                 <form method="post" class="accounting-entry-discount-delete-form">
                                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                     <input type="hidden" name="action" value="delete_accounting_discount">
@@ -1205,6 +1207,7 @@
                                                         <?= $accountingEntryDiscountRemainingCents > 0 ? '' : 'disabled' ?>
                                                         required
                                                     >
+                                                    <input type="date" name="discount_date" value="<?= e((new DateTimeImmutable('today'))->format('Y-m-d')) ?>" class="accounting-installment-select" aria-label="Data do abatimento">
                                                     <button
                                                         type="submit"
                                                         class="btn btn-mini"
@@ -1665,10 +1668,12 @@
                                                 data-accounting-primary-amount
                                                 <?= ($accountingEntryIsInstallment || $accountingEntryHasSubitems) ? 'readonly' : '' ?>
                                             >
-                                            <label class="accounting-entry-date-field" title="Organize esta entrada na semana em que ela ocorreu.">
-                                                <span>Data</span>
-                                                <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da entrada">
-                                            </label>
+                                            <?php if (!$accountingEntryReceipts): ?>
+                                                <label class="accounting-entry-date-field" title="Organize esta entrada na semana em que ela ocorreu.">
+                                                    <span>Data</span>
+                                                    <input type="date" name="entry_date" value="<?= e((string) ($accountingEntry['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data da entrada">
+                                                </label>
+                                            <?php endif; ?>
                                             <?= $renderAccountingEntryTypeControls(
                                                 'income',
                                                 $accountingEntryTypeChoice,
@@ -1839,7 +1844,7 @@
                                                         $accountingReceiptAmountDisplay = (string) ($accountingReceipt['amount_display'] ?? 'R$ 0,00');
                                                         ?>
                                                         <div class="accounting-entry-discount-row">
-                                                            <span>+ <?= $renderAccountingMoney($accountingReceiptAmountDisplay) ?></span>
+                                                            <span>+ <?= $renderAccountingMoney($accountingReceiptAmountDisplay) ?><?= !empty($accountingReceipt['due_date']) ? ' · ' . e(accountingDateCompactLabel((string) $accountingReceipt['due_date'])) : '' ?></span>
                                                             <form method="post" class="accounting-entry-discount-delete-form">
                                                                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                 <input type="hidden" name="action" value="delete_accounting_discount">
@@ -1857,6 +1862,7 @@
                                                     <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                                     <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                                     <input type="text" name="discount_amount_value" class="accounting-input accounting-input-amount" inputmode="numeric" placeholder="<?= $accountingEntryReceiptRemainingCents > 0 ? '0,00' : 'Recebido' ?>" autocomplete="off" aria-label="Valor recebido" <?= $accountingEntryReceiptRemainingCents > 0 ? '' : 'disabled' ?> required>
+                                                    <input type="date" name="discount_date" value="<?= e((new DateTimeImmutable('today'))->format('Y-m-d')) ?>" class="accounting-installment-select" aria-label="Data do recebimento">
                                                     <button type="submit" class="btn btn-mini" data-accounting-discount-add-button <?= $accountingEntryReceiptRemainingCents > 0 ? '' : 'disabled' ?>>+</button>
                                                     <button type="button" class="btn btn-mini btn-ghost accounting-entry-discount-settle-button" data-accounting-discount-settle-remaining title="Receber o valor restante" <?= $accountingEntryReceiptRemainingCents > 0 ? '' : 'disabled' ?>>Restante</button>
                                                 </form>

@@ -8116,7 +8116,10 @@ window.addEventListener("DOMContentLoaded", () => {
     let pendingCents = 0;
     panel.querySelectorAll("[data-accounting-pending-discount-row]").forEach((row) => {
       if (!(row instanceof HTMLElement)) return;
-      discounts.push({ amount: String(row.dataset.discountAmount || "").trim() });
+      discounts.push({
+        amount: String(row.dataset.discountAmount || "").trim(),
+        due_date: String(row.dataset.discountDate || "").trim(),
+      });
       pendingCents += Math.max(
         0,
         Number.parseInt(String(row.dataset.discountCents || "0"), 10) || 0
@@ -8180,6 +8183,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const panel = form.closest(".accounting-entry-discounts-panel");
     const list = panel?.querySelector("[data-accounting-discounts-list]");
     const amountField = form.querySelector('input[name="discount_amount_value"]');
+    const dateField = form.querySelector('input[name="discount_date"]');
     if (
       !(panel instanceof HTMLElement) ||
       !(list instanceof HTMLElement) ||
@@ -8225,14 +8229,16 @@ window.addEventListener("DOMContentLoaded", () => {
     amountField.setCustomValidity("");
 
     const amount = String(amountField.value || "").trim();
+    const dueDate = dateField instanceof HTMLInputElement ? String(dateField.value || "").trim() : "";
     const row = document.createElement("div");
     row.className = "accounting-entry-discount-row is-pending";
     row.dataset.accountingPendingDiscountRow = "1";
     row.dataset.discountAmount = amount;
     row.dataset.discountCents = String(amountCents);
+    row.dataset.discountDate = dueDate;
 
     const amountLabel = document.createElement("span");
-    amountLabel.textContent = `${isReceipt ? "+" : "-"} ${formatAccountingCentsToInputValue(amountCents)}`;
+    amountLabel.textContent = `${isReceipt ? "+" : "-"} ${formatAccountingCentsToInputValue(amountCents)}${dueDate ? ` · ${dueDate.split("-").reverse().join("/")}` : ""}`;
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className = "accounting-entry-subitem-delete";

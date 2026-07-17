@@ -2448,6 +2448,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
                 amount_cents BIGINT NOT NULL DEFAULT 0,
+                due_date DATE DEFAULT NULL,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )'
@@ -2528,6 +2529,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 workspace_id INTEGER NOT NULL,
                 entry_id INTEGER NOT NULL,
                 amount_cents INTEGER NOT NULL DEFAULT 0,
+                due_date TEXT DEFAULT NULL,
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -3073,6 +3075,7 @@ function ensureWorkspaceAccountingDiscountSchema(PDO $pdo): void
                 workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 entry_id BIGINT NOT NULL REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
                 amount_cents BIGINT NOT NULL DEFAULT 0,
+                due_date DATE DEFAULT NULL,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )'
@@ -3084,12 +3087,31 @@ function ensureWorkspaceAccountingDiscountSchema(PDO $pdo): void
                 workspace_id INTEGER NOT NULL,
                 entry_id INTEGER NOT NULL,
                 amount_cents INTEGER NOT NULL DEFAULT 0,
+                due_date TEXT DEFAULT NULL,
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
                 FOREIGN KEY (entry_id) REFERENCES workspace_accounting_entries(id) ON DELETE CASCADE,
                 FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
             )'
+        );
+    }
+
+    if (!tableHasColumn($pdo, 'workspace_accounting_entry_discounts', 'due_date')) {
+        $dueDateType = dbDriverName($pdo) === 'pgsql' ? 'DATE' : 'TEXT';
+        $pdo->exec("ALTER TABLE workspace_accounting_entry_discounts ADD COLUMN due_date {$dueDateType} DEFAULT NULL");
+    }
+    if (dbDriverName($pdo) === 'pgsql') {
+        $pdo->exec(
+            'UPDATE workspace_accounting_entry_discounts
+             SET due_date = CAST(created_at AS DATE)
+             WHERE due_date IS NULL'
+        );
+    } else {
+        $pdo->exec(
+            "UPDATE workspace_accounting_entry_discounts
+             SET due_date = substr(created_at, 1, 10)
+             WHERE due_date IS NULL"
         );
     }
 
@@ -7107,7 +7129,7 @@ function workspaceAccountingDiscountsByEntryIds(PDO $pdo, int $workspaceId, arra
     ensureWorkspaceAccountingDiscountSchema($pdo);
     $placeholders = implode(', ', array_fill(0, count($entryIds), '?'));
     $stmt = $pdo->prepare(
-        "SELECT id, workspace_id, entry_id, amount_cents, created_by, created_at
+        "SELECT id, workspace_id, entry_id, amount_cents, due_date, created_by, created_at
          FROM workspace_accounting_entry_discounts
          WHERE workspace_id = ?
            AND entry_id IN ({$placeholders})
@@ -7129,6 +7151,7 @@ function workspaceAccountingDiscountsByEntryIds(PDO $pdo, int $workspaceId, arra
             'entry_id' => $entryId,
             'amount_cents' => $amountCents,
             'amount_display' => dueAmountLabelFromCents($amountCents),
+            'due_date' => dueDateForStorage((string) ($row['due_date'] ?? '')),
             'created_by' => isset($row['created_by']) ? (int) $row['created_by'] : null,
             'created_at' => accountingDateTimeForStorage($row['created_at'] ?? null) ?? '',
         ];
@@ -7208,7 +7231,7 @@ function workspaceAccountingDiscountTotalCents(PDO $pdo, int $workspaceId, int $
     return max(0, (int) $stmt->fetchColumn());
 }
 
-function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null): int
+function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, $amountInput, ?int $createdBy = null, ?string $dueDateInput = null): int
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
     if ($entry !== null) {
@@ -7234,26 +7257,28 @@ function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId
 
     ensureWorkspaceAccountingDiscountSchema($pdo);
     $createdAt = nowIso();
+    $dueDate = dueDateForStorage((string) $dueDateInput) ?? (new DateTimeImmutable('today'))->format('Y-m-d');
     if (dbDriverName($pdo) === 'pgsql') {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_discounts (
-                workspace_id, entry_id, amount_cents, created_by, created_at
+                workspace_id, entry_id, amount_cents, due_date, created_by, created_at
             ) VALUES (
-                :workspace_id, :entry_id, :amount_cents, :created_by, :created_at
+                :workspace_id, :entry_id, :amount_cents, :due_date, :created_by, :created_at
             ) RETURNING id'
         );
     } else {
         $stmt = $pdo->prepare(
             'INSERT INTO workspace_accounting_entry_discounts (
-                workspace_id, entry_id, amount_cents, created_by, created_at
+                workspace_id, entry_id, amount_cents, due_date, created_by, created_at
             ) VALUES (
-                :workspace_id, :entry_id, :amount_cents, :created_by, :created_at
+                :workspace_id, :entry_id, :amount_cents, :due_date, :created_by, :created_at
             )'
         );
     }
     $stmt->bindValue(':workspace_id', $workspaceId, PDO::PARAM_INT);
     $stmt->bindValue(':entry_id', $entryId, PDO::PARAM_INT);
     $stmt->bindValue(':amount_cents', $amountCents, PDO::PARAM_INT);
+    $stmt->bindValue(':due_date', $dueDate, PDO::PARAM_STR);
     if ($createdBy !== null && $createdBy > 0) {
         $stmt->bindValue(':created_by', $createdBy, PDO::PARAM_INT);
     } else {
@@ -12310,7 +12335,8 @@ function accountingWeeklyBalanceProjection(
         $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
         $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
         $subitems = is_array($entry['subitems'] ?? null) ? $entry['subitems'] : [];
-        $eventSources = $subitems ?: [$entry];
+        $discounts = is_array($entry['discounts'] ?? null) ? $entry['discounts'] : [];
+        $eventSources = $discounts ?: ($subitems ?: [$entry]);
 
         foreach ($eventSources as $eventSource) {
             $amountCents = $isMonthlyGoal && $entryType === 'expense'
@@ -12320,8 +12346,11 @@ function accountingWeeklyBalanceProjection(
                 continue;
             }
 
-            $isSettled = ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
-            $settledDate = dueDateForStorage((string) ($eventSource['settled_at'] ?? $entry['settled_at'] ?? ''));
+            $isDiscountMovement = $discounts !== [];
+            $isSettled = $isDiscountMovement || ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
+            $settledDate = $isDiscountMovement
+                ? null
+                : dueDateForStorage((string) ($eventSource['settled_at'] ?? $entry['settled_at'] ?? ''));
             $eventDate = $isSettled && $settledDate !== null
                 ? $settledDate
                 : dueDateForStorage((string) ($eventSource['due_date'] ?? $entry['due_date'] ?? ''));

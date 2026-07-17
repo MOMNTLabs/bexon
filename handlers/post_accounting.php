@@ -622,14 +622,20 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         if ($amountCents === null || $amountCents <= 0) {
                             throw new RuntimeException($discountIsIncome ? 'Informe um valor recebido válido.' : 'Informe um valor de abatimento válido.');
                         }
-                        $discountAmounts[] = $amount;
+                        $discountAmounts[] = [
+                            'amount' => $amount,
+                            'due_date' => $discount['due_date'] ?? null,
+                        ];
                     }
 
                     if (!$discountAmounts) {
                         throw new RuntimeException($discountIsIncome ? 'Nenhum recebimento foi informado.' : 'Nenhum abatimento foi informado.');
                     }
                 } else {
-                    $discountAmounts[] = $_POST['discount_amount_value'] ?? null;
+                    $discountAmounts[] = [
+                        'amount' => $_POST['discount_amount_value'] ?? null,
+                        'due_date' => $_POST['discount_date'] ?? null,
+                    ];
                 }
 
                 $startedTransaction = !$pdo->inTransaction();
@@ -638,13 +644,14 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 try {
-                    foreach ($discountAmounts as $discountAmount) {
+                    foreach ($discountAmounts as $discount) {
                         addWorkspaceAccountingDiscount(
                             $pdo,
                             $workspaceId,
                             $entryId,
-                            $discountAmount,
-                            (int) ($authUser['id'] ?? 0)
+                            $discount['amount'] ?? null,
+                            (int) ($authUser['id'] ?? 0),
+                            $discount['due_date'] ?? null
                         );
                     }
 
