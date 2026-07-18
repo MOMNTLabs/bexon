@@ -2761,11 +2761,22 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
          ON workspace_accounting_goal_payments(workspace_id, entry_id, created_at, id)'
     );
 
+    // Normalizações antigas não devem regravar toda a contabilidade a cada
+    // requisição. Além de serem desnecessárias para registros já válidos,
+    // isso torna o bootstrap progressivamente mais lento em workspaces grandes.
     $rows = $pdo->query(
         'SELECT id, period_key, entry_type, label, amount_cents, total_amount_cents, is_installment,
                 installment_number, installment_total, is_monthly, monthly_mode, paid_amount_cents,
                 is_settled, settled_at, due_date, source_due_entry_id, carry_source_entry_id, sort_order, created_at, updated_at
-         FROM workspace_accounting_entries'
+         FROM workspace_accounting_entries
+         WHERE period_key IS NULL OR period_key = \'\'
+            OR entry_type IS NULL OR entry_type NOT IN (\'expense\', \'income\')
+            OR label IS NULL OR TRIM(label) = \'\'
+            OR amount_cents IS NULL OR total_amount_cents IS NULL
+            OR is_installment IS NULL OR installment_number IS NULL OR installment_total IS NULL
+            OR is_monthly IS NULL OR monthly_mode IS NULL
+            OR paid_amount_cents IS NULL OR is_settled IS NULL OR sort_order IS NULL
+            OR created_at IS NULL OR created_at = \'\' OR updated_at IS NULL OR updated_at = \'\''
     )->fetchAll();
     if ($rows) {
         $normalizeStmt = $pdo->prepare(
@@ -2887,7 +2898,10 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
 
     $periodRows = $pdo->query(
         'SELECT id, period_key, opening_balance_cents, balance_snapshot_cents, balance_snapshot_at, updated_at
-         FROM workspace_accounting_periods'
+         FROM workspace_accounting_periods
+         WHERE period_key IS NULL OR period_key = \'\'
+            OR opening_balance_cents IS NULL
+            OR updated_at IS NULL OR updated_at = \'\''
     )->fetchAll();
     if ($periodRows) {
         $periodNormalizeStmt = $pdo->prepare(
@@ -7278,7 +7292,6 @@ function workspaceAccountingRefreshAutomaticEntrySettlements(PDO $pdo, int $work
         return;
     }
 
-    ensureWorkspaceAccountingSchema($pdo);
     ensureWorkspaceAccountingDiscountSchema($pdo);
     $today = (new DateTimeImmutable('today'))->format('Y-m-d');
     $stmt = $pdo->prepare(
