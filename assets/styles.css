@@ -17365,14 +17365,56 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 }
 
 .accounting-weekly-projection-detail-head {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     color: #496681;
     font-size: 0.72rem;
 }
 
-.accounting-weekly-projection-detail-head strong {
+.accounting-weekly-projection-balance-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 27px;
+    color: #607993;
+    font-size: 0.73rem;
+}
+
+.accounting-weekly-projection-balance-row strong {
     color: #2d4b6d;
-    font-size: 0.8rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
+}
+
+.accounting-weekly-projection-balance-row strong.is-positive {
+    color: #39795b;
+}
+
+.accounting-weekly-projection-balance-row strong.is-negative {
+    color: #a35752;
+}
+
+.accounting-weekly-projection-balance-row.is-opening {
+    margin-top: 4px;
+    padding: 2px 0 5px;
+    border-bottom: 1px solid rgba(123, 159, 196, 0.16);
+}
+
+.accounting-weekly-projection-summary {
+    display: grid;
+    margin-top: 5px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(123, 159, 196, 0.2);
+}
+
+.accounting-weekly-projection-balance-row.is-total {
+    min-height: 30px;
+    color: #355878;
+    font-weight: 700;
+}
+
+.accounting-weekly-projection-balance-row.is-total strong {
+    font-size: 0.82rem;
 }
 
 .accounting-weekly-projection-events {
@@ -17429,14 +17471,6 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
 .accounting-weekly-projection-event.is-income strong {
     color: #39795b;
-}
-
-.accounting-weekly-projection-event.is-opening-balance {
-    background: rgba(113, 143, 177, 0.045);
-}
-
-.accounting-weekly-projection-event.is-opening-balance .accounting-weekly-projection-event-label small {
-    background: rgba(113, 143, 177, 0.18);
 }
 
 .accounting-weekly-projection-empty {

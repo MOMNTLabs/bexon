@@ -12672,22 +12672,6 @@ function accountingWeeklyBalanceProjection(
         ];
     }
 
-    // The opening balance is already the starting point for the accumulated
-    // calculation. Add it only as a display event so the first week's total
-    // can be understood without counting it a second time.
-    if ($openingBalanceCents !== 0 && $weeks) {
-        $weeks[0]['events'][] = [
-            'entry_type' => $openingBalanceCents > 0 ? 'income' : 'expense',
-            'label' => 'Saldo do período anterior',
-            'amount_cents' => abs($openingBalanceCents),
-            'amount_display' => dueAmountLabelFromCents(abs($openingBalanceCents)),
-            'event_date' => $weeks[0]['start_date'],
-            'event_date_display' => accountingDateCompactLabel($weeks[0]['start_date']),
-            'is_settled' => 1,
-            'is_opening_balance' => 1,
-        ];
-    }
-
     foreach ($entries as $entry) {
         $entryType = normalizeAccountingEntryType((string) ($entry['entry_type'] ?? 'expense'));
         $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
@@ -12786,6 +12770,8 @@ function accountingWeeklyBalanceProjection(
 
             return strcmp((string) ($left['label'] ?? ''), (string) ($right['label'] ?? ''));
         });
+        $week['opening_balance_cents'] = $balanceCents;
+        $week['opening_balance_display'] = dueAmountLabelFromSignedCents($balanceCents);
         $balanceCents += (int) $week['movement_cents'];
         $week['balance_cents'] = $balanceCents;
         $week['balance_display'] = dueAmountLabelFromSignedCents($balanceCents);

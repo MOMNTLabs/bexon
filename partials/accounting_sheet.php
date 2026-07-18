@@ -2250,6 +2250,12 @@
                                         ? $accountingWeek['events']
                                         : [];
                                     $accountingWeekIsCurrent = !empty($accountingWeek['is_current']);
+                                    $accountingWeekOpeningBalanceCents = (int) ($accountingWeek['opening_balance_cents'] ?? 0);
+                                    $accountingWeekMovementCents = (int) ($accountingWeek['movement_cents'] ?? 0);
+                                    $accountingWeekBalanceCents = (int) ($accountingWeek['balance_cents'] ?? 0);
+                                    $accountingWeekOpeningLabel = $accountingWeekIndex === '1'
+                                        ? 'Saldo do período anterior'
+                                        : 'Saldo ao fim da semana anterior';
                                     ?>
                                     <div
                                         class="accounting-weekly-projection-detail"
@@ -2258,20 +2264,20 @@
                                     >
                                         <div class="accounting-weekly-projection-detail-head">
                                             <span>Semana <?= e($accountingWeekIndex) ?> · <?= e((string) ($accountingWeek['range_display'] ?? '')) ?></span>
-                                            <strong><?= $renderAccountingMoney((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?></strong>
+                                        </div>
+                                        <div class="accounting-weekly-projection-balance-row is-opening">
+                                            <span><?= e($accountingWeekOpeningLabel) ?></span>
+                                            <strong class="<?= $accountingWeekOpeningBalanceCents < 0 ? 'is-negative' : ($accountingWeekOpeningBalanceCents > 0 ? 'is-positive' : '') ?>"><?= $accountingWeekOpeningBalanceCents < 0 ? '− ' : ($accountingWeekOpeningBalanceCents > 0 ? '+ ' : '') ?><?= $renderAccountingMoney(dueAmountLabelFromCents(abs($accountingWeekOpeningBalanceCents))) ?></strong>
                                         </div>
                                         <?php if ($accountingWeekEvents): ?>
                                             <div class="accounting-weekly-projection-events">
                                                 <?php foreach ($accountingWeekEvents as $accountingWeekEvent): ?>
                                                     <?php $accountingWeekEventType = (string) ($accountingWeekEvent['entry_type'] ?? 'expense'); ?>
                                                     <?php $accountingWeekEventIsSettled = ((int) ($accountingWeekEvent['is_settled'] ?? 0)) === 1; ?>
-                                                    <?php $accountingWeekEventIsOpeningBalance = !empty($accountingWeekEvent['is_opening_balance']); ?>
-                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?><?= $accountingWeekEventIsSettled ? ' is-settled' : ' is-pending' ?><?= $accountingWeekEventIsOpeningBalance ? ' is-opening-balance' : '' ?>">
+                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?><?= $accountingWeekEventIsSettled ? ' is-settled' : ' is-pending' ?>">
                                                         <span class="accounting-weekly-projection-event-label">
                                                             <span><?= e((string) ($accountingWeekEvent['label'] ?? '')) ?></span>
-                                                            <?php if ($accountingWeekEventIsOpeningBalance): ?>
-                                                                <small>Saldo inicial</small>
-                                                            <?php elseif (!$accountingWeekEventIsSettled): ?>
+                                                            <?php if (!$accountingWeekEventIsSettled): ?>
                                                                 <small>Previsto</small>
                                                             <?php endif; ?>
                                                         </span>
@@ -2283,6 +2289,16 @@
                                         <?php else: ?>
                                             <span class="accounting-weekly-projection-empty">Nenhum lan&ccedil;amento previsto nesta semana.</span>
                                         <?php endif; ?>
+                                        <div class="accounting-weekly-projection-summary">
+                                            <div class="accounting-weekly-projection-balance-row">
+                                                <span>Movimento da semana</span>
+                                                <strong class="<?= $accountingWeekMovementCents < 0 ? 'is-negative' : ($accountingWeekMovementCents > 0 ? 'is-positive' : '') ?>"><?= $accountingWeekMovementCents < 0 ? '− ' : ($accountingWeekMovementCents > 0 ? '+ ' : '') ?><?= $renderAccountingMoney(dueAmountLabelFromCents(abs($accountingWeekMovementCents))) ?></strong>
+                                            </div>
+                                            <div class="accounting-weekly-projection-balance-row is-total">
+                                                <span>Saldo ao fim da semana</span>
+                                                <strong class="<?= $accountingWeekBalanceCents < 0 ? 'is-negative' : ($accountingWeekBalanceCents > 0 ? 'is-positive' : '') ?>"><?= $accountingWeekBalanceCents < 0 ? '− ' : ($accountingWeekBalanceCents > 0 ? '+ ' : '') ?><?= $renderAccountingMoney(dueAmountLabelFromCents(abs($accountingWeekBalanceCents))) ?></strong>
+                                            </div>
+                                        </div>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
