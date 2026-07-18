@@ -12645,17 +12645,49 @@ function accountingWeeklyBalanceProjection(
         $isMonthlyGoal = ((int) ($entry['is_monthly_goal'] ?? 0)) === 1;
         $subitems = is_array($entry['subitems'] ?? null) ? $entry['subitems'] : [];
         $discounts = is_array($entry['discounts'] ?? null) ? $entry['discounts'] : [];
-        $eventSources = $discounts ?: ($subitems ?: [$entry]);
+        $targetAmountCents = $isMonthlyGoal && $entryType === 'expense'
+            ? max(0, normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0)
+            : max(0, normalizeDueAmountCents($entry['amount_cents'] ?? null) ?? 0);
+        if ($targetAmountCents <= 0) {
+            continue;
+        }
+
+        // A projeção precisa fechar exatamente com o saldo projetado. Os
+        // subitens e abatimentos definem quando parte do valor acontece, mas
+        // o restante continua previsto para a data do item principal.
+        $entryIsSettled = ((int) ($entry['is_settled'] ?? 0)) === 1;
+        $rawSources = $discounts ?: $subitems;
+        $eventSources = [];
+        if ($entryIsSettled || !$rawSources) {
+            $eventSources[] = $entry;
+        } else {
+            $allocatedCents = 0;
+            foreach ($rawSources as $rawSource) {
+                $sourceAmountCents = max(0, normalizeDueAmountCents($rawSource['amount_cents'] ?? null) ?? 0);
+                $remainingCents = max(0, $targetAmountCents - $allocatedCents);
+                if ($sourceAmountCents <= 0 || $remainingCents <= 0) {
+                    continue;
+                }
+                $rawSource['amount_cents'] = min($sourceAmountCents, $remainingCents);
+                $rawSource['_accounting_recorded_movement'] = $discounts ? 1 : 0;
+                $eventSources[] = $rawSource;
+                $allocatedCents += (int) $rawSource['amount_cents'];
+            }
+            if ($allocatedCents < $targetAmountCents) {
+                $remainingSource = $entry;
+                $remainingSource['amount_cents'] = $targetAmountCents - $allocatedCents;
+                $remainingSource['_accounting_recorded_movement'] = 0;
+                $eventSources[] = $remainingSource;
+            }
+        }
 
         foreach ($eventSources as $eventSource) {
-            $amountCents = $isMonthlyGoal && $entryType === 'expense'
-                ? max(0, normalizeDueAmountCents($entry['paid_amount_cents'] ?? null) ?? 0)
-                : max(0, normalizeDueAmountCents($eventSource['amount_cents'] ?? $entry['amount_cents'] ?? null) ?? 0);
+            $amountCents = max(0, normalizeDueAmountCents($eventSource['amount_cents'] ?? null) ?? 0);
             if ($amountCents <= 0) {
                 continue;
             }
 
-            $isDiscountMovement = $discounts !== [];
+            $isDiscountMovement = ((int) ($eventSource['_accounting_recorded_movement'] ?? 0)) === 1;
             $isSettled = $isDiscountMovement
                 ? (dueDateForStorage((string) ($eventSource['due_date'] ?? '')) ?? '') <= $today
                 : ((int) ($eventSource['is_settled'] ?? $entry['is_settled'] ?? 0)) === 1;
