@@ -17253,6 +17253,7 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
 
 .accounting-weekly-projection-detail {
     width: min(100%, 760px);
+    margin-inline: auto;
     padding: 7px 9px;
     border: 1px solid rgba(123, 159, 196, 0.26);
     border-radius: 9px;
