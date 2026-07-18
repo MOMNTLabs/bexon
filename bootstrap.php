@@ -10695,6 +10695,22 @@ function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
         ':workspace_id' => $workspaceId,
     ]);
 
+    if ($requestedStartDate !== null && $anchorDate > $existingAnchorDate) {
+        $obsoleteOccurrencesStmt = $pdo->prepare(
+            'DELETE FROM workspace_accounting_entries
+             WHERE workspace_id = :workspace_id
+               AND weekly_recurrence_id = :weekly_recurrence_id
+               AND due_date >= :previous_anchor_date
+               AND due_date < :anchor_date'
+        );
+        $obsoleteOccurrencesStmt->execute([
+            ':workspace_id' => $workspaceId,
+            ':weekly_recurrence_id' => $recurrenceId,
+            ':previous_anchor_date' => $existingAnchorDate,
+            ':anchor_date' => $anchorDate,
+        ]);
+    }
+
     $futureStmt = $pdo->prepare(
         'UPDATE workspace_accounting_entries
          SET label = :label, amount_cents = :amount_cents, total_amount_cents = :amount_cents, updated_at = :updated_at
