@@ -20438,6 +20438,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (form.matches(".accounting-entry-delete-form")) {
       event.preventDefault();
+      const deleteImpact =
+        form.dataset.accountingDeleteImpact ||
+        "Deseja excluir este registro?";
+      if (!window.confirm(deleteImpact)) {
+        return;
+      }
+      const confirmationField = form.querySelector('input[name="delete_confirmed"]');
+      if (confirmationField instanceof HTMLInputElement) {
+        confirmationField.value = "1";
+      }
       void submitAccountingActionForm(form, {
         successMessage: "Registro removido.",
         fallbackError: "Falha ao remover registro.",

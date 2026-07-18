@@ -15181,6 +15181,37 @@ select option:checked,
     box-shadow: inset 2px 0 0 rgba(83, 119, 166, 0.58);
 }
 
+.accounting-entry-row.is-inherited-balance {
+    margin-inline: 0;
+    padding-inline: 6px;
+    border-radius: 9px;
+    background: rgba(111, 143, 186, 0.07);
+    box-shadow: inset 2px 0 0 rgba(83, 119, 166, 0.46);
+}
+
+.accounting-entry-row.is-inherited-balance.is-income {
+    background: rgba(77, 157, 119, 0.07);
+    box-shadow: inset 2px 0 0 rgba(66, 142, 105, 0.5);
+}
+
+.accounting-entry-badge.is-inherited-balance {
+    border-color: rgba(83, 119, 166, 0.34);
+    background: rgba(111, 143, 186, 0.1);
+    color: #52749a;
+}
+
+.accounting-entry-row.is-inherited-balance.is-income .accounting-entry-badge.is-inherited-balance {
+    border-color: rgba(66, 142, 105, 0.32);
+    background: rgba(77, 157, 119, 0.1);
+    color: #39795a;
+}
+
+.accounting-entry-static-note {
+    color: #75869c;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
 .accounting-entry-row.is-forecast-carry {
     opacity: 0.82;
     border-style: dashed;

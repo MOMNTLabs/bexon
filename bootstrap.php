@@ -9999,6 +9999,27 @@ function workspaceAccountingOpeningBalanceCents(?int $workspaceId = null, ?strin
     return $openingBalance;
 }
 
+/**
+ * Creates a display-only entry for the balance inherited from prior periods.
+ * The value remains the opening balance in calculations, preventing it from
+ * being counted twice while making its origin visible in the current period.
+ */
+function workspaceAccountingInheritedBalanceDisplayEntry(int $openingBalanceCents): ?array
+{
+    if ($openingBalanceCents === 0) {
+        return null;
+    }
+
+    return [
+        'id' => 0,
+        'entry_type' => $openingBalanceCents > 0 ? 'income' : 'expense',
+        'label' => 'Saldo do período anterior',
+        'amount_cents' => abs($openingBalanceCents),
+        'amount_display' => dueAmountLabelFromCents(abs($openingBalanceCents)),
+        'is_inherited_balance' => 1,
+    ];
+}
+
 function setWorkspaceAccountingOpeningBalance(
     PDO $pdo,
     int $workspaceId,

@@ -294,6 +294,10 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro inválido.');
                 }
 
+                if ((string) ($_POST['delete_confirmed'] ?? '') !== '1') {
+                    throw new RuntimeException('Confirme a exclusão do registro antes de continuar.');
+                }
+
                 $entryWorkspaceStmt = $pdo->prepare(
                     'SELECT workspace_id, entry_type, weekly_recurrence_id
                      FROM workspace_accounting_entries

@@ -624,6 +624,19 @@
                                         </details>
                                         <?php continue; ?>
                                     <?php endif; ?>
+                                    <?php if (((int) ($accountingEntry['is_inherited_balance'] ?? 0)) === 1): ?>
+                                        <div class="accounting-entry-row is-inherited-balance is-expense">
+                                            <div class="accounting-entry-summary-main">
+                                                <div class="accounting-entry-summary-head">
+                                                    <strong class="accounting-entry-title">Saldo do per&iacute;odo anterior</strong>
+                                                    <span class="accounting-entry-badge is-inherited-balance">Herdado</span>
+                                                </div>
+                                            </div>
+                                            <?= $renderAccountingMoney((string) ($accountingEntry['amount_display'] ?? 'R$ 0,00'), 'accounting-entry-amount') ?>
+                                            <span class="accounting-entry-static-note">Conta</span>
+                                        </div>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
                                     <?php
                                     $accountingEntryId = (int) ($accountingEntry['id'] ?? 0);
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
@@ -933,11 +946,19 @@
                                                 </label>
                                             </form>
                                         <?php endif; ?>
-                                        <form method="post" class="accounting-entry-delete-form">
+                                        <?php
+                                        $accountingDeleteImpactMessage = ($accountingEntryIsWeekly || $accountingEntryIsMonthlyDue)
+                                            ? 'Esta é uma recorrência. A exclusão interromperá também os próximos lançamentos. Os meses anteriores serão mantidos. Deseja continuar?'
+                                            : ($accountingEntryHasSubitems || !empty($accountingEntryDiscounts)
+                                                ? 'Este item e seus subitens, abatimentos e respectivos registros serão removidos. Deseja continuar?'
+                                                : 'Deseja excluir este item? Caso existam lançamentos futuros vinculados, eles também poderão ser removidos.');
+                                        ?>
+                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="delete_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                            <input type="hidden" name="delete_confirmed" value="0">
                                             <button type="submit" class="vault-entry-delete-button" aria-label="Excluir conta">
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>
@@ -1489,6 +1510,19 @@
                                         <?= $renderAccountingGroupedEntry($accountingEntry, $accountingPeriod, 'income') ?>
                                         <?php continue; ?>
                                     <?php endif; ?>
+                                    <?php if (((int) ($accountingEntry['is_inherited_balance'] ?? 0)) === 1): ?>
+                                        <div class="accounting-entry-row is-inherited-balance is-income">
+                                            <div class="accounting-entry-summary-main">
+                                                <div class="accounting-entry-summary-head">
+                                                    <strong class="accounting-entry-title">Saldo do per&iacute;odo anterior</strong>
+                                                    <span class="accounting-entry-badge is-inherited-balance">Herdado</span>
+                                                </div>
+                                            </div>
+                                            <?= $renderAccountingMoney((string) ($accountingEntry['amount_display'] ?? 'R$ 0,00'), 'accounting-entry-amount') ?>
+                                            <span class="accounting-entry-static-note">Entrada</span>
+                                        </div>
+                                        <?php continue; ?>
+                                    <?php endif; ?>
                                     <?php
                                     $accountingEntryId = (int) ($accountingEntry['id'] ?? 0);
                                     $accountingEntryLabel = (string) ($accountingEntry['label'] ?? '');
@@ -1639,11 +1673,19 @@
                                                 <span>Recebido</span>
                                             </label>
                                         </form>
-                                        <form method="post" class="accounting-entry-delete-form">
+                                        <?php
+                                        $accountingDeleteImpactMessage = ($accountingEntryIsWeekly || $accountingEntryIsMonthly)
+                                            ? 'Esta é uma recorrência. A exclusão interromperá também os próximos lançamentos. Os meses anteriores serão mantidos. Deseja continuar?'
+                                            : ($accountingEntryHasSubitems || !empty($accountingEntryReceipts)
+                                                ? 'Este item e seus subitens, recebimentos e respectivos registros serão removidos. Deseja continuar?'
+                                                : 'Deseja excluir este item? Caso existam lançamentos futuros vinculados, eles também poderão ser removidos.');
+                                        ?>
+                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="delete_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                            <input type="hidden" name="delete_confirmed" value="0">
                                             <button type="submit" class="vault-entry-delete-button" aria-label="Excluir entrada">
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>

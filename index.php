@@ -718,6 +718,14 @@ $accountingSummary = accountingSummary($accountingEntries, $accountingOpeningBal
     'period_key' => $accountingPeriod,
     'current_period_key' => $accountingCurrentPeriodKey,
 ]);
+$accountingInheritedBalanceEntry = workspaceAccountingInheritedBalanceDisplayEntry($accountingOpeningBalanceCents);
+if ($accountingInheritedBalanceEntry !== null) {
+    if ((string) $accountingInheritedBalanceEntry['entry_type'] === 'income') {
+        array_unshift($accountingIncomeEntries, $accountingInheritedBalanceEntry);
+    } else {
+        array_unshift($accountingExpenseEntries, $accountingInheritedBalanceEntry);
+    }
+}
 $stylesAssetVersion = is_file(__DIR__ . '/assets/styles.css')
     ? (string) filemtime(__DIR__ . '/assets/styles.css')
     : '1';

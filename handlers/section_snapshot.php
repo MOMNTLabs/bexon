@@ -205,6 +205,14 @@ function respondAccountingPanelSnapshot(): void
         'period_key' => $accountingPeriod,
         'current_period_key' => $accountingCurrentPeriodKey,
     ]);
+    $accountingInheritedBalanceEntry = workspaceAccountingInheritedBalanceDisplayEntry($accountingOpeningBalanceCents);
+    if ($accountingInheritedBalanceEntry !== null) {
+        if ((string) $accountingInheritedBalanceEntry['entry_type'] === 'income') {
+            array_unshift($accountingIncomeEntries, $accountingInheritedBalanceEntry);
+        } else {
+            array_unshift($accountingExpenseEntries, $accountingInheritedBalanceEntry);
+        }
+    }
     ob_start();
     include __DIR__ . '/../partials/accounting_sheet.php';
     $accountingSheetHtml = (string) ob_get_clean();
