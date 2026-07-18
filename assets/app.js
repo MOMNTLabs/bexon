@@ -8999,6 +8999,76 @@ window.addEventListener("DOMContentLoaded", () => {
     window.location.assign(openPath);
   });
 
+  const openAccountingEntryDeleteFlow = (form) => {
+    const allowedScopes = String(form.dataset.accountingDeleteScopes || "single")
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter(Boolean);
+    const scopeLabels = {
+      single: "Somente este lançamento",
+      future: "Este lançamento e os futuros",
+      past: "Apenas os anteriores",
+      all: "Todos os lançamentos",
+    };
+    const deleteImpact = form.dataset.accountingDeleteImpact || "Deseja excluir este registro?";
+    const confirmDeletion = (scope) => {
+      const submit = () => {
+        const confirmationField = form.querySelector('input[name="delete_confirmed"]');
+        const scopeField = form.querySelector('input[name="delete_scope"]');
+        if (confirmationField instanceof HTMLInputElement) confirmationField.value = "1";
+        if (scopeField instanceof HTMLInputElement) scopeField.value = scope;
+        return submitAccountingActionForm(form, {
+          successMessage: "Registro removido.",
+          fallbackError: "Falha ao remover registro.",
+          refresh: true,
+        });
+      };
+      if (!confirmModal || !confirmModalMessage) {
+        if (window.confirm(`${scopeLabels[scope] || "Excluir lançamento"}.\n\n${deleteImpact}`)) {
+          void submit().catch(() => {});
+        }
+        return;
+      }
+      openConfirmModal({
+        title: "Confirmar exclusão",
+        message: `${scopeLabels[scope] || "Excluir lançamento"}. ${deleteImpact}`,
+        confirmLabel: "Excluir",
+        onConfirm: submit,
+      });
+    };
+
+    if (allowedScopes.length <= 1) {
+      confirmDeletion(allowedScopes[0] || "single");
+      return;
+    }
+
+    if (!confirmModal || !confirmModalMessage || !(confirmModalSubmit instanceof HTMLButtonElement)) {
+      confirmDeletion(allowedScopes[0] || "single");
+      return;
+    }
+
+    openConfirmModal({
+      title: "Como deseja excluir?",
+      message: "Escolha o alcance da exclusão.",
+      confirmLabel: "Escolha uma opção",
+    });
+    confirmModalSubmit.hidden = true;
+    const choices = document.createElement("div");
+    choices.className = "accounting-delete-scope-options";
+    allowedScopes.forEach((scope) => {
+      const choice = document.createElement("button");
+      choice.type = "button";
+      choice.className = scope === "all" ? "btn btn-mini btn-danger" : "btn btn-mini btn-ghost";
+      choice.textContent = scopeLabels[scope] || scope;
+      choice.addEventListener("click", () => {
+        closeConfirmModal({ skipOnClose: true });
+        confirmDeletion(scope);
+      });
+      choices.appendChild(choice);
+    });
+    confirmModalMessage.after(choices);
+  };
+
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.matches("[data-task-autosave-form]")) {
@@ -16794,6 +16864,7 @@ window.addEventListener("DOMContentLoaded", () => {
       confirmModalCancel.textContent = "Cancelar";
     }
     if (confirmModalSubmit instanceof HTMLButtonElement) {
+      confirmModalSubmit.hidden = false;
       confirmModalSubmit.disabled = false;
       confirmModalSubmit.textContent = "Confirmar";
       confirmModalSubmit.classList.remove("is-loading");
@@ -16821,6 +16892,7 @@ window.addEventListener("DOMContentLoaded", () => {
       confirmModalCancel.textContent = cancelLabel;
     }
     if (confirmModalSubmit instanceof HTMLButtonElement) {
+      confirmModalSubmit.hidden = false;
       confirmModalSubmit.textContent = confirmLabel;
       confirmModalSubmit.disabled = false;
       confirmModalSubmit.classList.remove("is-loading", "btn-danger");
@@ -20438,21 +20510,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (form.matches(".accounting-entry-delete-form")) {
       event.preventDefault();
-      const deleteImpact =
-        form.dataset.accountingDeleteImpact ||
-        "Deseja excluir este registro?";
-      if (!window.confirm(deleteImpact)) {
-        return;
-      }
-      const confirmationField = form.querySelector('input[name="delete_confirmed"]');
-      if (confirmationField instanceof HTMLInputElement) {
-        confirmationField.value = "1";
-      }
-      void submitAccountingActionForm(form, {
-        successMessage: "Registro removido.",
-        fallbackError: "Falha ao remover registro.",
-        refresh: true,
-      }).catch(() => {});
+      openAccountingEntryDeleteFlow(form);
       return;
     }
 

@@ -297,6 +297,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 if ((string) ($_POST['delete_confirmed'] ?? '') !== '1') {
                     throw new RuntimeException('Confirme a exclusão do registro antes de continuar.');
                 }
+                $deleteScope = (string) ($_POST['delete_scope'] ?? 'future');
 
                 $entryWorkspaceStmt = $pdo->prepare(
                     'SELECT workspace_id, entry_type, weekly_recurrence_id
@@ -906,7 +907,7 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro não encontrado.');
                 }
 
-                deleteWorkspaceAccountingEntryWithCarrySync($pdo, $workspaceId, $entryId);
+                deleteWorkspaceAccountingEntryWithCarrySync($pdo, $workspaceId, $entryId, $deleteScope);
 
                 if (requestExpectsJson()) {
                     respondJson([

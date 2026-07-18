@@ -15212,6 +15212,17 @@ select option:checked,
     white-space: nowrap;
 }
 
+.accounting-delete-scope-options {
+    display: grid;
+    gap: 7px;
+    margin-top: 12px;
+}
+
+.accounting-delete-scope-options .btn {
+    justify-content: flex-start;
+    text-align: left;
+}
+
 .accounting-entry-row.is-forecast-carry {
     opacity: 0.82;
     border-style: dashed;
@@ -17256,6 +17267,12 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     color: #5c748d;
     font-size: 0.68rem;
     font-weight: 700;
+}
+
+.accounting-weekly-projection-label em {
+    color: #8094a9;
+    font-style: normal;
+    font-weight: 500;
 }
 
 .accounting-weekly-projection-week strong {

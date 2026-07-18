@@ -2409,6 +2409,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 carry_source_entry_id BIGINT DEFAULT NULL REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL,
                 weekly_recurrence_id BIGINT DEFAULT NULL,
                 auto_settlement_paused SMALLINT NOT NULL DEFAULT 0,
+                is_removed SMALLINT NOT NULL DEFAULT 0,
                 is_balance_adjustment SMALLINT NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -2483,6 +2484,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 carry_source_entry_id INTEGER DEFAULT NULL,
                 weekly_recurrence_id INTEGER DEFAULT NULL,
                 auto_settlement_paused INTEGER NOT NULL DEFAULT 0,
+                is_removed INTEGER NOT NULL DEFAULT 0,
                 is_balance_adjustment INTEGER NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by INTEGER DEFAULT NULL,
@@ -2664,6 +2666,10 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'auto_settlement_paused')) {
         $pausedType = dbDriverName($pdo) === 'pgsql' ? 'SMALLINT' : 'INTEGER';
         $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN auto_settlement_paused {$pausedType} NOT NULL DEFAULT 0");
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'is_removed')) {
+        $removedType = dbDriverName($pdo) === 'pgsql' ? 'SMALLINT' : 'INTEGER';
+        $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN is_removed {$removedType} NOT NULL DEFAULT 0");
     }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'is_balance_adjustment')) {
         if (dbDriverName($pdo) === 'pgsql') {
@@ -8210,9 +8216,10 @@ function workspaceAccountingEntriesListRaw(
                 ' . $sourceDueMonthlyDaySelect . ',
                 u.name AS created_by_name
          FROM workspace_accounting_entries ae' . $sourceDueJoin . $weeklyRecurrenceJoin . '
-         LEFT JOIN users u ON u.id = ae.created_by
-         WHERE ae.workspace_id = :workspace_id
-           AND ae.period_key = :period_key';
+          LEFT JOIN users u ON u.id = ae.created_by
+          WHERE ae.workspace_id = :workspace_id
+            AND ae.period_key = :period_key
+            AND COALESCE(ae.is_removed, 0) = 0';
     if ($entryType !== null) {
         $sql .= ' AND ae.entry_type = :entry_type';
     }
@@ -12323,13 +12330,66 @@ function updateWorkspaceAccountingGoalPaymentWithCarrySync(
     }
 }
 
-function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId, int $entryId): void
+function workspaceAccountingMarkEntryRemoved(PDO $pdo, int $workspaceId, int $entryId): void
+{
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_removed = 1, updated_at = :updated_at
+         WHERE workspace_id = :workspace_id AND id = :id'
+    );
+    $stmt->execute([
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':id' => $entryId,
+    ]);
+}
+
+function workspaceAccountingDeleteRecurringEntriesBefore(
+    PDO $pdo,
+    int $workspaceId,
+    string $column,
+    int $relationId,
+    string $beforeDate
+): void {
+    $stmt = $pdo->prepare(
+        "SELECT id FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id
+           AND {$column} = :relation_id
+           AND due_date < :before_date"
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':relation_id' => $relationId,
+        ':before_date' => $beforeDate,
+    ]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $relatedEntryId) {
+        workspaceAccountingDeleteEntryChain($pdo, $workspaceId, (int) $relatedEntryId, true);
+    }
+}
+
+function workspaceAccountingDeleteRecurringEntriesAll(PDO $pdo, int $workspaceId, string $column, int $relationId): void
+{
+    $stmt = $pdo->prepare(
+        "SELECT id FROM workspace_accounting_entries
+         WHERE workspace_id = :workspace_id AND {$column} = :relation_id"
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':relation_id' => $relationId,
+    ]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) ?: [] as $relatedEntryId) {
+        workspaceAccountingDeleteEntryChain($pdo, $workspaceId, (int) $relatedEntryId, true);
+    }
+}
+
+function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId, int $entryId, string $scope = 'future'): void
 {
     $existingEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
     if ($existingEntry === null) {
         throw new RuntimeException('Registro não encontrado.');
     }
 
+    $scope = in_array($scope, ['single', 'future', 'past', 'all'], true) ? $scope : 'future';
     $startedTransaction = !$pdo->inTransaction();
     if ($startedTransaction) {
         $pdo->beginTransaction();
@@ -12339,7 +12399,42 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
         $carrySourceEntryId = max(0, (int) ($existingEntry['carry_source_entry_id'] ?? 0));
         $sourceDueEntryId = max(0, (int) ($existingEntry['source_due_entry_id'] ?? 0));
         $weeklyRecurrenceId = max(0, (int) ($existingEntry['weekly_recurrence_id'] ?? 0));
-        if ($weeklyRecurrenceId > 0) {
+        if ($scope === 'single') {
+            // A ocorrência permanece como exceção no banco para que a rotina
+            // de recorrência não a recrie no próximo carregamento.
+            workspaceAccountingMarkEntryRemoved($pdo, $workspaceId, $entryId);
+        } elseif ($scope === 'past' && $weeklyRecurrenceId > 0 && $dueDate !== null) {
+            $pdo->prepare(
+                'UPDATE workspace_accounting_weekly_recurrences
+                 SET anchor_date = :anchor_date, updated_at = :updated_at
+                 WHERE id = :id AND workspace_id = :workspace_id'
+            )->execute([
+                ':anchor_date' => $dueDate,
+                ':updated_at' => nowIso(),
+                ':id' => $weeklyRecurrenceId,
+                ':workspace_id' => $workspaceId,
+            ]);
+            workspaceAccountingDeleteRecurringEntriesBefore($pdo, $workspaceId, 'weekly_recurrence_id', $weeklyRecurrenceId, $dueDate);
+        } elseif ($scope === 'all' && $weeklyRecurrenceId > 0) {
+            workspaceAccountingDeleteRecurringEntriesAll($pdo, $workspaceId, 'weekly_recurrence_id', $weeklyRecurrenceId);
+            $pdo->prepare('DELETE FROM workspace_accounting_weekly_recurrences WHERE id = :id AND workspace_id = :workspace_id')
+                ->execute([':id' => $weeklyRecurrenceId, ':workspace_id' => $workspaceId]);
+        } elseif ($scope === 'past' && $sourceDueEntryId > 0 && $dueDate !== null && workspaceAccountingSupportsDueLinking($pdo)) {
+            $pdo->prepare(
+                'UPDATE workspace_due_entries
+                 SET due_date = :due_date, updated_at = :updated_at
+                 WHERE id = :id AND workspace_id = :workspace_id'
+            )->execute([
+                ':due_date' => $dueDate,
+                ':updated_at' => nowIso(),
+                ':id' => $sourceDueEntryId,
+                ':workspace_id' => $workspaceId,
+            ]);
+            workspaceAccountingDeleteRecurringEntriesBefore($pdo, $workspaceId, 'source_due_entry_id', $sourceDueEntryId, $dueDate);
+        } elseif ($scope === 'all' && $sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
+            workspaceAccountingDeleteRecurringEntriesAll($pdo, $workspaceId, 'source_due_entry_id', $sourceDueEntryId);
+            deleteWorkspaceDueEntry($pdo, $workspaceId, $sourceDueEntryId);
+        } elseif ($weeklyRecurrenceId > 0) {
             stopWorkspaceAccountingWeeklyRecurrenceFromEntry($pdo, $workspaceId, $existingEntry);
         } elseif ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
             $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));

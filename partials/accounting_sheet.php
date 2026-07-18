@@ -947,18 +947,22 @@
                                             </form>
                                         <?php endif; ?>
                                         <?php
+                                        $accountingDeleteScopes = ($accountingEntryIsWeekly || $accountingEntryIsMonthlyDue)
+                                            ? 'single,future,past,all'
+                                            : ($accountingEntryIsCarried ? 'single,future,all' : 'single');
                                         $accountingDeleteImpactMessage = ($accountingEntryIsWeekly || $accountingEntryIsMonthlyDue)
                                             ? 'Esta é uma recorrência. A exclusão interromperá também os próximos lançamentos. Os meses anteriores serão mantidos. Deseja continuar?'
                                             : ($accountingEntryHasSubitems || !empty($accountingEntryDiscounts)
                                                 ? 'Este item e seus subitens, abatimentos e respectivos registros serão removidos. Deseja continuar?'
                                                 : 'Deseja excluir este item? Caso existam lançamentos futuros vinculados, eles também poderão ser removidos.');
                                         ?>
-                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>">
+                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>" data-accounting-delete-scopes="<?= e($accountingDeleteScopes) ?>">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="delete_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                             <input type="hidden" name="delete_confirmed" value="0">
+                                            <input type="hidden" name="delete_scope" value="single">
                                             <button type="submit" class="vault-entry-delete-button" aria-label="Excluir conta">
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>
@@ -1674,18 +1678,22 @@
                                             </label>
                                         </form>
                                         <?php
+                                        $accountingDeleteScopes = ($accountingEntryIsWeekly || $accountingEntryIsMonthly)
+                                            ? 'single,future,past,all'
+                                            : 'single';
                                         $accountingDeleteImpactMessage = ($accountingEntryIsWeekly || $accountingEntryIsMonthly)
                                             ? 'Esta é uma recorrência. A exclusão interromperá também os próximos lançamentos. Os meses anteriores serão mantidos. Deseja continuar?'
                                             : ($accountingEntryHasSubitems || !empty($accountingEntryReceipts)
                                                 ? 'Este item e seus subitens, recebimentos e respectivos registros serão removidos. Deseja continuar?'
                                                 : 'Deseja excluir este item? Caso existam lançamentos futuros vinculados, eles também poderão ser removidos.');
                                         ?>
-                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>">
+                                        <form method="post" class="accounting-entry-delete-form" data-accounting-delete-impact="<?= e($accountingDeleteImpactMessage) ?>" data-accounting-delete-scopes="<?= e($accountingDeleteScopes) ?>">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                             <input type="hidden" name="action" value="delete_accounting_entry">
                                             <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
                                             <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
                                             <input type="hidden" name="delete_confirmed" value="0">
+                                            <input type="hidden" name="delete_scope" value="single">
                                             <button type="submit" class="vault-entry-delete-button" aria-label="Excluir entrada">
                                                 <span aria-hidden="true">&#10005;</span>
                                             </button>
@@ -2195,7 +2203,7 @@
                         <div class="accounting-weekly-projection" aria-label="Saldo projetado por semana">
                             <div class="accounting-weekly-projection-head">
                                 <span>Proje&ccedil;&atilde;o semanal</span>
-                                <span>Saldo ao fim de cada semana</span>
+                                <span>Saldo acumulado ao fim de cada semana</span>
                             </div>
                             <div class="accounting-weekly-projection-track" style="grid-template-columns: repeat(<?= e((string) count($accountingWeeklyProjectionWeeks)) ?>, minmax(0, 1fr));">
                                 <?php foreach ($accountingWeeklyProjectionWeeks as $accountingWeek): ?>
@@ -2215,7 +2223,7 @@
                                         title="Semana <?= e((string) ($accountingWeek['index'] ?? '')) ?> (<?= e((string) ($accountingWeek['range_display'] ?? '')) ?>): <?= e((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?>"
                                     >
                                         <span class="accounting-weekly-projection-fill"></span>
-                                        <span class="accounting-weekly-projection-label">Sem. <?= e((string) ($accountingWeek['index'] ?? '')) ?></span>
+                                        <span class="accounting-weekly-projection-label">Sem. <?= e((string) ($accountingWeek['index'] ?? '')) ?> <em>· saldo total</em></span>
                                         <strong><?= $renderAccountingMoney((string) ($accountingWeek['balance_display'] ?? 'R$ 0,00')) ?></strong>
                                         <small><?= e((string) ($accountingWeek['range_display'] ?? '')) ?></small>
                                     </button>
