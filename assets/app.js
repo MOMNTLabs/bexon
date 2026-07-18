@@ -6845,6 +6845,16 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  document.addEventListener("click", (event) => {
+    const target = getEventTargetElement(event);
+    const activeMenu = target?.closest?.(".workspace-sidebar-tool-actions-menu");
+    document.querySelectorAll(".workspace-sidebar-tool-actions-menu[open]").forEach((menu) => {
+      if (menu !== activeMenu && menu instanceof HTMLDetailsElement) {
+        menu.open = false;
+      }
+    });
+  });
+
   const workspaceUsersActionNames = new Set([
     "workspace_update_profile",
     "workspace_update_name",
@@ -19981,6 +19991,7 @@ window.addEventListener("DOMContentLoaded", () => {
       workspace_promote_member: "Permissão de administrador concedida.",
       workspace_demote_member: "Permissão alterada para usuário.",
       workspace_remove_member: "Usuário removido do workspace.",
+      workspace_update_sidebar_tools: "Ferramentas atualizadas.",
     };
 
     const fallbackErrorByAction = {
