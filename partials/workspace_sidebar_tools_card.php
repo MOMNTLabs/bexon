@@ -57,14 +57,7 @@ $availableToAddTools = is_array($workspaceSidebarConfig['available_to_add'] ?? n
                         <span class="workspace-sidebar-tool-drag-handle" aria-hidden="true" title="Arraste para reorganizar">⠿</span>
                         <span class="workspace-sidebar-tool-item-label"><?= e($toolLabel) ?></span>
                         <div class="workspace-sidebar-tool-item-actions">
-                            <details class="workspace-sidebar-tool-actions-menu">
-                                <summary aria-label="Ações da ferramenta" title="Ações"><span aria-hidden="true">&hellip;</span></summary>
-                                <div class="workspace-sidebar-tool-actions-popover">
-                                    <button type="button" class="workspace-sidebar-tool-action" data-sidebar-tools-move="up">↑ Mover para cima</button>
-                                    <button type="button" class="workspace-sidebar-tool-action" data-sidebar-tools-move="down">↓ Mover para baixo</button>
-                                    <button type="button" class="workspace-sidebar-tool-action is-remove" data-sidebar-tools-remove>Remover</button>
-                                </div>
-                            </details>
+                            <button type="button" class="workspace-sidebar-tool-remove-button" data-sidebar-tools-remove aria-label="Remover ferramenta" title="Remover ferramenta">&times;</button>
                         </div>
                     </li>
                 <?php endforeach; ?>
@@ -80,14 +73,7 @@ $availableToAddTools = is_array($workspaceSidebarConfig['available_to_add'] ?? n
                     <span class="workspace-sidebar-tool-drag-handle" aria-hidden="true" title="Arraste para reorganizar">⠿</span>
                     <span class="workspace-sidebar-tool-item-label"></span>
                     <div class="workspace-sidebar-tool-item-actions">
-                        <details class="workspace-sidebar-tool-actions-menu">
-                            <summary aria-label="Ações da ferramenta" title="Ações"><span aria-hidden="true">&hellip;</span></summary>
-                            <div class="workspace-sidebar-tool-actions-popover">
-                                <button type="button" class="workspace-sidebar-tool-action" data-sidebar-tools-move="up">↑ Mover para cima</button>
-                                <button type="button" class="workspace-sidebar-tool-action" data-sidebar-tools-move="down">↓ Mover para baixo</button>
-                                <button type="button" class="workspace-sidebar-tool-action is-remove" data-sidebar-tools-remove>Remover</button>
-                            </div>
-                        </details>
+                        <button type="button" class="workspace-sidebar-tool-remove-button" data-sidebar-tools-remove aria-label="Remover ferramenta" title="Remover ferramenta">&times;</button>
                     </div>
                 </li>
             </template>

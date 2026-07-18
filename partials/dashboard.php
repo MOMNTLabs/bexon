@@ -2208,7 +2208,6 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
             <input type="hidden" name="action" value="update_vault_entry">
             <input type="hidden" name="entry_id" value="" data-vault-entry-edit-id>
-            <input type="hidden" name="password_unavailable" value="0" data-vault-entry-edit-password-unavailable>
 
             <label>
                 <span>Grupo</span>
@@ -2236,6 +2235,11 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             <label>
                 <span>Senha</span>
                 <input type="text" name="password_value" maxlength="220" data-vault-entry-edit-password>
+            </label>
+            <p class="vault-entry-edit-password-help">Deixe em branco para manter a senha atual.</p>
+            <label class="vault-entry-edit-remove-password">
+                <input type="checkbox" name="remove_password" value="1" data-vault-entry-edit-remove-password>
+                <span>Remover senha salva</span>
             </label>
 
             <div class="modal-actions">

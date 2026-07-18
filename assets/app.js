@@ -1325,6 +1325,19 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const vaultRemovePasswordField = target.closest("[data-vault-entry-edit-remove-password]");
+    if (vaultRemovePasswordField instanceof HTMLInputElement) {
+      const editForm = vaultRemovePasswordField.closest("[data-vault-entry-edit-form]");
+      const passwordField = editForm?.querySelector("[data-vault-entry-edit-password]");
+      if (passwordField instanceof HTMLInputElement) {
+        passwordField.disabled = vaultRemovePasswordField.checked;
+        if (vaultRemovePasswordField.checked) {
+          passwordField.value = "";
+        }
+      }
+      return;
+    }
+
     const inventoryInlineQuantityInput = target.closest("[data-inventory-inline-quantity-input]");
     if (inventoryInlineQuantityInput instanceof HTMLInputElement) {
       const quantityForm = inventoryInlineQuantityInput.closest(
@@ -6685,16 +6698,6 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     const activeRows = workspaceSidebarToolRows(form);
-    activeRows.forEach((row, index) => {
-      const moveUp = row.querySelector('[data-sidebar-tools-move="up"]');
-      const moveDown = row.querySelector('[data-sidebar-tools-move="down"]');
-      if (moveUp instanceof HTMLButtonElement) {
-        moveUp.disabled = index <= 0;
-      }
-      if (moveDown instanceof HTMLButtonElement) {
-        moveDown.disabled = index >= activeRows.length - 1;
-      }
-    });
 
     const emptyState = form.querySelector("[data-sidebar-tools-empty]");
     if (emptyState instanceof HTMLElement) {
@@ -6843,16 +6846,6 @@ window.addEventListener("DOMContentLoaded", () => {
     if (form instanceof HTMLFormElement) {
       clearWorkspaceSidebarToolDragState(form);
     }
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = getEventTargetElement(event);
-    const activeMenu = target?.closest?.(".workspace-sidebar-tool-actions-menu");
-    document.querySelectorAll(".workspace-sidebar-tool-actions-menu[open]").forEach((menu) => {
-      if (menu !== activeMenu && menu instanceof HTMLDetailsElement) {
-        menu.open = false;
-      }
-    });
   });
 
   const workspaceUsersActionNames = new Set([
@@ -10576,8 +10569,8 @@ window.addEventListener("DOMContentLoaded", () => {
   const vaultEntryEditLabelField = document.querySelector("[data-vault-entry-edit-label]");
   const vaultEntryEditLoginField = document.querySelector("[data-vault-entry-edit-login]");
   const vaultEntryEditPasswordField = document.querySelector("[data-vault-entry-edit-password]");
-  const vaultEntryEditPasswordUnavailableField = document.querySelector(
-    "[data-vault-entry-edit-password-unavailable]"
+  const vaultEntryEditRemovePasswordField = document.querySelector(
+    "[data-vault-entry-edit-remove-password]"
   );
   const dueGroupModal = document.querySelector("[data-due-group-modal]");
   const dueGroupForm = document.querySelector("[data-due-group-form]");
@@ -17816,13 +17809,17 @@ window.addEventListener("DOMContentLoaded", () => {
       vaultEntryEditLoginField.value = login;
     }
     if (vaultEntryEditPasswordField instanceof HTMLInputElement) {
-      vaultEntryEditPasswordField.value = password;
+      vaultEntryEditPasswordField.value = "";
+      vaultEntryEditPasswordField.disabled = false;
       vaultEntryEditPasswordField.placeholder = passwordUnavailable
         ? "Informe uma nova senha para substituir"
-        : "";
+        : password !== ""
+          ? "Deixe em branco para manter a senha atual"
+          : "Nenhuma senha salva";
     }
-    if (vaultEntryEditPasswordUnavailableField instanceof HTMLInputElement) {
-      vaultEntryEditPasswordUnavailableField.value = passwordUnavailable ? "1" : "0";
+    if (vaultEntryEditRemovePasswordField instanceof HTMLInputElement) {
+      vaultEntryEditRemovePasswordField.checked = false;
+      vaultEntryEditRemovePasswordField.disabled = false;
     }
     if (vaultEntryEditGroupField instanceof HTMLSelectElement) {
       setVaultGroupSelectValue(vaultEntryEditGroupField, groupName);
@@ -18423,24 +18420,6 @@ window.addEventListener("DOMContentLoaded", () => {
       if (form.dataset.sidebarToolsAutosaveAdd === "1") {
         persistWorkspaceSidebarToolsForm(form);
       }
-      return;
-    }
-
-    const sidebarToolsMoveButton = target.closest("[data-sidebar-tools-move]");
-    if (sidebarToolsMoveButton instanceof HTMLButtonElement) {
-      const row = sidebarToolsMoveButton.closest("[data-sidebar-tool-key]");
-      const form = sidebarToolsMoveButton.closest("[data-sidebar-tools-form]");
-      const direction = String(sidebarToolsMoveButton.dataset.sidebarToolsMove || "").trim();
-      if (!(row instanceof HTMLElement) || !(form instanceof HTMLFormElement)) return;
-
-      if (direction === "up" && row.previousElementSibling instanceof HTMLElement) {
-        row.parentElement?.insertBefore(row, row.previousElementSibling);
-      } else if (direction === "down" && row.nextElementSibling instanceof HTMLElement) {
-        row.parentElement?.insertBefore(row.nextElementSibling, row);
-      }
-
-      syncWorkspaceSidebarToolsFormState(form);
-      persistWorkspaceSidebarToolsForm(form);
       return;
     }
 

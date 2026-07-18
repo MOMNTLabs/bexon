@@ -315,15 +315,19 @@ function handleVaultPostAction(PDO $pdo, string $action): bool
                 if (!userCanAccessVaultGroup((int) $authUser['id'], $workspaceId, $groupName)) {
                     throw new RuntimeException('Você não possui acesso ao grupo de destino.');
                 }
+                $passwordValue = (string) ($_POST['password_value'] ?? '');
+                $removePassword = ((string) ($_POST['remove_password'] ?? '0')) === '1';
+                $preserveStoredPassword = !$removePassword
+                    && normalizeVaultFieldValue($passwordValue, 220) === '';
                 updateWorkspaceVaultEntry(
                     $pdo,
                     $workspaceId,
                     $entryId,
                     (string) ($_POST['label'] ?? ''),
                     (string) ($_POST['login_value'] ?? ''),
-                    (string) ($_POST['password_value'] ?? ''),
+                    $removePassword ? '' : $passwordValue,
                     $groupName,
-                    ((string) ($_POST['password_unavailable'] ?? '0')) === '1'
+                    $preserveStoredPassword
                 );
 
                 if (requestExpectsJson()) {

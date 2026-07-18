@@ -2265,10 +2265,13 @@
                                                 <?php foreach ($accountingWeekEvents as $accountingWeekEvent): ?>
                                                     <?php $accountingWeekEventType = (string) ($accountingWeekEvent['entry_type'] ?? 'expense'); ?>
                                                     <?php $accountingWeekEventIsSettled = ((int) ($accountingWeekEvent['is_settled'] ?? 0)) === 1; ?>
-                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?><?= $accountingWeekEventIsSettled ? ' is-settled' : ' is-pending' ?>">
+                                                    <?php $accountingWeekEventIsOpeningBalance = !empty($accountingWeekEvent['is_opening_balance']); ?>
+                                                    <div class="accounting-weekly-projection-event is-<?= e($accountingWeekEventType) ?><?= $accountingWeekEventIsSettled ? ' is-settled' : ' is-pending' ?><?= $accountingWeekEventIsOpeningBalance ? ' is-opening-balance' : '' ?>">
                                                         <span class="accounting-weekly-projection-event-label">
                                                             <span><?= e((string) ($accountingWeekEvent['label'] ?? '')) ?></span>
-                                                            <?php if (!$accountingWeekEventIsSettled): ?>
+                                                            <?php if ($accountingWeekEventIsOpeningBalance): ?>
+                                                                <small>Saldo inicial</small>
+                                                            <?php elseif (!$accountingWeekEventIsSettled): ?>
                                                                 <small>Previsto</small>
                                                             <?php endif; ?>
                                                         </span>
