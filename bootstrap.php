@@ -10536,6 +10536,18 @@ function workspaceAccountingEnsureWeeklyEntriesForPeriod(PDO $pdo, int $workspac
             continue;
         }
 
+        $obsoleteOccurrencesStmt = $pdo->prepare(
+            'DELETE FROM workspace_accounting_entries
+             WHERE workspace_id = :workspace_id
+               AND weekly_recurrence_id = :weekly_recurrence_id
+               AND due_date < :anchor_date'
+        );
+        $obsoleteOccurrencesStmt->execute([
+            ':workspace_id' => $workspaceId,
+            ':weekly_recurrence_id' => (int) ($recurrence['id'] ?? 0),
+            ':anchor_date' => $anchorDate,
+        ]);
+
         $cursor = new DateTimeImmutable(max($startDate, $anchorDate));
         $weekday = normalizeAccountingWeeklyDay($recurrence['weekday'] ?? null);
         $offset = ($weekday - (int) $cursor->format('N') + 7) % 7;
@@ -10695,18 +10707,16 @@ function updateWorkspaceAccountingWeeklyRecurrenceFromEntry(
         ':workspace_id' => $workspaceId,
     ]);
 
-    if ($requestedStartDate !== null && $anchorDate > $existingAnchorDate) {
+    if ($requestedStartDate !== null) {
         $obsoleteOccurrencesStmt = $pdo->prepare(
             'DELETE FROM workspace_accounting_entries
              WHERE workspace_id = :workspace_id
                AND weekly_recurrence_id = :weekly_recurrence_id
-               AND due_date >= :previous_anchor_date
                AND due_date < :anchor_date'
         );
         $obsoleteOccurrencesStmt->execute([
             ':workspace_id' => $workspaceId,
             ':weekly_recurrence_id' => $recurrenceId,
-            ':previous_anchor_date' => $existingAnchorDate,
             ':anchor_date' => $anchorDate,
         ]);
     }
