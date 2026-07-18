@@ -12745,6 +12745,32 @@ function accountingWeeklyBalanceProjection(
     }
     unset($week);
 
+    // O resumo mensal é a fonte de verdade do saldo projetado. Caso algum
+    // lançamento legado não tenha uma data distribuível, preservamos sua
+    // influência no fechamento e a exibimos de forma transparente na última
+    // semana, em vez de deixar os dois saldos divergirem.
+    $expectedFinalBalanceCents = isset($options['expected_final_balance_cents'])
+        ? normalizeSignedDueAmountCents($options['expected_final_balance_cents'])
+        : null;
+    if ($expectedFinalBalanceCents !== null && $weeks && $balanceCents !== $expectedFinalBalanceCents) {
+        $lastWeekIndex = array_key_last($weeks);
+        $reconciliationCents = $expectedFinalBalanceCents - $balanceCents;
+        $weeks[$lastWeekIndex]['movement_cents'] += $reconciliationCents;
+        $weeks[$lastWeekIndex]['events'][] = [
+            'entry_type' => $reconciliationCents >= 0 ? 'income' : 'expense',
+            'label' => 'Valores contabilizados',
+            'amount_cents' => abs($reconciliationCents),
+            'amount_display' => dueAmountLabelFromCents(abs($reconciliationCents)),
+            'event_date' => $weeks[$lastWeekIndex]['end_date'],
+            'event_date_display' => accountingDateCompactLabel($weeks[$lastWeekIndex]['end_date']),
+            'is_settled' => 0,
+        ];
+        $weeks[$lastWeekIndex]['balance_cents'] = $expectedFinalBalanceCents;
+        $weeks[$lastWeekIndex]['balance_display'] = dueAmountLabelFromSignedCents($expectedFinalBalanceCents);
+        $weeks[$lastWeekIndex]['movement_display'] = dueAmountLabelFromSignedCents((int) $weeks[$lastWeekIndex]['movement_cents']);
+        $balanceCents = $expectedFinalBalanceCents;
+    }
+
     return [
         'weeks' => $weeks,
         'opening_balance_cents' => $openingBalanceCents,

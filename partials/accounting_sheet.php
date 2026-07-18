@@ -1588,6 +1588,7 @@
                                     $accountingEntrySupportsReceipts = ((int) ($accountingEntry['supports_discounts'] ?? 0)) === 1;
                                     $accountingEntryTotalCents = max(0, (int) ($accountingEntry['amount_cents'] ?? 0));
                                     $accountingEntryReceivedCents = max(0, (int) ($accountingEntry['discount_total_cents'] ?? 0));
+                                    $accountingEntryScheduledReceiptCents = max(0, (int) ($accountingEntry['discount_scheduled_total_cents'] ?? 0));
                                     $accountingEntryShowReceiptProgress = $accountingEntryReceivedCents > 0;
                                     $accountingEntryReceivedDisplay = (string) ($accountingEntry['discount_total_display'] ?? 'R$ 0,00');
                                     $accountingEntryReceivedCompact = dueAmountCompactLabelFromCents($accountingEntryReceivedCents, true);
@@ -1600,6 +1601,12 @@
                                         && $accountingEntryReceivedCents >= $accountingEntryTotalCents;
                                     $accountingEntryReceiptRemainingCents = max(0, (int) ($accountingEntry['discount_remaining_cents'] ?? 0));
                                     $accountingEntryReceiptRemainingDisplay = (string) ($accountingEntry['discount_remaining_display'] ?? $accountingEntryAmountInput);
+                                    $accountingEntryActualReceiptRemainingCents = $accountingEntryIsSettled
+                                        ? 0
+                                        : max(0, $accountingEntryTotalCents - $accountingEntryReceivedCents);
+                                    $accountingEntryActualReceiptRemainingDisplay = dueAmountLabelFromCents($accountingEntryActualReceiptRemainingCents);
+                                    $accountingEntryFutureScheduledReceiptCents = max(0, $accountingEntryScheduledReceiptCents - $accountingEntryReceivedCents);
+                                    $accountingEntryFutureScheduledReceiptDisplay = dueAmountLabelFromCents($accountingEntryFutureScheduledReceiptCents);
                                     $accountingEntryShowReceiptSummaryProgress = $accountingEntryShowReceiptProgress
                                         && !$accountingEntryIsSettled;
                                     ?>
@@ -1894,7 +1901,12 @@
                                             >
                                                 <div class="accounting-entry-discounts-head">
                                                     <strong>Recebimentos</strong>
-                                                    <span>Falta <?= $renderAccountingMoney($accountingEntryReceiptRemainingDisplay) ?></span>
+                                                    <span>
+                                                        A receber <?= $renderAccountingMoney($accountingEntryActualReceiptRemainingDisplay) ?>
+                                                        <?php if ($accountingEntryFutureScheduledReceiptCents > 0): ?>
+                                                            <small><?= $renderAccountingMoney($accountingEntryFutureScheduledReceiptDisplay) ?> previsto</small>
+                                                        <?php endif; ?>
+                                                    </span>
                                                 </div>
                                                 <div class="accounting-entry-discounts-list" data-accounting-discounts-list>
                                                     <?php foreach ($accountingEntryReceipts as $accountingReceipt): ?>
@@ -2158,6 +2170,7 @@
                         [
                             'period_key' => $accountingPeriod,
                             'cycle_close_day' => (int) ($accountingCycleCloseDay ?? 0),
+                            'expected_final_balance_cents' => $accountingFinalBalanceCents,
                         ]
                     );
                     $accountingWeeklyProjectionWeeks = is_array($accountingWeeklyProjection['weeks'] ?? null)
