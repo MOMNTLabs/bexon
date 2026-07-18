@@ -2251,7 +2251,6 @@
                                         : [];
                                     $accountingWeekIsCurrent = !empty($accountingWeek['is_current']);
                                     $accountingWeekOpeningBalanceCents = (int) ($accountingWeek['opening_balance_cents'] ?? 0);
-                                    $accountingWeekMovementCents = (int) ($accountingWeek['movement_cents'] ?? 0);
                                     $accountingWeekBalanceCents = (int) ($accountingWeek['balance_cents'] ?? 0);
                                     $accountingWeekOpeningLabel = $accountingWeekIndex === '1'
                                         ? 'Saldo do período anterior'
@@ -2290,10 +2289,6 @@
                                             <span class="accounting-weekly-projection-empty">Nenhum lan&ccedil;amento previsto nesta semana.</span>
                                         <?php endif; ?>
                                         <div class="accounting-weekly-projection-summary">
-                                            <div class="accounting-weekly-projection-balance-row">
-                                                <span>Movimento da semana</span>
-                                                <strong class="<?= $accountingWeekMovementCents < 0 ? 'is-negative' : ($accountingWeekMovementCents > 0 ? 'is-positive' : '') ?>"><?= $accountingWeekMovementCents < 0 ? '− ' : ($accountingWeekMovementCents > 0 ? '+ ' : '') ?><?= $renderAccountingMoney(dueAmountLabelFromCents(abs($accountingWeekMovementCents))) ?></strong>
-                                            </div>
                                             <div class="accounting-weekly-projection-balance-row is-total">
                                                 <span>Saldo ao fim da semana</span>
                                                 <strong class="<?= $accountingWeekBalanceCents < 0 ? 'is-negative' : ($accountingWeekBalanceCents > 0 ? 'is-positive' : '') ?>"><?= $accountingWeekBalanceCents < 0 ? '− ' : ($accountingWeekBalanceCents > 0 ? '+ ' : '') ?><?= $renderAccountingMoney(dueAmountLabelFromCents(abs($accountingWeekBalanceCents))) ?></strong>
