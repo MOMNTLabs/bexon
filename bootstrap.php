@@ -2776,7 +2776,8 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
             OR is_installment IS NULL OR installment_number IS NULL OR installment_total IS NULL
             OR is_monthly IS NULL OR monthly_mode IS NULL
             OR paid_amount_cents IS NULL OR is_settled IS NULL OR sort_order IS NULL
-            OR created_at IS NULL OR created_at = \'\' OR updated_at IS NULL OR updated_at = \'\''
+             OR COALESCE(CAST(created_at AS TEXT), \'\') = \'\'
+             OR COALESCE(CAST(updated_at AS TEXT), \'\') = \'\''
     )->fetchAll();
     if ($rows) {
         $normalizeStmt = $pdo->prepare(
@@ -2901,7 +2902,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
          FROM workspace_accounting_periods
          WHERE period_key IS NULL OR period_key = \'\'
             OR opening_balance_cents IS NULL
-            OR updated_at IS NULL OR updated_at = \'\''
+             OR COALESCE(CAST(updated_at AS TEXT), \'\') = \'\''
     )->fetchAll();
     if ($periodRows) {
         $periodNormalizeStmt = $pdo->prepare(
