@@ -7400,6 +7400,60 @@ function addWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId
     return $discountId;
 }
 
+function updateWorkspaceAccountingDiscountDate(PDO $pdo, int $workspaceId, int $entryId, int $discountId, ?string $dueDateInput): void
+{
+    $dueDate = dueDateForStorage((string) $dueDateInput);
+    if ($workspaceId <= 0 || $entryId <= 0 || $discountId <= 0 || $dueDate === null) {
+        throw new RuntimeException('Informe uma data válida.');
+    }
+
+    ensureWorkspaceAccountingDiscountSchema($pdo);
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entry_discounts
+         SET due_date = :due_date
+         WHERE workspace_id = :workspace_id
+           AND entry_id = :entry_id
+           AND id = :discount_id'
+    );
+    $stmt->execute([
+        ':due_date' => $dueDate,
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+        ':discount_id' => $discountId,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        throw new RuntimeException('Lançamento não encontrado.');
+    }
+
+    $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
+    if ($entry === null) {
+        throw new RuntimeException('Registro não encontrado.');
+    }
+    if (((int) ($entry['has_subitems'] ?? 0)) === 1) {
+        workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
+        return;
+    }
+
+    $amountCents = max(0, (int) ($entry['amount_cents'] ?? 0));
+    $isSettled = $amountCents > 0
+        && workspaceAccountingRealizedDiscountTotalCents($pdo, $workspaceId, $entryId) >= $amountCents;
+    $settleStmt = $pdo->prepare(
+        'UPDATE workspace_accounting_entries
+         SET is_settled = :is_settled,
+             settled_at = :settled_at,
+             updated_at = :updated_at
+         WHERE workspace_id = :workspace_id
+           AND id = :entry_id'
+    );
+    $settleStmt->execute([
+        ':is_settled' => $isSettled ? 1 : 0,
+        ':settled_at' => $isSettled ? nowIso() : null,
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':entry_id' => $entryId,
+    ]);
+}
+
 function deleteWorkspaceAccountingDiscount(PDO $pdo, int $workspaceId, int $entryId, int $discountId): void
 {
     $entry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);

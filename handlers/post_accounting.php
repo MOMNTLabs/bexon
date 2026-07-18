@@ -675,6 +675,34 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 flash('success', $discountIsIncome ? 'Recebimentos atualizados.' : 'Abatimentos atualizados.');
                 redirectTo(accountingRedirectPathFromRequest());
 
+            case 'update_accounting_discount_date':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo não encontrado.');
+                }
+
+                $entryId = (int) ($_POST['entry_id'] ?? 0);
+                $discountId = (int) ($_POST['discount_id'] ?? 0);
+                if ($entryId <= 0 || $discountId <= 0) {
+                    throw new RuntimeException('Lançamento inválido.');
+                }
+
+                updateWorkspaceAccountingDiscountDate(
+                    $pdo,
+                    $workspaceId,
+                    $entryId,
+                    $discountId,
+                    $_POST['discount_date'] ?? null
+                );
+
+                if (requestExpectsJson()) {
+                    respondJson(['ok' => true, 'message' => 'Data atualizada.']);
+                }
+
+                flash('success', 'Data atualizada.');
+                redirectTo(accountingRedirectPathFromRequest());
+
             case 'delete_accounting_discount':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);

@@ -16590,6 +16590,30 @@ body.is-dashboard[data-dashboard-view="accounting"] .accounting-task-link-picker
     margin: 0;
 }
 
+.accounting-entry-discount-date-form {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.accounting-entry-discount-date-form .accounting-installment-select {
+    width: 122px;
+    min-height: 26px;
+    padding: 3px 6px;
+    font-size: 0.7rem;
+}
+
+.accounting-entry-discount-date-save {
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(198, 138, 35, 0.38);
+    border-radius: 7px;
+    color: #a96910;
+    background: #fff;
+    cursor: pointer;
+}
+
 .accounting-entry-discount-add-form {
     display: flex;
     align-items: center;

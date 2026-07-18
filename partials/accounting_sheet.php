@@ -1176,7 +1176,16 @@
                                                             $accountingDiscountAmountDisplay = (string) ($accountingDiscount['amount_display'] ?? 'R$ 0,00');
                                                             ?>
                                                             <div class="accounting-entry-discount-row">
-                                                            <span>- <?= $renderAccountingMoney($accountingDiscountAmountDisplay) ?><?= !empty($accountingDiscount['due_date']) ? ' · ' . e(accountingDateCompactLabel((string) $accountingDiscount['due_date'])) : '' ?></span>
+                                                                <span>- <?= $renderAccountingMoney($accountingDiscountAmountDisplay) ?></span>
+                                                                <form method="post" class="accounting-entry-discount-date-form">
+                                                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                                    <input type="hidden" name="action" value="update_accounting_discount_date">
+                                                                    <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                                    <input type="hidden" name="discount_id" value="<?= e((string) $accountingDiscountId) ?>">
+                                                                    <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                                    <input type="date" name="discount_date" value="<?= e((string) ($accountingDiscount['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data do abatimento" required>
+                                                                    <button type="submit" class="accounting-entry-discount-date-save" aria-label="Salvar data do abatimento" title="Salvar data">✓</button>
+                                                                </form>
                                                                 <form method="post" class="accounting-entry-discount-delete-form">
                                                                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                     <input type="hidden" name="action" value="delete_accounting_discount">
@@ -1844,7 +1853,16 @@
                                                         $accountingReceiptAmountDisplay = (string) ($accountingReceipt['amount_display'] ?? 'R$ 0,00');
                                                         ?>
                                                         <div class="accounting-entry-discount-row">
-                                                            <span>+ <?= $renderAccountingMoney($accountingReceiptAmountDisplay) ?><?= !empty($accountingReceipt['due_date']) ? ' · ' . e(accountingDateCompactLabel((string) $accountingReceipt['due_date'])) : '' ?></span>
+                                                            <span>+ <?= $renderAccountingMoney($accountingReceiptAmountDisplay) ?></span>
+                                                            <form method="post" class="accounting-entry-discount-date-form">
+                                                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                                                <input type="hidden" name="action" value="update_accounting_discount_date">
+                                                                <input type="hidden" name="entry_id" value="<?= e((string) $accountingEntryId) ?>">
+                                                                <input type="hidden" name="discount_id" value="<?= e((string) $accountingReceiptId) ?>">
+                                                                <input type="hidden" name="period_key" value="<?= e($accountingPeriod) ?>">
+                                                                <input type="date" name="discount_date" value="<?= e((string) ($accountingReceipt['due_date'] ?? '')) ?>" class="accounting-installment-select" aria-label="Data do recebimento" required>
+                                                                <button type="submit" class="accounting-entry-discount-date-save" aria-label="Salvar data do recebimento" title="Salvar data">✓</button>
+                                                            </form>
                                                             <form method="post" class="accounting-entry-discount-delete-form">
                                                                 <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                                                                 <input type="hidden" name="action" value="delete_accounting_discount">
