@@ -7824,6 +7824,32 @@ window.addEventListener("DOMContentLoaded", () => {
     initializeAccountingEnhancements(nextSheet);
   };
 
+  let accountingSharedSyncInFlight = false;
+  const syncSharedAccountingPanel = () => {
+    const accountingPanel = document.querySelector("#accounting");
+    const sheet = accountingPanel?.querySelector(".accounting-sheet");
+    if (!(accountingPanel instanceof HTMLElement) || !(sheet instanceof HTMLElement)) return;
+    if (accountingPanel.hidden || accountingPanel.offsetParent === null) return;
+    if (document.hidden || accountingSharedSyncInFlight) return;
+
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      sheet.contains(activeElement) &&
+      activeElement.matches("input, select, textarea, button")
+    ) {
+      return;
+    }
+    if (sheet.querySelector("form.is-saving, form[data-submitting='1']")) return;
+
+    const periodField = sheet.querySelector('input[name="period_key"]');
+    const accountingPeriod = periodField instanceof HTMLInputElement ? periodField.value : "";
+    accountingSharedSyncInFlight = true;
+    void refreshAccountingSectionFromServer({ accountingPeriod }).catch(() => {}).finally(() => {
+      accountingSharedSyncInFlight = false;
+    });
+  };
+
   const formatAccountingCents = (value) => {
     const cents = Math.max(0, Number.parseInt(String(value || "0"), 10) || 0);
     const amount = cents / 100;
@@ -7961,12 +7987,12 @@ window.addEventListener("DOMContentLoaded", () => {
     } finally {
       if (form.isConnected && form.dataset.accountingPending === "1") {
         delete form.dataset.accountingPending;
-        scheduleAccountingAutosave(form, 80, options);
+        scheduleAccountingAutosave(form, 400, options);
       }
     }
   };
 
-  const scheduleAccountingAutosave = (form, delay = 160, options = {}) => {
+  const scheduleAccountingAutosave = (form, delay = 550, options = {}) => {
     if (!(form instanceof HTMLFormElement) || !form.isConnected) return;
 
     if (form.dataset.submitting === "1") {
@@ -20019,7 +20045,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (accountingEntryForm.classList.contains("accounting-entry-editor-form")) {
         return;
       }
-      scheduleAccountingAutosave(accountingEntryForm, target instanceof HTMLInputElement && target.type === "checkbox" ? 120 : 240, {
+      scheduleAccountingAutosave(accountingEntryForm, target instanceof HTMLInputElement && target.type === "checkbox" ? 450 : 700, {
         fallbackError: "Falha ao atualizar registro.",
       });
       return;
@@ -20215,7 +20241,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (accountingEntryForm.classList.contains("accounting-entry-editor-form")) {
         return;
       }
-      scheduleAccountingAutosave(accountingEntryForm, 160, {
+      scheduleAccountingAutosave(accountingEntryForm, 550, {
         fallbackError: "Falha ao atualizar registro.",
       });
     }
@@ -20734,6 +20760,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   syncAppReleaseFields(document);
   initializeAccountingEnhancements(document);
+  // Atualiza de forma discreta a visÃ£o de contabilidade quando outro membro do
+  // workspace fizer alteraÃ§Ãµes. A sincronizaÃ§Ã£o nÃ£o interrompe formulÃ¡rios nem
+  // envia dados: ela apenas recarrega o painel quando ninguÃ©m estÃ¡ editando.
+  window.setInterval(syncSharedAccountingPanel, 45000);
 
   if (typeof syncTaskDetailModalFromUrl === "function") {
     syncTaskDetailModalFromUrl({

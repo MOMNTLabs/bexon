@@ -2739,6 +2739,14 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
          ON workspace_accounting_entries(workspace_id, period_key, due_date)'
     );
     $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_entries_workspace_period_active_type
+         ON workspace_accounting_entries(workspace_id, period_key, is_removed, entry_type)'
+    );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_entries_workspace_settlement_due
+         ON workspace_accounting_entries(workspace_id, entry_type, is_settled, due_date)'
+    );
+    $pdo->exec(
         'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_entries_workspace_due_source
          ON workspace_accounting_entries(workspace_id, source_due_entry_id)'
     );
@@ -3145,6 +3153,10 @@ function ensureWorkspaceAccountingDiscountSchema(PDO $pdo): void
     $pdo->exec(
         'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_discounts_workspace_entry_created
          ON workspace_accounting_entry_discounts(workspace_id, entry_id, created_at, id)'
+    );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_accounting_discounts_workspace_entry_due
+         ON workspace_accounting_entry_discounts(workspace_id, entry_id, due_date)'
     );
 }
 
@@ -8106,15 +8118,35 @@ function workspaceAccountingEntriesListRaw(
     $periodKey = normalizeAccountingPeriodKey($periodKey);
     $entryType = $entryType !== null ? normalizeAccountingEntryType($entryType) : null;
     $accountingSchema = workspaceAccountingSchemaCapabilities($pdo);
+    // Esta lista Ã© chamada diversas vezes para montar um mesmo painel (totais,
+    // saldo de abertura e projeÃ§Ã£o semanal). As rotinas abaixo atualizam o banco
+    // e sÃ£o idempotentes, portanto basta executÃ¡-las uma vez por workspace/perÃ­odo
+    // em cada requisiÃ§Ã£o. Isso reduz consultas e escritas duplicadas sem deixar os
+    // dados compartilhados desatualizados.
+    static $weeklyReassignedWorkspaces = [];
+    static $weeklyPreparedPeriods = [];
+    static $automaticSettlementWorkspaces = [];
+
+    $workspaceRequestKey = (string) $workspaceId;
+    $periodRequestKey = $workspaceRequestKey . ':' . $periodKey;
     if (!empty($accountingSchema['weekly_recurrence_id'])) {
-        workspaceReassignAccountingWeeklyEntriesForCycleCloseDay(
-            $pdo,
-            $workspaceId,
-            workspaceAccountingCycleCloseDay($workspaceId)
-        );
-        workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
+        if (empty($weeklyReassignedWorkspaces[$workspaceRequestKey])) {
+            workspaceReassignAccountingWeeklyEntriesForCycleCloseDay(
+                $pdo,
+                $workspaceId,
+                workspaceAccountingCycleCloseDay($workspaceId)
+            );
+            $weeklyReassignedWorkspaces[$workspaceRequestKey] = true;
+        }
+        if (empty($weeklyPreparedPeriods[$periodRequestKey])) {
+            workspaceAccountingEnsureWeeklyEntriesForPeriod($pdo, $workspaceId, $periodKey);
+            $weeklyPreparedPeriods[$periodRequestKey] = true;
+        }
     }
-    workspaceAccountingRefreshAutomaticEntrySettlements($pdo, $workspaceId);
+    if (empty($automaticSettlementWorkspaces[$workspaceRequestKey])) {
+        workspaceAccountingRefreshAutomaticEntrySettlements($pdo, $workspaceId);
+        $automaticSettlementWorkspaces[$workspaceRequestKey] = true;
+    }
     $dueDateSelect = !empty($accountingSchema['due_date'])
         ? 'ae.due_date'
         : 'NULL AS due_date';
