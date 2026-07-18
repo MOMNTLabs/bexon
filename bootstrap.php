@@ -2408,6 +2408,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 source_due_entry_id BIGINT DEFAULT NULL REFERENCES workspace_due_entries(id) ON DELETE SET NULL,
                 carry_source_entry_id BIGINT DEFAULT NULL REFERENCES workspace_accounting_entries(id) ON DELETE SET NULL,
                 weekly_recurrence_id BIGINT DEFAULT NULL,
+                auto_settlement_paused SMALLINT NOT NULL DEFAULT 0,
                 is_balance_adjustment SMALLINT NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
@@ -2481,6 +2482,7 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
                 source_due_entry_id INTEGER DEFAULT NULL,
                 carry_source_entry_id INTEGER DEFAULT NULL,
                 weekly_recurrence_id INTEGER DEFAULT NULL,
+                auto_settlement_paused INTEGER NOT NULL DEFAULT 0,
                 is_balance_adjustment INTEGER NOT NULL DEFAULT 0,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_by INTEGER DEFAULT NULL,
@@ -2658,6 +2660,10 @@ function ensureWorkspaceAccountingSchema(PDO $pdo): void
         } else {
             $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN weekly_recurrence_id INTEGER DEFAULT NULL");
         }
+    }
+    if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'auto_settlement_paused')) {
+        $pausedType = dbDriverName($pdo) === 'pgsql' ? 'SMALLINT' : 'INTEGER';
+        $pdo->exec("ALTER TABLE workspace_accounting_entries ADD COLUMN auto_settlement_paused {$pausedType} NOT NULL DEFAULT 0");
     }
     if (!tableHasColumn($pdo, 'workspace_accounting_entries', 'is_balance_adjustment')) {
         if (dbDriverName($pdo) === 'pgsql') {
@@ -7272,6 +7278,7 @@ function workspaceAccountingRefreshAutomaticEntrySettlements(PDO $pdo, int $work
         return;
     }
 
+    ensureWorkspaceAccountingSchema($pdo);
     ensureWorkspaceAccountingDiscountSchema($pdo);
     $today = (new DateTimeImmutable('today'))->format('Y-m-d');
     $stmt = $pdo->prepare(
@@ -7287,6 +7294,7 @@ function workspaceAccountingRefreshAutomaticEntrySettlements(PDO $pdo, int $work
          WHERE ae.workspace_id = :workspace_id
            AND ae.entry_type = \'income\'
            AND ae.is_settled = 0
+           AND COALESCE(ae.auto_settlement_paused, 0) = 0
            AND ae.due_date IS NOT NULL
            AND ae.due_date <= :today
          GROUP BY ae.id, ae.amount_cents, ae.due_date'

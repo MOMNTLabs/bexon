@@ -390,6 +390,21 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['recurrence_start_period'] ?? null
                     );
                 }
+                if ($weeklyRecurrenceId > 0 && ((string) ($_POST['fast_status_only'] ?? '')) === '1') {
+                    $pauseAutoSettlementStmt = $pdo->prepare(
+                        'UPDATE workspace_accounting_entries
+                         SET auto_settlement_paused = :auto_settlement_paused,
+                             updated_at = :updated_at
+                         WHERE workspace_id = :workspace_id
+                           AND id = :entry_id'
+                    );
+                    $pauseAutoSettlementStmt->execute([
+                        ':auto_settlement_paused' => $isSettled === 1 ? 0 : 1,
+                        ':updated_at' => nowIso(),
+                        ':workspace_id' => $workspaceId,
+                        ':entry_id' => $entryId,
+                    ]);
+                }
                 if (!in_array($targetTypeChoice, ['monthly', 'weekly', 'installment', 'goal', 'completed_tasks'], true)) {
                     updateWorkspaceAccountingEntryDate(
                         $pdo,
