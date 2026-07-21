@@ -338,11 +338,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $sinceHistoryId = max(0, (int) ($_GET['since_id'] ?? 0));
             $limit = max(1, min(60, (int) ($_GET['limit'] ?? 24)));
             $latestHistoryId = latestTaskHistoryIdForWorkspace($workspaceId);
+            $taskSyncVersion = workspaceTaskPanelSyncVersion($pdo, $workspaceId);
 
             if ($initialize) {
                 respondJson([
                     'ok' => true,
                     'latest_history_id' => $latestHistoryId,
+                    'task_sync_version' => $taskSyncVersion,
                     'notifications' => [],
                 ]);
             }
@@ -357,6 +359,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             respondJson([
                 'ok' => true,
                 'latest_history_id' => $latestHistoryId,
+                'task_sync_version' => $taskSyncVersion,
                 'notifications' => $notifications,
             ]);
         } catch (Throwable $e) {
@@ -746,6 +749,14 @@ if ($currentUser && $currentWorkspaceId !== null) {
         // painel continua disponível caso ela não possa ser calculada.
     }
 }
+$taskSyncVersion = '';
+if ($currentUser && $currentWorkspaceId !== null && !$isPersonalWorkspace) {
+    try {
+        $taskSyncVersion = workspaceTaskPanelSyncVersion($pdo, $currentWorkspaceId);
+    } catch (Throwable $e) {
+        // A sincronização compartilhada volta a tentar no próximo ciclo.
+    }
+}
 $stylesAssetVersion = is_file(__DIR__ . '/assets/styles.css')
     ? (string) filemtime(__DIR__ . '/assets/styles.css')
     : '1';
@@ -948,6 +959,8 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
     data-default-group-name="<?= e((string) $defaultTaskGroupName) ?>"
     data-workspace-id="<?= e((string) (($renderAuthScreen || $renderPlansScreen) ? '' : ($currentWorkspaceId ?? ''))) ?>"
     data-user-id="<?= e((string) ($renderAuthScreen ? '' : ($currentUser['id'] ?? ''))) ?>"
+    data-workspace-personal="<?= (!$renderAuthScreen && !$renderPlansScreen && !empty($isPersonalWorkspace)) ? '1' : '0' ?>"
+    data-task-sync-version="<?= e((string) (($renderAuthScreen || $renderPlansScreen) ? '' : $taskSyncVersion)) ?>"
     data-workspace-enabled-views="<?= e((string) (($renderAuthScreen || $renderPlansScreen) ? '' : implode(',', $workspaceEnabledViews))) ?>"
 >
     <div class="pwa-launch-splash" data-pwa-launch-splash aria-hidden="true">

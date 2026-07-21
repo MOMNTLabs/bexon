@@ -5301,54 +5301,60 @@ window.addEventListener("DOMContentLoaded", () => {
     return status === 409 || code === "task_conflict";
   };
 
-  const postFormJson = async (form) => runWithAppLoading(async () => {
-    const runAttempt = async () => {
-      const requestBody = new FormData(form);
-      const appReleaseId = getCurrentAppReleaseId();
-      if (appReleaseId) {
-        requestBody.set("__app_release_id", appReleaseId);
-      }
-      const response = await fetch(form.getAttribute("action") || window.location.href, {
-        method: "POST",
-        body: requestBody,
-        headers: buildAppReleaseRequestHeaders({
-          "X-Requested-With": "XMLHttpRequest",
-          Accept: "application/json",
-        }),
-        credentials: "same-origin",
-      });
+  const postFormJson = async (form, { showLoading = true } = {}) => {
+    const submitRequest = async () => {
+      const runAttempt = async () => {
+        const requestBody = new FormData(form);
+        const appReleaseId = getCurrentAppReleaseId();
+        if (appReleaseId) {
+          requestBody.set("__app_release_id", appReleaseId);
+        }
+        const response = await fetch(form.getAttribute("action") || window.location.href, {
+          method: "POST",
+          body: requestBody,
+          headers: buildAppReleaseRequestHeaders({
+            "X-Requested-With": "XMLHttpRequest",
+            Accept: "application/json",
+          }),
+          credentials: "same-origin",
+        });
 
-      const data = await parseJsonSafely(response);
-      return { response, data };
+        const data = await parseJsonSafely(response);
+        return { response, data };
+      };
+
+      let lastMessage = "Não foi possível concluir a operação.";
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const { response, data } = await runAttempt();
+        if (response.ok && data && data.ok === true) {
+          return data;
+        }
+
+        const message =
+          (data && (data.error || data.message)) ||
+          "Não foi possível concluir a operação.";
+        lastMessage = message;
+
+        const shouldRetry = attempt === 0 && isDatabaseLockedMessage(message);
+        if (!shouldRetry) {
+          const requestError = createRequestError(message, response, data);
+          if (handleStaleAppReloadRecovery(requestError, { form })) {
+            return new Promise(() => {});
+          }
+          throw requestError;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 180));
+      }
+
+      throw new Error(lastMessage);
     };
 
-    let lastMessage = "Não foi possível concluir a operação.";
-
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const { response, data } = await runAttempt();
-      if (response.ok && data && data.ok === true) {
-        return data;
-      }
-
-      const message =
-        (data && (data.error || data.message)) ||
-        "Não foi possível concluir a operação.";
-      lastMessage = message;
-
-      const shouldRetry = attempt === 0 && isDatabaseLockedMessage(message);
-      if (!shouldRetry) {
-        const requestError = createRequestError(message, response, data);
-        if (handleStaleAppReloadRecovery(requestError, { form })) {
-          return new Promise(() => {});
-        }
-        throw requestError;
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, 180));
-    }
-
-    throw new Error(lastMessage);
-  }, { label: form?.getAttribute("data-loading-label") || "Salvando..." });
+    return showLoading
+      ? runWithAppLoading(submitRequest, { label: form?.getAttribute("data-loading-label") || "Salvando..." })
+      : submitRequest();
+  };
 
   const postActionJson = async (action, payload = {}) => runWithAppLoading(async () => {
     const formData = new FormData();
@@ -5456,6 +5462,7 @@ window.addEventListener("DOMContentLoaded", () => {
     String(document.body?.dataset?.userId || "").trim() || "0",
     10
   );
+  const notificationWorkspaceIsPersonal = document.body?.dataset?.workspacePersonal === "1";
   const headerNotificationsRoot = document.querySelector("[data-header-notifications]");
   const headerNotificationsToggle = document.querySelector("[data-header-notifications-toggle]");
   const headerNotificationsDropdown = document.querySelector("[data-header-notifications-dropdown]");
@@ -5467,6 +5474,7 @@ window.addEventListener("DOMContentLoaded", () => {
     isSyncingTasks: false,
     intervalId: null,
     lastHistoryId: 0,
+    syncVersion: String(document.body?.dataset?.taskSyncVersion || "").trim(),
     seenHistoryId: 0,
     notifications: [],
     isDropdownOpen: false,
@@ -5809,7 +5817,11 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    if (document.querySelector('[data-task-autosave-form][data-autosave-submitting="1"]')) {
+    if (
+      document.querySelector(
+        '[data-task-autosave-form][data-autosave-submitting="1"], [data-task-autosave-form][data-autosave-dirty="1"]'
+      )
+    ) {
       return true;
     }
 
@@ -5822,7 +5834,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     taskNotificationState.isSyncingTasks = true;
     try {
-      await refreshTasksSectionFromServer();
+      await refreshTasksSectionFromServer({ showLoading: false });
       taskNotificationState.pendingTasksSync = false;
       return true;
     } catch (error) {
@@ -5837,7 +5849,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     taskNotificationState.isPolling = true;
     try {
-      const previousHistoryId = taskNotificationState.lastHistoryId;
       const data = await fetchTaskNotificationsFeed({
         initialize,
         sinceHistoryId: taskNotificationState.lastHistoryId,
@@ -5845,6 +5856,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
       const notifications = Array.isArray(data.notifications) ? data.notifications : [];
       const latestHistoryId = Number.parseInt(String(data.latest_history_id || "0"), 10) || 0;
+      const remoteSyncVersion = String(data.task_sync_version || "").trim();
       mergeTaskNotifications(notifications);
 
       let maxHistoryId = Math.max(taskNotificationState.lastHistoryId, latestHistoryId);
@@ -5859,7 +5871,12 @@ window.addEventListener("DOMContentLoaded", () => {
       storeTaskNotificationHistoryId(taskNotificationState.lastHistoryId);
 
       const hasWorkspaceChanges =
-        !initialize && taskNotificationState.lastHistoryId > previousHistoryId;
+        !initialize &&
+        remoteSyncVersion !== "" &&
+        remoteSyncVersion !== taskNotificationState.syncVersion;
+      if (initialize && remoteSyncVersion !== "") {
+        taskNotificationState.syncVersion = remoteSyncVersion;
+      }
       if (hasWorkspaceChanges) {
         const synced = await syncTaskSectionAfterWorkspaceChange();
         if (!synced) {
@@ -5883,6 +5900,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(notificationWorkspaceId > 0) || !(notificationUserId > 0)) {
       return;
     }
+    if (notificationWorkspaceIsPersonal) {
+      return;
+    }
 
     taskNotificationState.notifications = readStoredTaskNotificationItems();
     taskNotificationState.seenHistoryId = readStoredTaskNotificationSeenHistoryId();
@@ -5904,6 +5924,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     taskNotificationState.intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       void pollTaskNotifications();
     }, 20000);
 
@@ -5964,14 +5985,12 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     window.addEventListener("focus", () => {
-      if (!taskNotificationState.pendingTasksSync) return;
-      void syncTaskSectionAfterWorkspaceChange();
+      void pollTaskNotifications();
     });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
-      if (!taskNotificationState.pendingTasksSync) return;
-      void syncTaskSectionAfterWorkspaceChange();
+      void pollTaskNotifications();
     });
   };
 
@@ -6112,8 +6131,13 @@ window.addEventListener("DOMContentLoaded", () => {
       : requestSnapshot();
   };
 
-  const fetchTaskPanelSnapshot = async () =>
-    fetchPanelSnapshot("task_panel_snapshot", "Não foi possível atualizar tarefas.");
+  const fetchTaskPanelSnapshot = async ({ showLoading = true } = {}) =>
+    fetchPanelSnapshot(
+      "task_panel_snapshot",
+      "Não foi possível atualizar tarefas.",
+      {},
+      { showLoading }
+    );
 
   const fetchDashboardDocumentLegacy = async (
     fallbackErrorMessage,
@@ -6157,12 +6181,12 @@ window.addEventListener("DOMContentLoaded", () => {
       : requestDocument();
   };
 
-  const refreshTasksSectionFromServer = async () => {
+  const refreshTasksSectionFromServer = async ({ showLoading = true } = {}) => {
     let snapshotData = null;
     let nextDoc = null;
 
     try {
-      snapshotData = await fetchTaskPanelSnapshot();
+      snapshotData = await fetchTaskPanelSnapshot({ showLoading });
       const panelHtml = String(snapshotData.tasks_panel_html || "").trim();
       if (!panelHtml) {
         throw new Error("Snapshot de tarefas vazio.");
@@ -6171,7 +6195,11 @@ window.addEventListener("DOMContentLoaded", () => {
       nextDoc = parser.parseFromString(panelHtml, "text/html");
     } catch (_snapshotError) {
       snapshotData = null;
-      nextDoc = await fetchDashboardDocumentLegacy("Não foi possível atualizar tarefas.");
+      nextDoc = await fetchDashboardDocumentLegacy(
+        "Não foi possível atualizar tarefas.",
+        {},
+        { showLoading }
+      );
     }
 
     const currentProjectChooser = document.querySelector("[data-task-project-chooser]");
@@ -6297,6 +6325,16 @@ window.addEventListener("DOMContentLoaded", () => {
       });
 
       hydrateTaskInteractiveFields(taskGroupsRoot);
+    }
+
+    const nextSyncVersion = String(
+      snapshotData?.task_sync_version || nextDoc.body?.dataset?.taskSyncVersion || ""
+    ).trim();
+    if (nextSyncVersion) {
+      taskNotificationState.syncVersion = nextSyncVersion;
+      if (document.body) {
+        document.body.dataset.taskSyncVersion = nextSyncVersion;
+      }
     }
 
     if (typeof syncTaskGroupInputs === "function") {
@@ -8595,15 +8633,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
     try {
       prepareTaskReviewFileFieldForSubmit(form);
-      const data = await postFormJson(form);
+      const data = await postFormJson(form, { showLoading: false });
       if (!form.isConnected) {
         success = true;
         return true;
       }
       const task = data.task || {};
       const taskItem = form.closest("[data-task-item]");
+      const hasNewerLocalChanges = form.dataset.autosavePending === "1";
 
-      if (typeof task.description === "string") {
+      if (!hasNewerLocalChanges && typeof task.description === "string") {
         const descriptionField = form.querySelector('textarea[name="description"]');
         if (descriptionField instanceof HTMLTextAreaElement) {
           descriptionField.value = task.description;
@@ -8617,13 +8656,13 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      if (typeof task.reference_links_json === "string") {
+      if (!hasNewerLocalChanges && typeof task.reference_links_json === "string") {
         const linksField = form.querySelector("[data-task-reference-links-json]");
         if (linksField instanceof HTMLInputElement) {
           linksField.value = task.reference_links_json;
         }
       }
-      if (typeof task.reference_images_json === "string") {
+      if (!hasNewerLocalChanges && typeof task.reference_images_json === "string") {
         const imagesField = ensureTaskHiddenField(form, {
           name: "reference_images_json",
           withName: false,
@@ -8635,7 +8674,7 @@ window.addEventListener("DOMContentLoaded", () => {
           imagesField.removeAttribute("name");
         }
       }
-      if (typeof task.review_file_json === "string") {
+      if (!hasNewerLocalChanges && typeof task.review_file_json === "string") {
         const reviewFileField = ensureTaskReviewFileField(form, { withName: false });
         if (reviewFileField instanceof HTMLInputElement) {
           reviewFileField.value = task.review_file_json || "{}";
@@ -8645,7 +8684,7 @@ window.addEventListener("DOMContentLoaded", () => {
           }
         }
       }
-      if (typeof task.subtasks_json === "string") {
+      if (!hasNewerLocalChanges && typeof task.subtasks_json === "string") {
         const subtasksField = form.querySelector("[data-task-subtasks-json]");
         const subtasksDependencyField = ensureTaskHiddenField(form, {
           name: "subtasks_dependency_enabled",
@@ -8689,7 +8728,7 @@ window.addEventListener("DOMContentLoaded", () => {
           }
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "title_tag")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "title_tag")) {
         const titleTagField = form.querySelector("[data-task-title-tag]");
         const titleTagColorField = form.querySelector("[data-task-title-tag-color]");
         const normalizedTag = normalizeTaskTitleTagValue(task.title_tag || "");
@@ -8712,48 +8751,48 @@ window.addEventListener("DOMContentLoaded", () => {
           syncTaskTitleTagBadge(taskItem, normalizedTag, normalizedColor);
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "due_date")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "due_date")) {
         const dueDateField = form.querySelector("[data-due-date-input]");
         if (dueDateField instanceof HTMLInputElement) {
           dueDateField.value = task.due_date ? String(task.due_date) : "";
           syncDueDateDisplay(dueDateField);
         }
       }
-      if (typeof task.status === "string") {
+      if (!hasNewerLocalChanges && typeof task.status === "string") {
         const statusField = form.querySelector('select[name="status"]');
         if (statusField instanceof HTMLSelectElement) {
           statusField.value = task.status;
           syncSelectColor(statusField);
         }
       }
-      if (typeof task.priority === "string") {
+      if (!hasNewerLocalChanges && typeof task.priority === "string") {
         const priorityField = form.querySelector('select[name="priority"]');
         if (priorityField instanceof HTMLSelectElement) {
           priorityField.value = task.priority;
           syncSelectColor(priorityField);
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "overdue_flag")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "overdue_flag")) {
         const overdueField = form.querySelector("[data-task-overdue-flag]");
         if (overdueField instanceof HTMLInputElement) {
           overdueField.value = Number(task.overdue_flag) === 1 ? "1" : "0";
           syncTaskOverdueBadge(form);
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "overdue_since_date")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "overdue_since_date")) {
         const overdueSinceField = form.querySelector("[data-task-overdue-since-date]");
         if (overdueSinceField instanceof HTMLInputElement) {
           overdueSinceField.value = task.overdue_since_date ? String(task.overdue_since_date) : "";
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "overdue_days")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "overdue_days")) {
         const overdueDaysField = form.querySelector("[data-task-overdue-days]");
         if (overdueDaysField instanceof HTMLInputElement) {
           const nextValue = Math.max(0, Number.parseInt(task.overdue_days, 10) || 0);
           overdueDaysField.value = String(nextValue);
         }
       }
-      if (Array.isArray(task.history)) {
+      if (!hasNewerLocalChanges && Array.isArray(task.history)) {
         const historyField = ensureTaskHiddenField(form, {
           withName: false,
           dataSelector: "[data-task-history-json]",
@@ -8763,7 +8802,7 @@ window.addEventListener("DOMContentLoaded", () => {
           writeTaskHistoryField(historyField, task.history);
         }
       }
-      if (Object.prototype.hasOwnProperty.call(task, "has_active_revision")) {
+      if (!hasNewerLocalChanges && Object.prototype.hasOwnProperty.call(task, "has_active_revision")) {
         const revisionStateField = ensureTaskHiddenField(form, {
           withName: false,
           dataSelector: "[data-task-has-active-revision]",
@@ -8779,7 +8818,7 @@ window.addEventListener("DOMContentLoaded", () => {
       syncTaskRevisionBadge(form);
       syncTaskReviewFileBadge(form);
 
-      if (taskItem instanceof HTMLElement && typeof task.group_name === "string") {
+      if (!hasNewerLocalChanges && taskItem instanceof HTMLElement && typeof task.group_name === "string") {
         moveTaskItemToGroupDom(taskItem, task.group_name);
       }
 
@@ -8829,7 +8868,11 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       form.classList.remove("is-saving");
       delete form.dataset.autosaveSubmitting;
-      if (shouldProcessPendingAutosave && form.dataset.autosavePending === "1") {
+      const hasPendingAutosave = shouldProcessPendingAutosave && form.dataset.autosavePending === "1";
+      if (success && !hasPendingAutosave) {
+        delete form.dataset.autosaveDirty;
+      }
+      if (hasPendingAutosave) {
         delete form.dataset.autosavePending;
         scheduleTaskAutosave(form, 80);
       }
@@ -8840,6 +8883,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const scheduleTaskAutosave = (form, delay = 180) => {
     if (!(form instanceof HTMLFormElement)) return;
     if (!form.isConnected) return;
+    form.dataset.autosaveDirty = "1";
 
     if (form.dataset.autosaveSubmitting === "1") {
       form.dataset.autosavePending = "1";
@@ -8850,8 +8894,8 @@ window.addEventListener("DOMContentLoaded", () => {
     if (previousTimer) window.clearTimeout(previousTimer);
 
     const nextTimer = window.setTimeout(() => {
+      autosaveTimers.delete(form);
       if (!form.isConnected) {
-        autosaveTimers.delete(form);
         return;
       }
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
@@ -9022,7 +9066,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(form instanceof HTMLFormElement)) return;
 
     if (target.matches('input[type="text"], textarea')) {
-      scheduleTaskAutosave(form, 420);
+      scheduleTaskAutosave(form, 800);
     }
   });
 

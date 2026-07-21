@@ -3507,6 +3507,60 @@ function workspaceAccountingPanelSyncVersion(PDO $pdo, int $workspaceId): string
     return hash('sha256', json_encode($fingerprint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
 }
 
+/**
+ * Assinatura do painel de tarefas usada apenas para decidir se o navegador
+ * precisa buscar o HTML novamente. Inclui exclusões e mudanças de grupos, que
+ * não podem ser inferidas com segurança apenas pelo histórico das tarefas.
+ */
+function workspaceTaskPanelSyncVersion(PDO $pdo, int $workspaceId): string
+{
+    if ($workspaceId <= 0) {
+        return '';
+    }
+
+    $sources = [
+        ['tasks', 'id, updated_at', 'id ASC'],
+        ['task_groups', 'id, name, created_at', 'id ASC'],
+        [
+            'task_group_permissions',
+            'group_name, user_id, can_view, can_access, updated_at',
+            'group_name ASC, user_id ASC',
+        ],
+    ];
+    $fingerprint = [];
+
+    foreach ($sources as [$table, $columns, $orderBy]) {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT {$columns}
+                 FROM {$table}
+                 WHERE workspace_id = :workspace_id
+                 ORDER BY {$orderBy}"
+            );
+            $stmt->execute([':workspace_id' => $workspaceId]);
+            $fingerprint[] = $table;
+            $fingerprint[] = $stmt->fetchAll(PDO::FETCH_NUM) ?: [];
+        } catch (Throwable $_) {
+            $fingerprint[] = $table . ':unavailable';
+        }
+    }
+
+    try {
+        $workspaceStmt = $pdo->prepare(
+            'SELECT task_statuses_json, task_review_status_key, updated_at
+             FROM workspaces
+             WHERE id = :workspace_id
+             LIMIT 1'
+        );
+        $workspaceStmt->execute([':workspace_id' => $workspaceId]);
+        $fingerprint[] = $workspaceStmt->fetch(PDO::FETCH_NUM) ?: [];
+    } catch (Throwable $_) {
+        $fingerprint[] = 'workspace:unavailable';
+    }
+
+    return hash('sha256', json_encode($fingerprint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+}
+
 function workspaceAccountingHasDueDateColumn(PDO $pdo): bool
 {
     return !empty(workspaceAccountingSchemaCapabilities($pdo)['due_date']);

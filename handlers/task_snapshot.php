@@ -37,6 +37,10 @@ function respondTaskPanelSnapshot(): void
         applyOverdueTaskPolicyIfNeeded($currentWorkspaceId);
     }
 
+    // A versão representa o início da leitura. Se alguém alterar tarefas
+    // durante a montagem do snapshot, o próximo ciclo detectará a diferença.
+    $taskSyncVersion = workspaceTaskPanelSyncVersion(db(), $currentWorkspaceId);
+
     $currentWorkspace = workspaceById($currentWorkspaceId);
     $isPersonalWorkspace = !empty($currentWorkspace['is_personal']);
     $statusConfig = taskStatusConfig($currentWorkspaceId, $currentWorkspace);
@@ -157,6 +161,7 @@ function respondTaskPanelSnapshot(): void
         'tasks_panel_html' => $tasksPanelHtml,
         'create_task_group_options_html' => renderCreateTaskGroupOptionsHtml($taskGroupsWithAccess),
         'has_task_group_access' => !empty($taskGroupsWithAccess),
+        'task_sync_version' => $taskSyncVersion,
         'undo_state' => taskUndoState($currentWorkspaceId),
         'summary' => [
             'total' => (int) $stats['total'],
