@@ -584,7 +584,7 @@
                 return (string) ob_get_clean();
             };
             ?>
-            <div class="accounting-sheet">
+            <div class="accounting-sheet" data-accounting-sync-version="<?= e((string) ($accountingSyncVersion ?? '')) ?>">
                 <script type="application/json" data-accounting-task-link-options><?= $accountingTaskLinkOptionsJson ?></script>
                 <div class="accounting-columns">
                     <section class="accounting-card is-expense-card<?= empty($accountingExpenseEntries) ? ' is-empty' : '' ?>">

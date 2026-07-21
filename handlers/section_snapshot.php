@@ -213,6 +213,7 @@ function respondAccountingPanelSnapshot(): void
             array_unshift($accountingExpenseEntries, $accountingInheritedBalanceEntry);
         }
     }
+    $accountingSyncVersion = workspaceAccountingPanelSyncVersion(db(), $workspaceId);
     ob_start();
     include __DIR__ . '/../partials/accounting_sheet.php';
     $accountingSheetHtml = (string) ob_get_clean();
@@ -220,6 +221,18 @@ function respondAccountingPanelSnapshot(): void
     respondJson([
         'ok' => true,
         'accounting_sheet_html' => $accountingSheetHtml,
+        'accounting_sync_version' => $accountingSyncVersion,
+    ]);
+}
+
+function respondAccountingPanelVersion(): void
+{
+    $ctx = requireSnapshotWorkspaceContext();
+    $workspaceId = (int) $ctx['workspace_id'];
+
+    respondJson([
+        'ok' => true,
+        'accounting_sync_version' => workspaceAccountingPanelSyncVersion(db(), $workspaceId),
     ]);
 }
 

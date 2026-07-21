@@ -293,6 +293,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
 
+    if ($getAction === 'accounting_panel_version') {
+        try {
+            respondAccountingPanelVersion();
+        } catch (Throwable $e) {
+            respondJson([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
     if ($getAction === 'users_panel_snapshot') {
         try {
             respondUsersPanelSnapshot();
@@ -724,6 +735,15 @@ if ($accountingInheritedBalanceEntry !== null) {
         array_unshift($accountingIncomeEntries, $accountingInheritedBalanceEntry);
     } else {
         array_unshift($accountingExpenseEntries, $accountingInheritedBalanceEntry);
+    }
+}
+$accountingSyncVersion = '';
+if ($currentUser && $currentWorkspaceId !== null) {
+    try {
+        $accountingSyncVersion = workspaceAccountingPanelSyncVersion($pdo, $currentWorkspaceId);
+    } catch (Throwable $e) {
+        // A versão é apenas uma otimização de atualização compartilhada; o
+        // painel continua disponível caso ela não possa ser calculada.
     }
 }
 $stylesAssetVersion = is_file(__DIR__ . '/assets/styles.css')

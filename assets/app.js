@@ -6062,79 +6062,100 @@ window.addEventListener("DOMContentLoaded", () => {
     };
   };
 
-  const fetchPanelSnapshot = async (action, fallbackErrorMessage, extraParams = {}) => runWithAppLoading(async () => {
-    const params = new URLSearchParams(window.location.search || "");
-    Object.entries(extraParams || {}).forEach(([key, value]) => {
-      const normalizedKey = String(key || "").trim();
-      const normalizedValue = String(value || "").trim();
-      if (!normalizedKey) return;
-      if (normalizedValue === "") {
-        params.delete(normalizedKey);
-        return;
+  const fetchPanelSnapshot = async (
+    action,
+    fallbackErrorMessage,
+    extraParams = {},
+    { showLoading = true } = {}
+  ) => {
+    const requestSnapshot = async () => {
+      const params = new URLSearchParams(window.location.search || "");
+      Object.entries(extraParams || {}).forEach(([key, value]) => {
+        const normalizedKey = String(key || "").trim();
+        const normalizedValue = String(value || "").trim();
+        if (!normalizedKey) return;
+        if (normalizedValue === "") {
+          params.delete(normalizedKey);
+          return;
+        }
+        params.set(normalizedKey, normalizedValue);
+      });
+      params.set("action", String(action || "").trim());
+      const url = `${window.location.pathname}?${params.toString()}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+      });
+
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (_error) {
+        data = null;
       }
-      params.set(normalizedKey, normalizedValue);
-    });
-    params.set("action", String(action || "").trim());
-    const url = `${window.location.pathname}?${params.toString()}`;
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-    });
 
-    let data = null;
-    try {
-      data = await response.json();
-    } catch (_error) {
-      data = null;
-    }
+      if (!response.ok || !data || data.ok !== true) {
+        throw new Error(
+          (data && (data.error || data.message)) || fallbackErrorMessage
+        );
+      }
 
-    if (!response.ok || !data || data.ok !== true) {
-      throw new Error(
-        (data && (data.error || data.message)) || fallbackErrorMessage
-      );
-    }
+      return data;
+    };
 
-    return data;
-  }, { label: "Atualizando..." });
+    return showLoading
+      ? runWithAppLoading(requestSnapshot, { label: "Atualizando..." })
+      : requestSnapshot();
+  };
 
   const fetchTaskPanelSnapshot = async () =>
     fetchPanelSnapshot("task_panel_snapshot", "Não foi possível atualizar tarefas.");
 
-  const fetchDashboardDocumentLegacy = async (fallbackErrorMessage, extraParams = {}) => runWithAppLoading(async () => {
-    const params = new URLSearchParams(window.location.search || "");
-    Object.entries(extraParams || {}).forEach(([key, value]) => {
-      const normalizedKey = String(key || "").trim();
-      const normalizedValue = String(value || "").trim();
-      if (!normalizedKey) return;
-      if (normalizedValue === "") {
-        params.delete(normalizedKey);
-        return;
+  const fetchDashboardDocumentLegacy = async (
+    fallbackErrorMessage,
+    extraParams = {},
+    { showLoading = true } = {}
+  ) => {
+    const requestDocument = async () => {
+      const params = new URLSearchParams(window.location.search || "");
+      Object.entries(extraParams || {}).forEach(([key, value]) => {
+        const normalizedKey = String(key || "").trim();
+        const normalizedValue = String(value || "").trim();
+        if (!normalizedKey) return;
+        if (normalizedValue === "") {
+          params.delete(normalizedKey);
+          return;
+        }
+        params.set(normalizedKey, normalizedValue);
+      });
+      const query = params.toString();
+      const url = `${window.location.pathname}${query ? `?${query}` : ""}`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "text/html",
+        },
+        credentials: "same-origin",
+      });
+
+      if (!response.ok) {
+        throw new Error(fallbackErrorMessage);
       }
-      params.set(normalizedKey, normalizedValue);
-    });
-    const query = params.toString();
-    const url = `${window.location.pathname}${query ? `?${query}` : ""}`;
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        Accept: "text/html",
-      },
-      credentials: "same-origin",
-    });
 
-    if (!response.ok) {
-      throw new Error(fallbackErrorMessage);
-    }
+      const html = await response.text();
+      const parser = new DOMParser();
+      return parser.parseFromString(html, "text/html");
+    };
 
-    const html = await response.text();
-    const parser = new DOMParser();
-    return parser.parseFromString(html, "text/html");
-  }, { label: "Atualizando..." });
+    return showLoading
+      ? runWithAppLoading(requestDocument, { label: "Atualizando..." })
+      : requestDocument();
+  };
 
   const refreshTasksSectionFromServer = async () => {
     let snapshotData = null;
@@ -7783,7 +7804,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const refreshAccountingSectionFromServer = async ({ accountingPeriod = "" } = {}) => {
+  const refreshAccountingSectionFromServer = async ({ accountingPeriod = "", showLoading = true } = {}) => {
     let snapshotData = null;
     let nextDoc = null;
     const snapshotParams = {};
@@ -7799,7 +7820,8 @@ window.addEventListener("DOMContentLoaded", () => {
       snapshotData = await fetchPanelSnapshot(
         "accounting_panel_snapshot",
         "Não foi possível atualizar a contabilidade.",
-        snapshotParams
+        snapshotParams,
+        { showLoading }
       );
       const sheetHtml = String(snapshotData.accounting_sheet_html || "").trim();
       if (!sheetHtml) {
@@ -7811,7 +7833,8 @@ window.addEventListener("DOMContentLoaded", () => {
       snapshotData = null;
       nextDoc = await fetchDashboardDocumentLegacy(
         "Não foi possível atualizar a contabilidade.",
-        snapshotParams
+        snapshotParams,
+        { showLoading }
       );
     }
 
@@ -7824,11 +7847,34 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     currentSheet.replaceWith(nextSheet);
+    const syncVersion = String(snapshotData?.accounting_sync_version || "").trim();
+    if (syncVersion) {
+      nextSheet.dataset.accountingSyncVersion = syncVersion;
+    }
     initializeAccountingEnhancements(nextSheet);
   };
 
+  const fetchAccountingPanelSyncVersion = async () => {
+    const params = new URLSearchParams(window.location.search || "");
+    params.set("action", "accounting_panel_version");
+    const response = await fetch(`${window.location.pathname}?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    });
+    const data = await parseJsonSafely(response);
+    if (!response.ok || !data || data.ok !== true) {
+      throw new Error("Não foi possível verificar atualizações da contabilidade.");
+    }
+
+    return String(data.accounting_sync_version || "").trim();
+  };
+
   let accountingSharedSyncInFlight = false;
-  const syncSharedAccountingPanel = () => {
+  const syncSharedAccountingPanel = async () => {
     const accountingPanel = document.querySelector("#accounting");
     const sheet = accountingPanel?.querySelector(".accounting-sheet");
     if (!(accountingPanel instanceof HTMLElement) || !(sheet instanceof HTMLElement)) return;
@@ -7848,9 +7894,23 @@ window.addEventListener("DOMContentLoaded", () => {
     const periodField = sheet.querySelector('input[name="period_key"]');
     const accountingPeriod = periodField instanceof HTMLInputElement ? periodField.value : "";
     accountingSharedSyncInFlight = true;
-    void refreshAccountingSectionFromServer({ accountingPeriod }).catch(() => {}).finally(() => {
+    try {
+      const remoteVersion = await fetchAccountingPanelSyncVersion();
+      const localVersion = String(sheet.dataset.accountingSyncVersion || "").trim();
+      if (!remoteVersion || remoteVersion === localVersion) return;
+
+      await refreshAccountingSectionFromServer({
+        accountingPeriod,
+        // A sincronização compartilhada nunca deve abrir a tela global de
+        // carregamento: ela acontece em segundo plano.
+        showLoading: false,
+      });
+    } catch (_error) {
+      // Uma falha transitória não interrompe a edição local. A próxima rodada
+      // tentará novamente.
+    } finally {
       accountingSharedSyncInFlight = false;
-    });
+    }
   };
 
   const formatAccountingCents = (value) => {

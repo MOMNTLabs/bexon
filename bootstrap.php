@@ -3447,6 +3447,66 @@ function workspaceAccountingPeriodSchemaCapabilities(PDO $pdo): array
     return $cache[$cacheKey];
 }
 
+/**
+ * Produz uma assinatura leve do estado financeiro compartilhado. Ela é usada
+ * pelo navegador para saber se precisa buscar novamente o painel completo,
+ * evitando reconstruir a contabilidade a cada ciclo de sincronização.
+ */
+function workspaceAccountingPanelSyncVersion(PDO $pdo, int $workspaceId): string
+{
+    if ($workspaceId <= 0) {
+        return '';
+    }
+
+    $sources = [
+        ['workspace_accounting_entries', 'id, period_key, entry_type, label, amount_cents, total_amount_cents, is_settled, settled_at, due_date, is_removed, updated_at'],
+        ['workspace_accounting_entry_subitems', 'id, entry_id, label, amount_cents, due_date, is_settled, settled_at, updated_at'],
+        ['workspace_accounting_entry_discounts', 'id, entry_id, amount_cents, due_date, created_at'],
+        ['workspace_accounting_goal_payments', 'id, entry_id, amount_cents, due_date, created_at'],
+        ['workspace_accounting_periods', 'id, period_key, opening_balance_cents, balance_snapshot_cents, balance_snapshot_at, updated_at'],
+        ['workspace_accounting_weekly_recurrences', 'id, entry_type, label, amount_cents, weekday, anchor_date, end_date, updated_at'],
+    ];
+
+    $fingerprint = [
+        // A virada do dia pode alterar liquidações automáticas mesmo sem uma
+        // edição humana, portanto ela também participa da versão.
+        (new DateTimeImmutable('today'))->format('Y-m-d'),
+    ];
+
+    foreach ($sources as [$table, $columns]) {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT {$columns}
+                 FROM {$table}
+                 WHERE workspace_id = :workspace_id
+                 ORDER BY id ASC"
+            );
+            $stmt->execute([':workspace_id' => $workspaceId]);
+            $fingerprint[] = $table;
+            $fingerprint[] = $stmt->fetchAll(PDO::FETCH_NUM) ?: [];
+        } catch (Throwable $_) {
+            // Instalações antigas podem ainda não ter alguma tabela opcional.
+            // A migração normaliza isso no próximo deploy, sem impedir leitura.
+            $fingerprint[] = $table . ':unavailable';
+        }
+    }
+
+    try {
+        $workspaceStmt = $pdo->prepare(
+            'SELECT id, accounting_cycle_close_day, updated_at
+             FROM workspaces
+             WHERE id = :workspace_id
+             LIMIT 1'
+        );
+        $workspaceStmt->execute([':workspace_id' => $workspaceId]);
+        $fingerprint[] = $workspaceStmt->fetch(PDO::FETCH_NUM) ?: [];
+    } catch (Throwable $_) {
+        $fingerprint[] = 'workspace:unavailable';
+    }
+
+    return hash('sha256', json_encode($fingerprint, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+}
+
 function workspaceAccountingHasDueDateColumn(PDO $pdo): bool
 {
     return !empty(workspaceAccountingSchemaCapabilities($pdo)['due_date']);
