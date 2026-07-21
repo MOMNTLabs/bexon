@@ -85,11 +85,14 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 }
 
                 $periodKey = normalizeAccountingPeriodKey((string) ($_POST['period_key'] ?? ''));
-                setWorkspaceAccountingOpeningBalance(
+                // Compatibilidade com o endpoint antigo: informar um saldo real
+                // nunca deve reescrever o saldo de abertura do período. Mantemos a
+                // conferência auditável como um ajuste datado, tal como a interface.
+                createWorkspaceAccountingBalanceAdjustment(
                     $pdo,
                     $workspaceId,
                     $periodKey,
-                    $_POST['opening_balance_value'] ?? null,
+                    $_POST['actual_balance_value'] ?? $_POST['opening_balance_value'] ?? null,
                     (int) ($authUser['id'] ?? 0)
                 );
 
@@ -294,24 +297,6 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Registro inválido.');
                 }
 
-                if ((string) ($_POST['delete_confirmed'] ?? '') !== '1') {
-                    throw new RuntimeException('Confirme a exclusão do registro antes de continuar.');
-                }
-                $deleteScope = (string) ($_POST['delete_scope'] ?? 'future');
-
-                $entryWorkspaceStmt = $pdo->prepare(
-                    'SELECT workspace_id, entry_type, weekly_recurrence_id
-                     FROM workspace_accounting_entries
-                     WHERE id = :id
-                     LIMIT 1'
-                );
-                $entryWorkspaceStmt->execute([':id' => $entryId]);
-                $entryRow = $entryWorkspaceStmt->fetch(PDO::FETCH_ASSOC);
-                $entryWorkspaceId = (int) ($entryRow['workspace_id'] ?? 0);
-                if ($entryWorkspaceId <= 0 || $entryWorkspaceId !== $workspaceId) {
-                    throw new RuntimeException('Registro não encontrado.');
-                }
-
                 $existingEntry = workspaceAccountingEntryById($pdo, $workspaceId, $entryId);
                 if ($existingEntry === null) {
                     throw new RuntimeException('Registro não encontrado.');
@@ -395,7 +380,11 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['recurrence_start_period'] ?? null
                     );
                 }
-                if ($weeklyRecurrenceId > 0 && ((string) ($_POST['fast_status_only'] ?? '')) === '1') {
+                if (
+                    $entryType === 'income'
+                    && dueDateForStorage((string) ($existingEntry['due_date'] ?? '')) !== null
+                    && ((string) ($_POST['fast_status_only'] ?? '')) === '1'
+                ) {
                     $pauseAutoSettlementStmt = $pdo->prepare(
                         'UPDATE workspace_accounting_entries
                          SET auto_settlement_paused = :auto_settlement_paused,
@@ -894,6 +883,10 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                 if ($entryId <= 0) {
                     throw new RuntimeException('Registro inválido.');
                 }
+                if ((string) ($_POST['delete_confirmed'] ?? '') !== '1') {
+                    throw new RuntimeException('Confirme a exclusão do registro antes de continuar.');
+                }
+                $deleteScope = (string) ($_POST['delete_scope'] ?? 'single');
 
                 $entryWorkspaceStmt = $pdo->prepare(
                     'SELECT workspace_id
