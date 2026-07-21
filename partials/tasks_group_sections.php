@@ -494,7 +494,7 @@
 
                                     <label>
                                         <span>Descrição</span>
-                                        <textarea name="description" rows="3"><?= e((string) $task['description']) ?></textarea>
+                                        <textarea name="description" rows="3" maxlength="<?= e((string) taskDescriptionMaxLength()) ?>"><?= e((string) $task['description']) ?></textarea>
                                     </label>
                                 </div>
 
@@ -504,6 +504,7 @@
                                         <?php if (!empty($task['updated_at'])): ?>
                                             <span data-task-updated-at>Atualizado em <?= e((new DateTimeImmutable((string) $task['updated_at']))->format('d/m H:i')) ?></span>
                                         <?php endif; ?>
+                                        <span class="task-autosave-status" data-task-autosave-status role="status" aria-live="polite"></span>
                                     </div>
 
                                 </div>

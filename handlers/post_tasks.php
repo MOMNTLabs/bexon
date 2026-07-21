@@ -46,7 +46,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $title = normalizeTaskTitle((string) ($_POST['title'] ?? ''));
                 $titleTag = normalizeTaskTitleTag((string) ($_POST['title_tag'] ?? ''));
                 $titleTagColor = normalizeTaskTitleTagColor((string) ($_POST['title_tag_color'] ?? ''));
-                $description = trim((string) ($_POST['description'] ?? ''));
+                $description = taskDescriptionForStorage((string) ($_POST['description'] ?? ''));
                 $referenceLinksPosted = array_key_exists('reference_links_json', $_POST);
                 $referenceImagesPosted = array_key_exists('reference_images_json', $_POST);
                 $reviewFilePosted = array_key_exists('review_file_json', $_POST);
@@ -149,7 +149,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     if ($reviewFile !== null && !in_array($actorUserId, $assigneeIds, true)) {
                         throw new RuntimeException('Apenas o responsável pode alterar o arquivo de revisão.');
                     }
-                    $now = nowIso();
+                    $now = taskVersionTimestamp();
                     $completedAt = taskCompletedAtValueForStatusChange(
                         $status,
                         null,
@@ -336,7 +336,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingStatus = normalizeTaskStatus((string) ($existingTaskRow['status'] ?? 'todo'), $workspaceId);
                 $existingCompletedAt = trim((string) ($existingTaskRow['completed_at'] ?? ''));
                 $status = applyTaskSubtasksCompletionStatus($status, $subtasks, $workspaceId);
-                $updatedAt = nowIso();
+                $updatedAt = taskVersionTimestamp();
                 $completedAt = taskCompletedAtValueForStatusChange(
                     $status,
                     $existingStatus,
@@ -406,7 +406,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
 
                 if ($enforceTaskRevisionCheck && $stmt->rowCount() === 0) {
                     $currentVersionStmt = $pdo->prepare(
-                        'SELECT updated_at
+                        'SELECT title, description, updated_at
                          FROM tasks
                          WHERE id = :id
                            AND workspace_id = :workspace_id
@@ -416,7 +416,8 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                         ':id' => $taskId,
                         ':workspace_id' => $workspaceId,
                     ]);
-                    $latestUpdatedAt = trim((string) ($currentVersionStmt->fetchColumn() ?: ''));
+                    $latestTaskRow = $currentVersionStmt->fetch();
+                    $latestUpdatedAt = trim((string) ($latestTaskRow['updated_at'] ?? ''));
                     if ($latestUpdatedAt === '') {
                         throw new RuntimeException('Tarefa inválida.');
                     }
@@ -431,6 +432,10 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                                 'code' => 'task_conflict',
                                 'task' => [
                                     'id' => $taskId,
+                                    'title' => normalizeTaskTitle((string) ($latestTaskRow['title'] ?? '')),
+                                    'description' => normalizeTaskDescription(
+                                        (string) ($latestTaskRow['description'] ?? '')
+                                    ),
                                     'updated_at' => $latestUpdatedAt,
                                     'updated_at_label' => $latestUpdatedAtLabel,
                                 ],
@@ -447,7 +452,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingPriority = normalizeTaskPriority((string) ($existingTaskRow['priority'] ?? 'medium'));
                 $existingTitle = normalizeTaskTitle((string) ($existingTaskRow['title'] ?? ''));
                 $existingTitleTag = normalizeTaskTitleTag((string) ($existingTaskRow['title_tag'] ?? ''));
-                $existingDescription = trim((string) ($existingTaskRow['description'] ?? ''));
+                $existingDescription = normalizeTaskDescription((string) ($existingTaskRow['description'] ?? ''));
                 $existingDueDate = dueDateForStorage((string) ($existingTaskRow['due_date'] ?? ''));
                 $existingGroup = normalizeTaskGroupName((string) ($existingTaskRow['group_name'] ?? 'Geral'));
                 $existingOverdueFlag = ((int) ($existingTaskRow['overdue_flag'] ?? 0)) === 1 ? 1 : 0;
@@ -836,12 +841,9 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Tarefa inválida.');
                 }
 
-                $newDescription = trim((string) ($_POST['revision_description'] ?? ''));
+                $newDescription = taskDescriptionForStorage((string) ($_POST['revision_description'] ?? ''));
                 if ($newDescription === '') {
                     throw new RuntimeException('A nova descrição é obrigatória.');
-                }
-                if (mb_strlen($newDescription) > 8000) {
-                    throw new RuntimeException('A nova descrição deve ter no máximo 8000 caracteres.');
                 }
 
                 $taskStmt = $pdo->prepare(
@@ -870,12 +872,12 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('A solicitação de ajuste só pode ser feita em tarefas em revisão.');
                 }
 
-                $previousDescription = trim((string) ($taskRow['description'] ?? ''));
+                $previousDescription = normalizeTaskDescription((string) ($taskRow['description'] ?? ''));
                 if ($previousDescription === $newDescription) {
                     throw new RuntimeException('A nova descrição precisa ser diferente da descrição atual.');
                 }
 
-                $updatedAt = nowIso();
+                $updatedAt = taskVersionTimestamp();
                 $updateStmt = $pdo->prepare(
                     'UPDATE tasks
                      SET description = :description,
@@ -958,7 +960,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
 
                 $taskStatus = normalizeTaskStatus((string) ($taskRow['status'] ?? 'todo'), $workspaceId);
 
-                $currentDescription = trim((string) ($taskRow['description'] ?? ''));
+                $currentDescription = normalizeTaskDescription((string) ($taskRow['description'] ?? ''));
                 if ($currentDescription === '') {
                     throw new RuntimeException('A tarefa não possui uma solicitação ativa para remover.');
                 }
@@ -973,8 +975,10 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     $payload = is_array($historyEntry['payload'] ?? null)
                         ? $historyEntry['payload']
                         : [];
-                    $previousDescription = trim((string) ($payload['previous_description'] ?? ''));
-                    $newDescription = trim((string) ($payload['new_description'] ?? ''));
+                    $previousDescription = normalizeTaskDescription(
+                        (string) ($payload['previous_description'] ?? '')
+                    );
+                    $newDescription = normalizeTaskDescription((string) ($payload['new_description'] ?? ''));
                     if ($previousDescription === '' || $newDescription === '') {
                         continue;
                     }
@@ -993,12 +997,14 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Não há solicitação de ajuste ativa para remover.');
                 }
 
-                $restoredDescription = trim((string) ($activeRevision['previous_description'] ?? ''));
+                $restoredDescription = taskDescriptionForStorage(
+                    (string) ($activeRevision['previous_description'] ?? '')
+                );
                 if ($restoredDescription === '') {
                     throw new RuntimeException('Não foi possível restaurar a descrição anterior.');
                 }
 
-                $updatedAt = nowIso();
+                $updatedAt = taskVersionTimestamp();
                 $updateStmt = $pdo->prepare(
                     'UPDATE tasks
                      SET description = :description,
@@ -1084,7 +1090,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 $existingCompletedAt = trim((string) ($existingTaskRow['completed_at'] ?? ''));
                 $status = normalizeTaskStatus((string) ($_POST['status'] ?? 'todo'), $workspaceId);
                 $doneStatusKey = taskDoneStatusKey($workspaceId);
-                $updatedAt = nowIso();
+                $updatedAt = taskVersionTimestamp();
                 $completedAt = taskCompletedAtValueForStatusChange(
                     $status,
                     $existingStatus,
@@ -1198,7 +1204,7 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 }
 
                 $taskHistory = taskHistoryList($taskId, 40);
-                $taskDescription = trim((string) ($taskRow['description'] ?? ''));
+                $taskDescription = normalizeTaskDescription((string) ($taskRow['description'] ?? ''));
                 $hasActiveRevision = taskHasActiveRevisionRequest($taskDescription, $taskHistory);
 
                 if (requestExpectsJson()) {

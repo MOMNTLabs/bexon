@@ -1297,49 +1297,6 @@ body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link.i
     box-shadow: inset 2px 0 0 rgba(255, 247, 220, 0.78);
 }
 
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder {
-    margin-top: 6px;
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-trigger {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--bexon-gold-strong);
-    box-shadow: none;
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-trigger:hover,
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-trigger:focus-visible,
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder[open] > .workspace-sidebar-tool-adder-trigger {
-    border-color: rgba(var(--color-accent-500-rgb), 0.72);
-    background: rgba(var(--color-accent-500-rgb), 0.12);
-    color: #fff7dc;
-    transform: none;
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-menu {
-    border-color: rgba(var(--color-accent-500-rgb), 0.24);
-    background: linear-gradient(180deg, rgba(25, 32, 45, 0.97), rgba(18, 24, 36, 0.97));
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.34);
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-option {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--ui-sidebar-text);
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-option:hover,
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-option:focus-visible {
-    border-color: rgba(var(--color-accent-500-rgb), 0.54);
-    background: rgba(var(--color-accent-500-rgb), 0.14);
-}
-
-body.is-dashboard .users-sidebar .workspace-sidebar-tool-adder-empty {
-    border-color: rgba(255, 255, 255, 0.18);
-    color: rgba(240, 244, 251, 0.86);
-}
-
 body.is-dashboard .users-sidebar .workspace-sidebar-plan-card {
     border: 1px solid rgba(var(--sidebar-plan-accent-rgb), 0.24);
     background:

@@ -1889,12 +1889,13 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                             class="task-detail-edit-description-editor task-create-description-editor"
                             data-create-task-description-editor
                             contenteditable="true"
+                            data-description-maxlength="<?= e((string) taskDescriptionMaxLength()) ?>"
                             role="textbox"
                             aria-multiline="true"
                             aria-label="Descri&ccedil;&atilde;o da tarefa"
                         ></div>
                     </div>
-                    <textarea name="description" rows="5" data-create-task-description hidden></textarea>
+                    <textarea name="description" rows="5" maxlength="<?= e((string) taskDescriptionMaxLength()) ?>" data-create-task-description hidden></textarea>
                 </div>
 
                 <div class="task-detail-edit-images-field">
@@ -3014,12 +3015,13 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                     class="task-detail-edit-description-editor"
                                     data-task-detail-edit-description-editor
                                     contenteditable="true"
+                                    data-description-maxlength="<?= e((string) taskDescriptionMaxLength()) ?>"
                                     role="textbox"
                                     aria-multiline="true"
                                     aria-label="Descri&ccedil;&atilde;o da tarefa"
                                 ></div>
                             </div>
-                            <textarea rows="5" data-task-detail-edit-description hidden></textarea>
+                            <textarea rows="5" maxlength="<?= e((string) taskDescriptionMaxLength()) ?>" data-task-detail-edit-description hidden></textarea>
                         </div>
 
                         <div class="task-detail-edit-images-field">

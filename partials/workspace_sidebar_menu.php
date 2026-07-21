@@ -5,14 +5,7 @@ $workspaceSidebarConfig = is_array($workspaceSidebarConfig ?? null)
 $enabledSidebarTools = is_array($workspaceSidebarConfig['enabled'] ?? null)
     ? $workspaceSidebarConfig['enabled']
     : ['tasks'];
-$availableSidebarTools = is_array($workspaceSidebarConfig['available_to_add'] ?? null)
-    ? $workspaceSidebarConfig['available_to_add']
-    : [];
-$sidebarOptionalToolLabels = is_array($workspaceSidebarConfig['optional_labels'] ?? null)
-    ? $workspaceSidebarConfig['optional_labels']
-    : workspaceSidebarOptionalToolLabels();
 $currentSidebarView = normalizeDashboardViewKey((string) ($_GET['view'] ?? ''));
-$sidebarToolAddRedirectPath = dashboardPath($currentSidebarView !== '' ? $currentSidebarView : 'overview');
 $sidebarTaskGroups = array_values(array_filter(
     is_array($taskGroups ?? null) ? $taskGroups : [],
     static fn ($groupName): bool => trim((string) $groupName) !== ''
@@ -168,27 +161,3 @@ $sidebarTaskAllProjectsActive = $currentSidebarView === 'tasks' && $sidebarTaskS
         <?php endif; ?>
     <?php endforeach; ?>
 </nav>
-
-<?php if (!empty($canManageWorkspace) && $availableSidebarTools !== []): ?>
-    <details class="workspace-sidebar-tool-adder">
-        <summary
-            class="workspace-sidebar-tool-adder-trigger"
-            aria-label="Adicionar ferramenta ao sidebar"
-            title="Adicionar ferramenta"
-        >
-            <span aria-hidden="true">+</span>
-        </summary>
-        <div class="workspace-sidebar-tool-adder-menu">
-            <?php foreach ($availableSidebarTools as $sidebarToolKey): ?>
-                <?php $toolLabel = (string) ($sidebarOptionalToolLabels[$sidebarToolKey] ?? $sidebarToolKey); ?>
-                <form method="post" class="workspace-sidebar-tool-adder-form">
-                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                    <input type="hidden" name="action" value="workspace_add_sidebar_tool">
-                    <input type="hidden" name="sidebar_tool" value="<?= e((string) $sidebarToolKey) ?>">
-                    <input type="hidden" name="redirect_to" value="<?= e($sidebarToolAddRedirectPath) ?>">
-                    <button type="submit" class="workspace-sidebar-tool-adder-option"><?= e($toolLabel) ?></button>
-                </form>
-            <?php endforeach; ?>
-        </div>
-    </details>
-<?php endif; ?>

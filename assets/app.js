@@ -661,7 +661,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const closeOpenWorkspaceSidebarPickers = (targetNode = null) => {
     document
-      .querySelectorAll("details.workspace-sidebar-picker[open], details.workspace-sidebar-tool-adder[open]")
+      .querySelectorAll("details.workspace-sidebar-picker[open]")
       .forEach((details) => {
         if (!(details instanceof HTMLDetailsElement)) return;
         if (targetNode instanceof Node && details.contains(targetNode)) return;
@@ -1472,6 +1472,42 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  document.addEventListener("dragover", (event) => {
+    const target = event.target;
+    const editor = getClosestFromEventTarget(
+      target,
+      "[data-task-detail-edit-description-editor], [data-create-task-description-editor]"
+    );
+    if (editor instanceof HTMLElement) {
+      event.preventDefault();
+    }
+  });
+
+  document.addEventListener("drop", (event) => {
+    const target = event.target;
+    const taskDetailEditor = getClosestFromEventTarget(
+      target,
+      "[data-task-detail-edit-description-editor]"
+    );
+    if (taskDetailEditor instanceof HTMLElement) {
+      handleDescriptionEditorDrop(
+        event,
+        taskDetailEditDescriptionEditor,
+        taskDetailEditDescription,
+        syncTaskDetailDescriptionToolbar
+      );
+      return;
+    }
+
+    const createEditor = getClosestFromEventTarget(
+      target,
+      "[data-create-task-description-editor]"
+    );
+    if (createEditor instanceof HTMLElement) {
+      handleDescriptionEditorDrop(event, createTaskDescriptionEditor, createTaskDescription);
+    }
+  });
+
   document.addEventListener("focusin", (event) => {
     const target = event.target;
     const taskDetailDescriptionEditorTarget = getClosestFromEventTarget(
@@ -1800,6 +1836,8 @@ window.addEventListener("DOMContentLoaded", () => {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
 
+  const taskDescriptionMaxLength = 8000;
+
   const formatTaskDescriptionInlineHtml = (value) => {
     const withBold = escapeHtml(value).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
     return withBold.replace(/_([^_\n]+)_/g, "<em>$1</em>");
@@ -1859,21 +1897,21 @@ window.addEventListener("DOMContentLoaded", () => {
     };
 
     lines.forEach((rawLine) => {
-      const line = rawLine.trim();
-      if (!line) {
+      const trimmedLine = rawLine.trim();
+      if (!trimmedLine) {
         flushList();
         paragraphLines.push("");
         return;
       }
 
-      if (isTaskDescriptionSeparatorLine(line)) {
+      if (isTaskDescriptionSeparatorLine(trimmedLine)) {
         flushList();
         flushParagraph();
         parts.push('<hr class="task-description-divider">');
         return;
       }
 
-      const listItemText = getTaskDescriptionListItemText(line);
+      const listItemText = getTaskDescriptionListItemText(trimmedLine);
       if (listItemText) {
         flushParagraph();
         listItems.push(listItemText);
@@ -1881,7 +1919,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       flushList();
-      paragraphLines.push(line);
+      paragraphLines.push(rawLine);
     });
 
     flushList();
@@ -2118,11 +2156,17 @@ window.addEventListener("DOMContentLoaded", () => {
     const text = String(textarea.value || "");
     if (!text.trim()) {
       editor.innerHTML = "";
+      updateDescriptionLengthIndicator(editor, 0, descriptionMaxLengthForEditor(editor));
       return;
     }
 
     editor.innerHTML = formatTaskDescriptionHtml(text);
     normalizeDescriptionEditorMarkup(editor);
+    updateDescriptionLengthIndicator(
+      editor,
+      descriptionCharacterCount(text),
+      descriptionMaxLengthForEditor(editor)
+    );
   };
 
   const isDescriptionEditorEffectivelyEmpty = (editor) => {
@@ -2153,6 +2197,31 @@ window.addEventListener("DOMContentLoaded", () => {
     node.replaceWith(replacement);
     return replacement;
   };
+
+  const allowedDescriptionEditorTags = new Set([
+    "BR",
+    "DIV",
+    "EM",
+    "HR",
+    "LI",
+    "OL",
+    "P",
+    "SPAN",
+    "STRONG",
+    "UL",
+  ]);
+  const discardedDescriptionEditorTags = new Set([
+    "APPLET",
+    "AUDIO",
+    "EMBED",
+    "IFRAME",
+    "IMG",
+    "OBJECT",
+    "SCRIPT",
+    "STYLE",
+    "SVG",
+    "VIDEO",
+  ]);
 
   const normalizeDescriptionEditorMarkup = (editor) => {
     if (!(editor instanceof HTMLElement)) return;
@@ -2191,7 +2260,22 @@ window.addEventListener("DOMContentLoaded", () => {
         currentNode = replaceDescriptionEditorNode(currentNode, "em") || currentNode;
       }
 
-      currentNode.removeAttribute("style");
+      if (!allowedDescriptionEditorTags.has(currentNode.tagName)) {
+        if (discardedDescriptionEditorTags.has(currentNode.tagName)) {
+          currentNode.remove();
+        } else {
+          currentNode.replaceWith(...Array.from(currentNode.childNodes));
+        }
+        return;
+      }
+
+      const wasEmptyDescriptionLine =
+        currentNode.tagName === "SPAN" && currentNode.classList.contains("is-empty");
+      const wasDescriptionLine =
+        currentNode.tagName === "SPAN" && currentNode.classList.contains("task-description-line");
+      Array.from(currentNode.attributes).forEach((attribute) => {
+        currentNode.removeAttribute(attribute.name);
+      });
       if (currentNode.tagName === "HR") {
         currentNode.className = "task-description-divider";
         return;
@@ -2207,8 +2291,8 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      if (currentNode.tagName === "SPAN" && currentNode.classList.contains("task-description-line")) {
-        currentNode.className = currentNode.classList.contains("is-empty")
+      if (currentNode.tagName === "SPAN" && wasDescriptionLine) {
+        currentNode.className = wasEmptyDescriptionLine
           ? "task-description-line is-empty"
           : "task-description-line";
         return;
@@ -2436,9 +2520,68 @@ window.addEventListener("DOMContentLoaded", () => {
     return lines.join("\n");
   };
 
+  const descriptionCharacterCount = (value) => Array.from(String(value || "")).length;
+
+  const descriptionMaxLengthForEditor = (editor) => {
+    if (!(editor instanceof HTMLElement)) return taskDescriptionMaxLength;
+    const configured = Number.parseInt(String(editor.dataset.descriptionMaxlength || ""), 10);
+    return Number.isFinite(configured) && configured > 0 ? configured : taskDescriptionMaxLength;
+  };
+
+  const updateDescriptionLengthIndicator = (editor, count, maxLength) => {
+    if (!(editor instanceof HTMLElement)) return;
+    const wrap = editor.closest(".task-detail-edit-description-wrap");
+    if (!(wrap instanceof HTMLElement)) return;
+
+    let indicator = wrap.querySelector("[data-description-length-indicator]");
+    if (!(indicator instanceof HTMLElement)) {
+      indicator = document.createElement("span");
+      indicator.className = "task-description-length-indicator";
+      indicator.dataset.descriptionLengthIndicator = "";
+      indicator.setAttribute("aria-live", "polite");
+      wrap.append(indicator);
+    }
+
+    const shouldShow = count >= Math.floor(maxLength * 0.9);
+    indicator.hidden = !shouldShow;
+    indicator.classList.toggle("is-limit", count >= maxLength);
+    indicator.textContent = shouldShow
+      ? `${count.toLocaleString("pt-BR")} / ${maxLength.toLocaleString("pt-BR")}`
+      : "";
+  };
+
+  const enforceDescriptionEditorLimit = (textarea, editor, value) => {
+    const maxLength = descriptionMaxLengthForEditor(editor);
+    const characters = Array.from(String(value || ""));
+    if (characters.length <= maxLength) {
+      updateDescriptionLengthIndicator(editor, characters.length, maxLength);
+      if (editor instanceof HTMLElement) {
+        delete editor.dataset.descriptionLimitReached;
+      }
+      return String(value || "");
+    }
+
+    const limited = characters.slice(0, maxLength).join("");
+    if (textarea instanceof HTMLTextAreaElement) {
+      textarea.value = limited;
+    }
+    const shouldNotify = !(editor instanceof HTMLElement) || editor.dataset.descriptionLimitReached !== "1";
+    if (editor instanceof HTMLElement) {
+      editor.dataset.descriptionLimitReached = "1";
+      syncDescriptionEditorFromTextarea(textarea, editor);
+      setSelectionAtElementEnd(editor);
+    }
+    updateDescriptionLengthIndicator(editor, maxLength, maxLength);
+    if (shouldNotify) {
+      showClientFlash("error", `A descrição pode ter no máximo ${maxLength.toLocaleString("pt-BR")} caracteres.`);
+    }
+    return limited;
+  };
+
   const syncDescriptionTextareaFromEditor = (textarea, editor) => {
     if (!(textarea instanceof HTMLTextAreaElement)) return;
-    textarea.value = descriptionTextFromEditor(editor);
+    const description = descriptionTextFromEditor(editor);
+    textarea.value = enforceDescriptionEditorLimit(textarea, editor, description);
   };
 
   const normalizeDescriptionClipboardText = (value) =>
@@ -2446,6 +2589,7 @@ window.addEventListener("DOMContentLoaded", () => {
       .replace(/\r\n?/g, "\n")
       .replace(/[\u2028\u2029]/g, "\n")
       .replace(/\u00a0/g, " ")
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
       .replace(/[\u200B-\u200D\uFEFF]/g, "");
 
   const insertPlainDescriptionText = (editor, textarea, value) => {
@@ -2513,10 +2657,36 @@ window.addEventListener("DOMContentLoaded", () => {
       event.clipboardData?.getData("text/plain") ||
       event.clipboardData?.getData("text") ||
       "";
-    if (!pastedText) return false;
-
     event.preventDefault();
+    if (!pastedText) {
+      showClientFlash("error", "A descrição aceita apenas texto. Use a área de mídias para arquivos.");
+      return true;
+    }
+
     const inserted = insertPlainDescriptionText(editor, textarea, pastedText);
+    if (inserted && typeof afterSync === "function") {
+      afterSync();
+    }
+    return inserted;
+  };
+
+  const handleDescriptionEditorDrop = (event, editor, textarea, afterSync) => {
+    if (!(editor instanceof HTMLElement) || !(textarea instanceof HTMLTextAreaElement)) {
+      return false;
+    }
+
+    const droppedText =
+      event.dataTransfer?.getData("text/plain") ||
+      event.dataTransfer?.getData("text") ||
+      "";
+    event.preventDefault();
+    if (!droppedText) {
+      showClientFlash("error", "A descrição aceita apenas texto. Use a área de mídias para arquivos.");
+      return true;
+    }
+
+    collapseDescriptionSelectionAtPoint(editor, event.clientX, event.clientY);
+    const inserted = insertPlainDescriptionText(editor, textarea, droppedText);
     if (inserted && typeof afterSync === "function") {
       afterSync();
     }
@@ -8621,6 +8791,48 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   const autosaveTimers = new WeakMap();
+  const taskAutosaveStatusTimers = new WeakMap();
+  const setTaskAutosaveStatus = (form, state = "", label = "") => {
+    if (!(form instanceof HTMLFormElement)) return;
+    const taskItem = form.closest("[data-task-item]");
+    if (!(taskItem instanceof HTMLElement)) return;
+
+    let status = taskItem.querySelector("[data-task-autosave-status]");
+    if (!(status instanceof HTMLElement)) {
+      const meta = taskItem.querySelector(".task-line-meta");
+      if (!(meta instanceof HTMLElement)) return;
+      status = document.createElement("span");
+      status.className = "task-autosave-status";
+      status.dataset.taskAutosaveStatus = "";
+      status.setAttribute("role", "status");
+      status.setAttribute("aria-live", "polite");
+      meta.append(status);
+    }
+
+    const previousTimer = taskAutosaveStatusTimers.get(form);
+    if (previousTimer) {
+      window.clearTimeout(previousTimer);
+      taskAutosaveStatusTimers.delete(form);
+    }
+
+    status.classList.remove("is-saving", "is-saved", "is-error", "is-conflict");
+    if (state) {
+      status.classList.add(`is-${state}`);
+    }
+    status.textContent = label;
+
+    if (state === "saved") {
+      const timer = window.setTimeout(() => {
+        if (status.isConnected) {
+          status.classList.remove("is-saved");
+          status.textContent = "";
+        }
+        taskAutosaveStatusTimers.delete(form);
+      }, 1600);
+      taskAutosaveStatusTimers.set(form, timer);
+    }
+  };
+
   const submitTaskAutosave = async (form) => {
     if (!(form instanceof HTMLFormElement)) return;
     if (!form.isConnected) return false;
@@ -8628,8 +8840,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
     form.dataset.autosaveSubmitting = "1";
     form.classList.add("is-saving");
+    setTaskAutosaveStatus(form, "saving", "Salvando…");
     let success = false;
     let shouldProcessPendingAutosave = true;
+    let conflictError = null;
 
     try {
       prepareTaskReviewFileFieldForSubmit(form);
@@ -8842,11 +9056,9 @@ window.addEventListener("DOMContentLoaded", () => {
       success = true;
     } catch (error) {
       if (isTaskConflictError(error)) {
+        conflictError = error;
         const payload = error.payload && typeof error.payload === "object" ? error.payload : {};
         const conflictTask = payload.task && typeof payload.task === "object" ? payload.task : {};
-        if (typeof conflictTask.updated_at === "string") {
-          syncTaskExpectedUpdatedAt(form, conflictTask.updated_at);
-        }
         if (typeof conflictTask.updated_at_label === "string") {
           refreshTaskUpdatedAtMeta(form, conflictTask.updated_at_label);
         }
@@ -8854,7 +9066,9 @@ window.addEventListener("DOMContentLoaded", () => {
         delete form.dataset.autosavePending;
       }
       form.dataset.autosaveError = "1";
-      showClientFlash("error", error instanceof Error ? error.message : "Falha ao salvar tarefa.");
+      if (!conflictError) {
+        showClientFlash("error", error instanceof Error ? error.message : "Falha ao salvar tarefa.");
+      }
     } finally {
       if (success) {
         const referenceImagesField = form.querySelector("[data-task-reference-images-json]");
@@ -8871,6 +9085,18 @@ window.addEventListener("DOMContentLoaded", () => {
       const hasPendingAutosave = shouldProcessPendingAutosave && form.dataset.autosavePending === "1";
       if (success && !hasPendingAutosave) {
         delete form.dataset.autosaveDirty;
+        setTaskAutosaveStatus(form, "saved", "Salvo");
+      } else if (success && hasPendingAutosave) {
+        setTaskAutosaveStatus(form, "saving", "Salvando…");
+      } else if (conflictError) {
+        setTaskAutosaveStatus(form, "conflict", "Revisar conflito");
+        window.setTimeout(() => {
+          if (form.isConnected) {
+            openTaskConflictModal(form, conflictError);
+          }
+        }, 0);
+      } else {
+        setTaskAutosaveStatus(form, "error", "Erro ao salvar");
       }
       if (hasPendingAutosave) {
         delete form.dataset.autosavePending;
@@ -9188,6 +9414,7 @@ window.addEventListener("DOMContentLoaded", () => {
     confirmModalSubmit.hidden = true;
     const choices = document.createElement("div");
     choices.className = "accounting-delete-scope-options";
+    choices.dataset.confirmModalDynamic = "";
     allowedScopes.forEach((scope) => {
       const choice = document.createElement("button");
       choice.type = "button";
@@ -16987,6 +17214,13 @@ window.addEventListener("DOMContentLoaded", () => {
     document.body.classList.toggle("modal-open", hasOpenModal);
   };
 
+  const clearConfirmModalDynamicContent = () => {
+    if (!(confirmModal instanceof HTMLElement)) return;
+    confirmModal.querySelectorAll("[data-confirm-modal-dynamic]").forEach((element) => {
+      element.remove();
+    });
+  };
+
   const closeConfirmModal = ({ skipOnClose = false } = {}) => {
     if (!confirmModal) return;
     confirmModal.hidden = true;
@@ -17002,6 +17236,7 @@ window.addEventListener("DOMContentLoaded", () => {
       confirmModalSubmit.textContent = "Confirmar";
       confirmModalSubmit.classList.remove("is-loading");
     }
+    clearConfirmModalDynamicContent();
     syncBodyModalLock();
     if (typeof closeAction === "function") {
       closeAction();
@@ -17019,6 +17254,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }) => {
     if (!confirmModal) return;
 
+    clearConfirmModalDynamicContent();
     if (confirmModalTitle) confirmModalTitle.textContent = title;
     if (confirmModalMessage) confirmModalMessage.textContent = message;
     if (confirmModalCancel instanceof HTMLButtonElement) {
@@ -17038,6 +17274,96 @@ window.addEventListener("DOMContentLoaded", () => {
     confirmModalCloseAction = typeof onClose === "function" ? onClose : null;
     confirmModal.hidden = false;
     syncBodyModalLock();
+  };
+
+  const openTaskConflictModal = (form, error) => {
+    if (!(form instanceof HTMLFormElement)) return;
+    const payload = error?.payload && typeof error.payload === "object" ? error.payload : {};
+    const latestTask = payload.task && typeof payload.task === "object" ? payload.task : {};
+    const latestUpdatedAt = String(latestTask.updated_at || "").trim();
+    if (!latestUpdatedAt) {
+      showClientFlash("error", "Não foi possível carregar a versão mais recente da tarefa.");
+      return;
+    }
+
+    const taskId = Number.parseInt(String(latestTask.id || "0"), 10) || 0;
+    const localDescriptionField = form.querySelector('textarea[name="description"]');
+    const localDescription =
+      localDescriptionField instanceof HTMLTextAreaElement ? localDescriptionField.value || "" : "";
+    const latestDescription = String(latestTask.description || "");
+    const taskTitle = String(
+      latestTask.title || form.querySelector('input[name="title"]')?.value || "esta tarefa"
+    ).trim();
+
+    openConfirmModal({
+      title: "Alterações simultâneas",
+      message: `${taskTitle} foi alterada em outra sessão. A comparação abaixo mostra a descrição; manter sua versão substituirá também os demais dados mais recentes.`,
+      confirmLabel: "Manter minha versão",
+      cancelLabel: "Continuar editando",
+      onConfirm: async () => {
+        syncTaskExpectedUpdatedAt(form, latestUpdatedAt);
+        delete form.dataset.autosaveError;
+        form.dataset.autosaveDirty = "1";
+        const saved = await submitTaskAutosave(form);
+        if (!saved) {
+          throw new Error("A tarefa mudou novamente antes da confirmação.");
+        }
+      },
+    });
+
+    if (!(confirmModalMessage instanceof HTMLElement)) return;
+
+    const compare = document.createElement("details");
+    compare.className = "task-conflict-compare";
+    compare.dataset.confirmModalDynamic = "";
+    const compareSummary = document.createElement("summary");
+    compareSummary.textContent = "Comparar descrições";
+    const compareGrid = document.createElement("div");
+    compareGrid.className = "task-conflict-compare-grid";
+
+    const appendVersion = (label, description) => {
+      const version = document.createElement("section");
+      const heading = document.createElement("strong");
+      heading.textContent = label;
+      const content = document.createElement("pre");
+      content.textContent = String(description || "").trim() || "Sem descrição.";
+      version.append(heading, content);
+      compareGrid.append(version);
+    };
+    appendVersion("Minha versão", localDescription);
+    appendVersion("Versão mais recente", latestDescription);
+    compare.append(compareSummary, compareGrid);
+
+    const useLatestButton = document.createElement("button");
+    useLatestButton.type = "button";
+    useLatestButton.className = "btn btn-mini btn-ghost task-conflict-use-latest";
+    useLatestButton.dataset.confirmModalDynamic = "";
+    useLatestButton.textContent = "Carregar versão mais recente";
+    useLatestButton.addEventListener("click", async () => {
+      useLatestButton.disabled = true;
+      const detailWasOpen =
+        taskDetailModal instanceof HTMLElement &&
+        !taskDetailModal.hidden &&
+        taskDetailContext?.form === form;
+      closeConfirmModal({ skipOnClose: true });
+      if (detailWasOpen) {
+        closeTaskDetailModal({ updateUrl: false });
+      }
+      try {
+        await refreshTasksSectionFromServer({ showLoading: false });
+        if (detailWasOpen && taskId > 0) {
+          const refreshedTaskItem = document.getElementById(`task-${taskId}`);
+          if (refreshedTaskItem instanceof HTMLElement) {
+            openTaskDetailModal(refreshedTaskItem, { updateUrl: false });
+          }
+        }
+        showClientFlash("success", "Versão mais recente carregada.");
+      } catch (_error) {
+        showClientFlash("error", "Não foi possível carregar a versão mais recente.");
+      }
+    });
+
+    confirmModalMessage.after(compare, useLatestButton);
   };
 
   const submitTaskHistoryForm = async (historyForm) => {

@@ -14203,6 +14203,43 @@ function normalizeTaskTitle(string $value): string
     return uppercaseFirstCharacter($value);
 }
 
+function taskDescriptionMaxLength(): int
+{
+    return 8000;
+}
+
+function taskVersionTimestamp(): string
+{
+    return (new DateTimeImmutable())->format('Y-m-d H:i:s.u');
+}
+
+function normalizeTaskDescription(string $value): string
+{
+    $value = str_replace(["\r\n", "\r", "\u{2028}", "\u{2029}"], "\n", $value);
+    $value = str_replace("\u{00A0}", ' ', $value);
+    $value = preg_replace('/[\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}\x{007F}]/u', '', $value) ?? $value;
+    $value = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $value) ?? $value;
+    if (trim($value) === '') {
+        return '';
+    }
+    $value = preg_replace('/\A(?:[ \t]*\n)+/u', '', $value) ?? $value;
+    $value = preg_replace('/(?:\n[ \t]*)+\z/u', '', $value) ?? $value;
+
+    return $value;
+}
+
+function taskDescriptionForStorage(string $value): string
+{
+    $description = normalizeTaskDescription($value);
+    if (mb_strlen($description) > taskDescriptionMaxLength()) {
+        throw new RuntimeException(
+            'A descrição deve ter no máximo ' . taskDescriptionMaxLength() . ' caracteres.'
+        );
+    }
+
+    return $description;
+}
+
 function normalizeTaskTitleTag(string $value): string
 {
     $value = trim($value);
