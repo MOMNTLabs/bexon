@@ -10481,6 +10481,7 @@ window.addEventListener("DOMContentLoaded", () => {
       normalized === "vault" ||
       normalized === "inventory" ||
       normalized === "accounting" ||
+      normalized === "documents" ||
       normalized === "users"
       ? normalized
       : "";
@@ -21460,4 +21461,203 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   startTaskNotificationsPolling();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const root = document.querySelector("[data-documents-root]");
+  if (!(root instanceof HTMLElement)) return;
+
+  const titleInput = root.querySelector("[data-document-title]");
+  const editor = root.querySelector("[data-document-editor]");
+  const saveState = root.querySelector("[data-document-save-state]");
+  let saveTimer = 0;
+  let saving = false;
+  let isDirty = false;
+
+  const setSaveState = (label, tone = "") => {
+    if (!(saveState instanceof HTMLElement)) return;
+    saveState.textContent = label;
+    saveState.dataset.tone = tone;
+  };
+
+  const saveDocument = async () => {
+    if (
+      saving ||
+      !isDirty ||
+      !(titleInput instanceof HTMLInputElement) ||
+      !(editor instanceof HTMLElement)
+    ) {
+      return;
+    }
+
+    const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+    const revision = Number.parseInt(root.dataset.documentRevision || "0", 10) || 0;
+    const csrfToken = String(root.dataset.documentCsrf || "");
+    if (documentId <= 0 || revision <= 0 || !csrfToken) return;
+
+    saving = true;
+    setSaveState("Salvando…");
+    const payload = new URLSearchParams({
+      action: "update_workspace_document",
+      csrf_token: csrfToken,
+      document_id: String(documentId),
+      expected_revision: String(revision),
+      title: titleInput.value,
+      content_html: editor.innerHTML,
+    });
+
+    try {
+      const response = await fetch(window.location.pathname, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: payload.toString(),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) {
+        if (result?.code === "document_conflict") {
+          setSaveState("Alterado por outra pessoa", "error");
+          return;
+        }
+        throw new Error(String(result?.error || "Não foi possível salvar o documento."));
+      }
+
+      const documentData = result.document || {};
+      root.dataset.documentRevision = String(documentData.revision || revision + 1);
+      isDirty = false;
+      setSaveState("Salvo");
+    } catch (error) {
+      setSaveState("Não salvo", "error");
+      console.error(error);
+    } finally {
+      saving = false;
+      if (isDirty) scheduleSave();
+    }
+  };
+
+  const scheduleSave = () => {
+    if (!(titleInput instanceof HTMLInputElement) || !(editor instanceof HTMLElement)) return;
+    isDirty = true;
+    window.clearTimeout(saveTimer);
+    setSaveState("Alterações não salvas");
+    saveTimer = window.setTimeout(() => void saveDocument(), 850);
+  };
+
+  if (titleInput instanceof HTMLInputElement) {
+    titleInput.addEventListener("input", scheduleSave);
+    titleInput.addEventListener("blur", () => void saveDocument());
+  }
+  if (editor instanceof HTMLElement) {
+    editor.addEventListener("input", scheduleSave);
+    editor.addEventListener("blur", () => void saveDocument());
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const text = event.clipboardData?.getData("text/plain") || "";
+      document.execCommand("insertText", false, text);
+    });
+  }
+
+  document.addEventListener("click", async (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const commandButton = target.closest("[data-document-command]");
+    if (commandButton instanceof HTMLButtonElement && editor instanceof HTMLElement) {
+      event.preventDefault();
+      editor.focus();
+      const command = String(commandButton.dataset.documentCommand || "");
+      let value = String(commandButton.dataset.documentCommandValue || "");
+      if (command === "createLink") {
+        value = window.prompt("Cole o link", "https://") || "";
+        if (!/^https?:\/\//i.test(value) && !/^mailto:/i.test(value)) return;
+      }
+      document.execCommand(command, false, value || null);
+      scheduleSave();
+      return;
+    }
+
+    const createButton = target.closest("[data-document-create]");
+    if (createButton instanceof HTMLElement) {
+      event.preventDefault();
+      const csrfToken = String(root.dataset.documentCsrf || "");
+      if (!csrfToken) return;
+      createButton.setAttribute("aria-busy", "true");
+      try {
+        const response = await fetch(window.location.pathname, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: new URLSearchParams({ action: "create_workspace_document", csrf_token: csrfToken }).toString(),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok || !result.redirect_path) {
+          throw new Error(String(result?.error || "Não foi possível criar o documento."));
+        }
+        window.location.assign(String(result.redirect_path));
+      } catch (error) {
+        console.error(error);
+        window.alert("Não foi possível criar o documento agora.");
+      } finally {
+        createButton.removeAttribute("aria-busy");
+      }
+      return;
+    }
+
+    const trashButton = target.closest("[data-document-trash]");
+    if (trashButton instanceof HTMLElement) {
+      event.preventDefault();
+      if (!window.confirm("Mover este documento para a lixeira?")) return;
+      const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+      const csrfToken = String(root.dataset.documentCsrf || "");
+      if (documentId <= 0 || !csrfToken) return;
+      try {
+        const response = await fetch(window.location.pathname, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: new URLSearchParams({
+            action: "trash_workspace_document",
+            csrf_token: csrfToken,
+            document_id: String(documentId),
+          }).toString(),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok || !result.redirect_path) {
+          throw new Error(String(result?.error || "Não foi possível mover o documento."));
+        }
+        window.location.assign(String(result.redirect_path));
+      } catch (error) {
+        console.error(error);
+        window.alert("Não foi possível mover o documento para a lixeira.");
+      }
+    }
+  });
+
+  const searchInput = root.querySelector("[data-document-search]");
+  if (searchInput instanceof HTMLInputElement) {
+    searchInput.addEventListener("input", () => {
+      const query = searchInput.value.trim().toLocaleLowerCase();
+      root.querySelectorAll("[data-document-list-item]").forEach((item) => {
+        if (!(item instanceof HTMLElement)) return;
+        const source = String(item.dataset.documentSearchText || "");
+        item.hidden = query !== "" && !source.includes(query);
+      });
+    });
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (isDirty) void saveDocument();
+  });
 });

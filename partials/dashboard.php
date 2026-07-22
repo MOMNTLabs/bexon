@@ -859,6 +859,8 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         <section class="tasklist-wrap panel" id="tasks" data-dashboard-view-panel="tasks"<?= $serverSelectedDashboardView !== 'tasks' ? ' hidden' : '' ?>>
             <?php require __DIR__ . '/tasks_panel_content.php'; ?>
         </section>
+
+        <?php require __DIR__ . '/documents_panel.php'; ?>
         <script>
             (() => {
                 const workspaceId = String(document.body?.dataset?.workspaceId || "").trim() || "0";

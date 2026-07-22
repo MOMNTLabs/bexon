@@ -64,6 +64,7 @@ require_once __DIR__ . '/handlers/post_tasks.php';
 require_once __DIR__ . '/handlers/post_vault.php';
 require_once __DIR__ . '/handlers/post_dues.php';
 require_once __DIR__ . '/handlers/post_inventory.php';
+require_once __DIR__ . '/handlers/post_documents.php';
 require_once __DIR__ . '/handlers/post_accounting.php';
 require_once __DIR__ . '/handlers/post_task_groups.php';
 require_once __DIR__ . '/handlers/dashboard_overview.php';
@@ -421,6 +422,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (handleInventoryPostAction($pdo, $action)) {
                     break;
                 }
+                if (handleDocumentsPostAction($pdo, $action)) {
+                    break;
+                }
                 if (handleAccountingPostAction($pdo, $action)) {
                     break;
                 }
@@ -675,6 +679,23 @@ if ($currentUser && $currentWorkspaceId !== null) {
     }
 }
 $inventoryEntriesByGroup = $currentUser ? inventoryEntriesByGroup($inventoryEntries, $inventoryGroups) : [];
+$documentsSearch = trim((string) ($_GET['document_search'] ?? ''));
+$documents = [];
+$selectedDocument = null;
+$selectedDocumentId = max(0, (int) ($_GET['document'] ?? 0));
+if ($currentUser && $currentWorkspaceId !== null) {
+    try {
+        $documents = workspaceDocumentsList($currentWorkspaceId, false, $documentsSearch);
+        if ($selectedDocumentId > 0) {
+            $selectedDocument = workspaceDocumentById($currentWorkspaceId, $selectedDocumentId);
+        }
+        if ($selectedDocument === null && $documents) {
+            $selectedDocument = $documents[0];
+        }
+    } catch (Throwable $e) {
+        $appendDashboardLoadError('Não foi possível carregar os documentos deste workspace.', $e);
+    }
+}
 $accountingCycleCloseDay = ($currentUser && $currentWorkspaceId !== null)
     ? workspaceAccountingCycleCloseDay($currentWorkspaceId, $currentWorkspace)
     : 0;

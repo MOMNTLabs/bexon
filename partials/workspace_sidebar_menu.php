@@ -173,6 +173,24 @@ $sidebarTaskInboxActive = $currentSidebarView === 'tasks' && $sidebarTaskScope =
                 </span>
                 <span class="sidebar-view-toggle-label">Contabilidade</span>
             </button>
+        <?php elseif ($sidebarToolView === 'documents'): ?>
+            <button
+                type="button"
+                class="sidebar-view-toggle"
+                data-dashboard-view-toggle
+                data-view="documents"
+                aria-pressed="false"
+            >
+                <span class="sidebar-view-toggle-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M7 3.5h7l3.5 3.5v13.5H7z"></path>
+                        <path d="M14 3.5V7h3.5"></path>
+                        <path d="M10 11h5"></path>
+                        <path d="M10 15h5"></path>
+                    </svg>
+                </span>
+                <span class="sidebar-view-toggle-label">Documentos</span>
+            </button>
         <?php endif; ?>
     <?php endforeach; ?>
 </nav>

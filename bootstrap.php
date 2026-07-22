@@ -64,6 +64,7 @@ function migrate(PDO $pdo): void
     ensureWorkspaceInvitationSchema($pdo);
     ensureWorkspaceEmailInvitationSchema($pdo);
     ensureWorkspaceVaultSchema($pdo);
+    ensureWorkspaceDocumentsSchema($pdo);
     ensureWorkspaceDueSchema($pdo);
     ensureWorkspaceInventorySchema($pdo);
     ensureWorkspaceAccountingSchema($pdo);
@@ -1976,6 +1977,243 @@ function ensureWorkspaceVaultSchema(PDO $pdo): void
     }
 
     migratePlainVaultSecretsToEncrypted($pdo);
+}
+
+function ensureWorkspaceDocumentsSchema(PDO $pdo): void
+{
+    if (dbDriverName($pdo) === 'pgsql') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_documents (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                content_html TEXT NOT NULL DEFAULT \'\',
+                content_text TEXT NOT NULL DEFAULT \'\',
+                created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                updated_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                revision INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                deleted_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL
+            )'
+        );
+    } else {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                content_html TEXT NOT NULL DEFAULT \'\',
+                content_text TEXT NOT NULL DEFAULT \'\',
+                created_by INTEGER DEFAULT NULL,
+                updated_by INTEGER DEFAULT NULL,
+                revision INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT DEFAULT NULL,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+            )'
+        );
+    }
+
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_documents_workspace_updated
+         ON workspace_documents(workspace_id, updated_at DESC)'
+    );
+    $pdo->exec(
+        'CREATE INDEX IF NOT EXISTS idx_workspace_documents_workspace_deleted
+         ON workspace_documents(workspace_id, deleted_at)'
+    );
+}
+
+function normalizeWorkspaceDocumentTitle(string $value): string
+{
+    $value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+    if ($value === '') {
+        return 'Documento sem titulo';
+    }
+
+    return mb_substr($value, 0, 160);
+}
+
+function sanitizeWorkspaceDocumentHtml(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '<p><br></p>';
+    }
+
+    $html = mb_substr($html, 0, 180000);
+    $allowedTags = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a'];
+    $allowed = '<' . implode('><', $allowedTags) . '>';
+    $html = strip_tags($html, $allowed);
+    $html = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
+    $html = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
+    $html = preg_replace_callback(
+        '/<a\b([^>]*)>/iu',
+        static function (array $match): string {
+            $href = '';
+            if (preg_match('/\bhref\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/iu', (string) ($match[1] ?? ''), $hrefMatch)) {
+                $candidate = html_entity_decode((string) ($hrefMatch[1] ?? $hrefMatch[2] ?? $hrefMatch[3] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                if (preg_match('/^(https?:\/\/|mailto:)/iu', $candidate)) {
+                    $href = $candidate;
+                }
+            }
+
+            return $href === ''
+                ? '<a>'
+                : '<a href="' . e($href) . '" rel="noopener noreferrer" target="_blank">';
+        },
+        $html
+    ) ?? '';
+
+    $text = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
+    return $text === '' ? '<p><br></p>' : $html;
+}
+
+function workspaceDocumentTextFromHtml(string $html): string
+{
+    $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = trim(preg_replace('/\s+/u', ' ', $text) ?? '');
+    return mb_substr($text, 0, 180000);
+}
+
+function workspaceDocumentsList(int $workspaceId, bool $includeDeleted = false, string $search = ''): array
+{
+    if ($workspaceId <= 0) {
+        return [];
+    }
+
+    ensureWorkspaceDocumentsSchema(db());
+    $clauses = ['d.workspace_id = :workspace_id'];
+    $params = [':workspace_id' => $workspaceId];
+    if (!$includeDeleted) {
+        $clauses[] = 'd.deleted_at IS NULL';
+    }
+    $search = trim($search);
+    if ($search !== '') {
+        $clauses[] = '(LOWER(d.title) LIKE :search OR LOWER(d.content_text) LIKE :search)';
+        $params[':search'] = '%' . mb_strtolower(mb_substr($search, 0, 80)) . '%';
+    }
+
+    $stmt = db()->prepare(
+        'SELECT d.*, creator.name AS created_by_name, editor.name AS updated_by_name
+         FROM workspace_documents d
+         LEFT JOIN users creator ON creator.id = d.created_by
+         LEFT JOIN users editor ON editor.id = d.updated_by
+         WHERE ' . implode(' AND ', $clauses) . '
+         ORDER BY d.updated_at DESC, d.id DESC'
+    );
+    $stmt->execute($params);
+    return $stmt->fetchAll() ?: [];
+}
+
+function workspaceDocumentById(int $workspaceId, int $documentId, bool $includeDeleted = false): ?array
+{
+    if ($workspaceId <= 0 || $documentId <= 0) {
+        return null;
+    }
+
+    ensureWorkspaceDocumentsSchema(db());
+    $sql = 'SELECT d.*, creator.name AS created_by_name, editor.name AS updated_by_name
+            FROM workspace_documents d
+            LEFT JOIN users creator ON creator.id = d.created_by
+            LEFT JOIN users editor ON editor.id = d.updated_by
+            WHERE d.workspace_id = :workspace_id AND d.id = :document_id';
+    if (!$includeDeleted) {
+        $sql .= ' AND d.deleted_at IS NULL';
+    }
+    $sql .= ' LIMIT 1';
+    $stmt = db()->prepare($sql);
+    $stmt->execute([':workspace_id' => $workspaceId, ':document_id' => $documentId]);
+    $document = $stmt->fetch();
+    return $document ?: null;
+}
+
+function createWorkspaceDocument(PDO $pdo, int $workspaceId, int $userId, string $title = ''): array
+{
+    ensureWorkspaceDocumentsSchema($pdo);
+    $now = nowIso();
+    $params = [
+        ':workspace_id' => $workspaceId,
+        ':title' => normalizeWorkspaceDocumentTitle($title),
+        ':content_html' => '<p><br></p>',
+        ':content_text' => '',
+        ':created_by' => $userId > 0 ? $userId : null,
+        ':updated_by' => $userId > 0 ? $userId : null,
+        ':created_at' => $now,
+        ':updated_at' => $now,
+    ];
+    $sql = 'INSERT INTO workspace_documents (workspace_id, title, content_html, content_text, created_by, updated_by, revision, created_at, updated_at)
+            VALUES (:workspace_id, :title, :content_html, :content_text, :created_by, :updated_by, 1, :created_at, :updated_at)';
+    if (dbDriverName($pdo) === 'pgsql') {
+        $stmt = $pdo->prepare($sql . ' RETURNING id');
+        $stmt->execute($params);
+        $documentId = (int) $stmt->fetchColumn();
+    } else {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $documentId = (int) $pdo->lastInsertId();
+    }
+    return workspaceDocumentById($workspaceId, $documentId) ?? [];
+}
+
+function updateWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId, int $userId, string $title, string $contentHtml, int $expectedRevision): ?array
+{
+    if ($workspaceId <= 0 || $documentId <= 0 || $expectedRevision <= 0) {
+        return null;
+    }
+
+    ensureWorkspaceDocumentsSchema($pdo);
+    $contentHtml = sanitizeWorkspaceDocumentHtml($contentHtml);
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_documents
+         SET title = :title,
+             content_html = :content_html,
+             content_text = :content_text,
+             updated_by = :updated_by,
+             updated_at = :updated_at,
+             revision = revision + 1
+         WHERE workspace_id = :workspace_id
+           AND id = :document_id
+           AND deleted_at IS NULL
+           AND revision = :expected_revision'
+    );
+    $stmt->execute([
+        ':title' => normalizeWorkspaceDocumentTitle($title),
+        ':content_html' => $contentHtml,
+        ':content_text' => workspaceDocumentTextFromHtml($contentHtml),
+        ':updated_by' => $userId > 0 ? $userId : null,
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+        ':expected_revision' => $expectedRevision,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        return null;
+    }
+
+    return workspaceDocumentById($workspaceId, $documentId);
+}
+
+function trashWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId): bool
+{
+    ensureWorkspaceDocumentsSchema($pdo);
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_documents
+         SET deleted_at = :deleted_at, updated_at = :updated_at
+         WHERE workspace_id = :workspace_id AND id = :document_id AND deleted_at IS NULL'
+    );
+    $now = nowIso();
+    $stmt->execute([
+        ':deleted_at' => $now,
+        ':updated_at' => $now,
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+    ]);
+    return $stmt->rowCount() > 0;
 }
 
 function ensureWorkspaceDueSchema(PDO $pdo): void
@@ -13768,6 +14006,7 @@ function workspaceSidebarOptionalToolLabels(): array
         'vault' => 'Gerenciador de acessos',
         'inventory' => 'Estoque',
         'accounting' => 'Contabilidade',
+        'documents' => 'Documentos',
     ];
 }
 
