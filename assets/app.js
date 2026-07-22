@@ -6871,6 +6871,16 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
     }
+
+    const currentSidebarMenu = document.querySelector("#workspace-sidebar-menu");
+    const workspaceSidebarMenuHtml = String(snapshotData?.workspace_sidebar_menu_html || "").trim();
+    if (currentSidebarMenu instanceof HTMLElement && workspaceSidebarMenuHtml) {
+      const menuDocument = new DOMParser().parseFromString(workspaceSidebarMenuHtml, "text/html");
+      const nextSidebarMenu = menuDocument.querySelector("#workspace-sidebar-menu");
+      if (nextSidebarMenu instanceof HTMLElement) {
+        currentSidebarMenu.replaceWith(nextSidebarMenu);
+      }
+    }
   };
 
   const submitVaultActionForm = async (

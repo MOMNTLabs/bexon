@@ -253,6 +253,19 @@ function respondUsersPanelSnapshot(): void
     $workspaceSidebarConfig = workspaceSidebarToolsConfig($workspaceId, $currentWorkspace);
     $isPersonalWorkspace = !empty($currentWorkspace['is_personal']);
     $showUsersDashboardTab = true;
+    $taskGroups = [];
+    foreach (taskGroupsList($workspaceId) as $taskGroupName) {
+        $taskGroupName = normalizeTaskGroupName((string) $taskGroupName);
+        if ($taskGroupName === '') {
+            continue;
+        }
+
+        $permission = taskGroupPermissionForUser($workspaceId, $taskGroupName, (int) $currentUser['id']);
+        if (!empty($permission['can_view'])) {
+            $taskGroups[] = $taskGroupName;
+        }
+    }
+    $taskGroupVisuals = taskGroupVisualsMap($workspaceId);
 
     ob_start();
     include __DIR__ . '/../partials/users_panel.php';
@@ -266,11 +279,16 @@ function respondUsersPanelSnapshot(): void
     include __DIR__ . '/../partials/workspace_sidebar_picker_summary.php';
     $workspacePickerSummaryHtml = (string) ob_get_clean();
 
+    ob_start();
+    include __DIR__ . '/../partials/workspace_sidebar_menu.php';
+    $workspaceSidebarMenuHtml = (string) ob_get_clean();
+
     respondJson([
         'ok' => true,
         'panel_html' => $panelHtml,
         'workspace_picker_list_html' => $workspacePickerListHtml,
         'workspace_picker_summary_html' => $workspacePickerSummaryHtml,
+        'workspace_sidebar_menu_html' => $workspaceSidebarMenuHtml,
         'workspace_picker_title' => (string) ($currentWorkspace['name'] ?? 'Workspace'),
     ]);
 }
