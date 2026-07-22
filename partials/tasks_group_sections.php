@@ -251,7 +251,7 @@
                             <input type="hidden" name="expected_updated_at" value="<?= e((string) ($task['updated_at'] ?? '')) ?>" data-task-expected-updated-at>
 
                             <fieldset class="task-row-fieldset" <?= $taskRowCanAccess ? '' : 'disabled' ?>>
-                            <div class="task-line-row">
+                            <div class="task-line-row<?= $taskIsPersonalInbox ? ' has-workspace-source' : '' ?>">
                                 <div class="task-line-title">
                                     <span
                                         class="task-title-tag-badge"

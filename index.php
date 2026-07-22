@@ -831,6 +831,8 @@ if ($taskPageMode === 'select') {
 }
 if ($taskPageMode === 'mine') {
     $groupFilter = null;
+    $creatorFilterId = null;
+    $assigneeFilterId = null;
     $taskGroupPermissions[personalTaskInboxName()] = [
         'can_view' => true,
         'can_access' => false,

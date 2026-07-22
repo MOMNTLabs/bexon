@@ -10214,6 +10214,31 @@ body.is-dashboard .task-calendar-card.is-dragging {
     }
 }
 
+/* Keep the source workspace in a fixed column in the personal task inbox. */
+@media (min-width: 901px) {
+    body.is-dashboard .task-line-row.has-workspace-source {
+        grid-template-columns:
+            minmax(240px, 1.45fr)
+            minmax(190px, 0.75fr)
+            190px
+            138px
+            168px
+            52px
+            18px
+            20px;
+    }
+
+    body.is-dashboard .task-line-row.has-workspace-source .task-line-title {
+        grid-column: 1 / span 2;
+    }
+
+    body.is-dashboard .task-line-row.has-workspace-source .task-inbox-workspace-source {
+        flex: 0 0 190px;
+        order: 3;
+        margin-left: auto;
+    }
+}
+
 @media (max-width: 360px) {
     body.is-dashboard .create-task-modal .task-detail-inline-controls,
     body.is-dashboard .task-detail-modal .task-detail-inline-controls {

@@ -230,6 +230,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
         <?php if ($taskPageIsProject && !$taskPageIsPersonalInbox && $taskCurrentProjectName !== ''): ?>
             <input type="hidden" name="group" value="<?= e($taskCurrentProjectName) ?>">
         <?php endif; ?>
+        <?php if (!$taskPageIsPersonalInbox): ?>
         <button
             type="button"
             class="task-filters-mobile-toggle<?= $taskActiveFilterCount > 0 ? ' is-active' : '' ?>"
@@ -422,6 +423,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                 </div>
             </label>
         </div>
+        <?php endif; ?>
 
         <?php if ($taskPageShowsProjectFilter || $taskPageIsProject): ?>
             <div class="task-filters-create<?= $taskPageIsProject ? ' task-filters-create-project' : '' ?>">
