@@ -1989,6 +1989,9 @@ function ensureWorkspaceDocumentsSchema(PDO $pdo): void
                 title TEXT NOT NULL,
                 content_html TEXT NOT NULL DEFAULT \'\',
                 content_text TEXT NOT NULL DEFAULT \'\',
+                is_favorite SMALLINT NOT NULL DEFAULT 0,
+                task_group_name TEXT DEFAULT NULL,
+                linked_task_id BIGINT DEFAULT NULL,
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 updated_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 revision INTEGER NOT NULL DEFAULT 1,
@@ -2005,6 +2008,9 @@ function ensureWorkspaceDocumentsSchema(PDO $pdo): void
                 title TEXT NOT NULL,
                 content_html TEXT NOT NULL DEFAULT \'\',
                 content_text TEXT NOT NULL DEFAULT \'\',
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                task_group_name TEXT DEFAULT NULL,
+                linked_task_id INTEGER DEFAULT NULL,
                 created_by INTEGER DEFAULT NULL,
                 updated_by INTEGER DEFAULT NULL,
                 revision INTEGER NOT NULL DEFAULT 1,
@@ -2026,6 +2032,82 @@ function ensureWorkspaceDocumentsSchema(PDO $pdo): void
         'CREATE INDEX IF NOT EXISTS idx_workspace_documents_workspace_deleted
          ON workspace_documents(workspace_id, deleted_at)'
     );
+
+    $documentColumns = dbDriverName($pdo) === 'pgsql'
+        ? [
+            'is_favorite' => 'ALTER TABLE workspace_documents ADD COLUMN is_favorite SMALLINT NOT NULL DEFAULT 0',
+            'task_group_name' => 'ALTER TABLE workspace_documents ADD COLUMN task_group_name TEXT DEFAULT NULL',
+            'linked_task_id' => 'ALTER TABLE workspace_documents ADD COLUMN linked_task_id BIGINT DEFAULT NULL',
+        ]
+        : [
+            'is_favorite' => 'ALTER TABLE workspace_documents ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0',
+            'task_group_name' => 'ALTER TABLE workspace_documents ADD COLUMN task_group_name TEXT DEFAULT NULL',
+            'linked_task_id' => 'ALTER TABLE workspace_documents ADD COLUMN linked_task_id INTEGER DEFAULT NULL',
+        ];
+    foreach ($documentColumns as $column => $statement) {
+        if (!tableHasColumn($pdo, 'workspace_documents', $column)) {
+            $pdo->exec($statement);
+        }
+    }
+
+    if (dbDriverName($pdo) === 'pgsql') {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_document_revisions (
+                id BIGSERIAL PRIMARY KEY,
+                workspace_id BIGINT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                document_id BIGINT NOT NULL REFERENCES workspace_documents(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                content_html TEXT NOT NULL,
+                content_text TEXT NOT NULL,
+                task_group_name TEXT DEFAULT NULL,
+                linked_task_id BIGINT DEFAULT NULL,
+                is_favorite SMALLINT NOT NULL DEFAULT 0,
+                document_revision INTEGER NOT NULL,
+                changed_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_document_presence (
+                document_id BIGINT NOT NULL REFERENCES workspace_documents(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                PRIMARY KEY (document_id, user_id)
+            )'
+        );
+    } else {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_document_revisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                document_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                content_html TEXT NOT NULL,
+                content_text TEXT NOT NULL,
+                task_group_name TEXT DEFAULT NULL,
+                linked_task_id INTEGER DEFAULT NULL,
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                document_revision INTEGER NOT NULL,
+                changed_by INTEGER DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+                FOREIGN KEY (document_id) REFERENCES workspace_documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
+            )'
+        );
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS workspace_document_presence (
+                document_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (document_id, user_id),
+                FOREIGN KEY (document_id) REFERENCES workspace_documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )'
+        );
+    }
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_workspace_document_revisions_document ON workspace_document_revisions(document_id, document_revision DESC)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_workspace_document_presence_document ON workspace_document_presence(document_id, updated_at DESC)');
 }
 
 function normalizeWorkspaceDocumentTitle(string $value): string
@@ -2046,7 +2128,7 @@ function sanitizeWorkspaceDocumentHtml(string $html): string
     }
 
     $html = mb_substr($html, 0, 180000);
-    $allowedTags = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a'];
+    $allowedTags = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a', 'input'];
     $allowed = '<' . implode('><', $allowedTags) . '>';
     $html = strip_tags($html, $allowed);
     $html = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
@@ -2068,6 +2150,15 @@ function sanitizeWorkspaceDocumentHtml(string $html): string
         },
         $html
     ) ?? '';
+    $html = preg_replace_callback(
+        '/<input\b([^>]*)>/iu',
+        static function (array $match): string {
+            $attributes = (string) ($match[1] ?? '');
+            $checked = preg_match('/\bchecked(?:\s*=\s*(?:"checked"|\'checked\'|checked))?/iu', $attributes) === 1;
+            return '<input type="checkbox" data-document-checkbox="1"' . ($checked ? ' checked' : '') . '>';
+        },
+        $html
+    ) ?? '';
 
     $text = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
     return $text === '' ? '<p><br></p>' : $html;
@@ -2080,7 +2171,7 @@ function workspaceDocumentTextFromHtml(string $html): string
     return mb_substr($text, 0, 180000);
 }
 
-function workspaceDocumentsList(int $workspaceId, bool $includeDeleted = false, string $search = ''): array
+function workspaceDocumentsList(int $workspaceId, bool $includeDeleted = false, string $search = '', bool $deletedOnly = false): array
 {
     if ($workspaceId <= 0) {
         return [];
@@ -2089,7 +2180,9 @@ function workspaceDocumentsList(int $workspaceId, bool $includeDeleted = false, 
     ensureWorkspaceDocumentsSchema(db());
     $clauses = ['d.workspace_id = :workspace_id'];
     $params = [':workspace_id' => $workspaceId];
-    if (!$includeDeleted) {
+    if ($deletedOnly) {
+        $clauses[] = 'd.deleted_at IS NOT NULL';
+    } elseif (!$includeDeleted) {
         $clauses[] = 'd.deleted_at IS NULL';
     }
     $search = trim($search);
@@ -2104,7 +2197,7 @@ function workspaceDocumentsList(int $workspaceId, bool $includeDeleted = false, 
          LEFT JOIN users creator ON creator.id = d.created_by
          LEFT JOIN users editor ON editor.id = d.updated_by
          WHERE ' . implode(' AND ', $clauses) . '
-         ORDER BY d.updated_at DESC, d.id DESC'
+         ORDER BY d.is_favorite DESC, d.updated_at DESC, d.id DESC'
     );
     $stmt->execute($params);
     return $stmt->fetchAll() ?: [];
@@ -2132,6 +2225,32 @@ function workspaceDocumentById(int $workspaceId, int $documentId, bool $includeD
     return $document ?: null;
 }
 
+function workspaceDocumentsByLinkedTaskIds(int $workspaceId, array $taskIds): array
+{
+    $taskIds = array_values(array_unique(array_filter(array_map('intval', $taskIds), static fn (int $id): bool => $id > 0)));
+    if ($workspaceId <= 0 || !$taskIds) {
+        return [];
+    }
+
+    ensureWorkspaceDocumentsSchema(db());
+    $placeholders = implode(', ', array_fill(0, count($taskIds), '?'));
+    $stmt = db()->prepare(
+        'SELECT id, linked_task_id, title
+         FROM workspace_documents
+         WHERE workspace_id = ? AND deleted_at IS NULL AND linked_task_id IN (' . $placeholders . ')
+         ORDER BY is_favorite DESC, updated_at DESC, id DESC'
+    );
+    $stmt->execute(array_merge([$workspaceId], $taskIds));
+    $byTask = [];
+    foreach ($stmt->fetchAll() ?: [] as $document) {
+        $taskId = (int) ($document['linked_task_id'] ?? 0);
+        if ($taskId > 0) {
+            $byTask[$taskId][] = $document;
+        }
+    }
+    return $byTask;
+}
+
 function createWorkspaceDocument(PDO $pdo, int $workspaceId, int $userId, string $title = ''): array
 {
     ensureWorkspaceDocumentsSchema($pdo);
@@ -2146,8 +2265,8 @@ function createWorkspaceDocument(PDO $pdo, int $workspaceId, int $userId, string
         ':created_at' => $now,
         ':updated_at' => $now,
     ];
-    $sql = 'INSERT INTO workspace_documents (workspace_id, title, content_html, content_text, created_by, updated_by, revision, created_at, updated_at)
-            VALUES (:workspace_id, :title, :content_html, :content_text, :created_by, :updated_by, 1, :created_at, :updated_at)';
+    $sql = 'INSERT INTO workspace_documents (workspace_id, title, content_html, content_text, is_favorite, task_group_name, linked_task_id, created_by, updated_by, revision, created_at, updated_at)
+            VALUES (:workspace_id, :title, :content_html, :content_text, 0, NULL, NULL, :created_by, :updated_by, 1, :created_at, :updated_at)';
     if (dbDriverName($pdo) === 'pgsql') {
         $stmt = $pdo->prepare($sql . ' RETURNING id');
         $stmt->execute($params);
@@ -2160,19 +2279,89 @@ function createWorkspaceDocument(PDO $pdo, int $workspaceId, int $userId, string
     return workspaceDocumentById($workspaceId, $documentId) ?? [];
 }
 
-function updateWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId, int $userId, string $title, string $contentHtml, int $expectedRevision): ?array
+function archiveWorkspaceDocumentRevision(PDO $pdo, array $document): void
+{
+    $documentId = (int) ($document['id'] ?? 0);
+    $workspaceId = (int) ($document['workspace_id'] ?? 0);
+    if ($documentId <= 0 || $workspaceId <= 0) {
+        return;
+    }
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO workspace_document_revisions
+         (workspace_id, document_id, title, content_html, content_text, task_group_name, linked_task_id, is_favorite, document_revision, changed_by, created_at)
+         VALUES
+         (:workspace_id, :document_id, :title, :content_html, :content_text, :task_group_name, :linked_task_id, :is_favorite, :document_revision, :changed_by, :created_at)'
+    );
+    $stmt->execute([
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+        ':title' => (string) ($document['title'] ?? ''),
+        ':content_html' => (string) ($document['content_html'] ?? ''),
+        ':content_text' => (string) ($document['content_text'] ?? ''),
+        ':task_group_name' => trim((string) ($document['task_group_name'] ?? '')) ?: null,
+        ':linked_task_id' => (int) ($document['linked_task_id'] ?? 0) ?: null,
+        ':is_favorite' => !empty($document['is_favorite']) ? 1 : 0,
+        ':document_revision' => max(1, (int) ($document['revision'] ?? 1)),
+        ':changed_by' => (int) ($document['updated_by'] ?? 0) ?: null,
+        ':created_at' => nowIso(),
+    ]);
+}
+
+function workspaceDocumentRevisionHistory(int $workspaceId, int $documentId, int $limit = 16): array
+{
+    if ($workspaceId <= 0 || $documentId <= 0) {
+        return [];
+    }
+
+    ensureWorkspaceDocumentsSchema(db());
+    $stmt = db()->prepare(
+        'SELECT r.*, u.name AS changed_by_name
+         FROM workspace_document_revisions r
+         LEFT JOIN users u ON u.id = r.changed_by
+         WHERE r.workspace_id = :workspace_id AND r.document_id = :document_id
+         ORDER BY r.document_revision DESC, r.id DESC
+         LIMIT ' . max(1, min(60, $limit))
+    );
+    $stmt->execute([':workspace_id' => $workspaceId, ':document_id' => $documentId]);
+    return $stmt->fetchAll() ?: [];
+}
+
+function updateWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId, int $userId, string $title, string $contentHtml, int $expectedRevision, array $metadata = []): ?array
 {
     if ($workspaceId <= 0 || $documentId <= 0 || $expectedRevision <= 0) {
         return null;
     }
 
     ensureWorkspaceDocumentsSchema($pdo);
+    $currentDocument = workspaceDocumentById($workspaceId, $documentId);
+    if ($currentDocument === null || (int) ($currentDocument['revision'] ?? 0) !== $expectedRevision) {
+        return null;
+    }
+
     $contentHtml = sanitizeWorkspaceDocumentHtml($contentHtml);
+    $normalizedTitle = normalizeWorkspaceDocumentTitle($title);
+    $projectName = trim((string) ($metadata['task_group_name'] ?? ''));
+    $linkedTaskId = max(0, (int) ($metadata['linked_task_id'] ?? 0));
+    $isFavorite = !empty($metadata['is_favorite']) ? 1 : 0;
+    $hasChanged =
+        $normalizedTitle !== (string) ($currentDocument['title'] ?? '') ||
+        $contentHtml !== (string) ($currentDocument['content_html'] ?? '') ||
+        $projectName !== trim((string) ($currentDocument['task_group_name'] ?? '')) ||
+        $linkedTaskId !== (int) ($currentDocument['linked_task_id'] ?? 0) ||
+        $isFavorite !== (!empty($currentDocument['is_favorite']) ? 1 : 0);
+    if (!$hasChanged) {
+        return $currentDocument;
+    }
+
     $stmt = $pdo->prepare(
         'UPDATE workspace_documents
          SET title = :title,
              content_html = :content_html,
              content_text = :content_text,
+             is_favorite = :is_favorite,
+             task_group_name = :task_group_name,
+             linked_task_id = :linked_task_id,
              updated_by = :updated_by,
              updated_at = :updated_at,
              revision = revision + 1
@@ -2182,9 +2371,12 @@ function updateWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId, in
            AND revision = :expected_revision'
     );
     $stmt->execute([
-        ':title' => normalizeWorkspaceDocumentTitle($title),
+        ':title' => $normalizedTitle,
         ':content_html' => $contentHtml,
         ':content_text' => workspaceDocumentTextFromHtml($contentHtml),
+        ':is_favorite' => $isFavorite,
+        ':task_group_name' => $projectName !== '' ? $projectName : null,
+        ':linked_task_id' => $linkedTaskId > 0 ? $linkedTaskId : null,
         ':updated_by' => $userId > 0 ? $userId : null,
         ':updated_at' => nowIso(),
         ':workspace_id' => $workspaceId,
@@ -2195,7 +2387,108 @@ function updateWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId, in
         return null;
     }
 
+    archiveWorkspaceDocumentRevision($pdo, $currentDocument);
     return workspaceDocumentById($workspaceId, $documentId);
+}
+
+function restoreWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId): bool
+{
+    ensureWorkspaceDocumentsSchema($pdo);
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_documents
+         SET deleted_at = NULL, updated_at = :updated_at
+         WHERE workspace_id = :workspace_id AND id = :document_id AND deleted_at IS NOT NULL'
+    );
+    $stmt->execute([
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+    ]);
+    return $stmt->rowCount() > 0;
+}
+
+function restoreWorkspaceDocumentRevision(PDO $pdo, int $workspaceId, int $documentId, int $revisionId, int $userId, int $expectedRevision): ?array
+{
+    $currentDocument = workspaceDocumentById($workspaceId, $documentId);
+    if ($currentDocument === null || (int) ($currentDocument['revision'] ?? 0) !== $expectedRevision) {
+        return null;
+    }
+
+    $revisionStmt = $pdo->prepare(
+        'SELECT * FROM workspace_document_revisions
+         WHERE id = :revision_id AND workspace_id = :workspace_id AND document_id = :document_id
+         LIMIT 1'
+    );
+    $revisionStmt->execute([
+        ':revision_id' => $revisionId,
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+    ]);
+    $storedRevision = $revisionStmt->fetch();
+    if (!$storedRevision) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare(
+        'UPDATE workspace_documents
+         SET title = :title, content_html = :content_html, content_text = :content_text,
+             task_group_name = :task_group_name, linked_task_id = :linked_task_id,
+             is_favorite = :is_favorite, updated_by = :updated_by, updated_at = :updated_at,
+             revision = revision + 1
+         WHERE workspace_id = :workspace_id AND id = :document_id AND revision = :expected_revision'
+    );
+    $stmt->execute([
+        ':title' => (string) $storedRevision['title'],
+        ':content_html' => (string) $storedRevision['content_html'],
+        ':content_text' => (string) $storedRevision['content_text'],
+        ':task_group_name' => trim((string) ($storedRevision['task_group_name'] ?? '')) ?: null,
+        ':linked_task_id' => (int) ($storedRevision['linked_task_id'] ?? 0) ?: null,
+        ':is_favorite' => !empty($storedRevision['is_favorite']) ? 1 : 0,
+        ':updated_by' => $userId > 0 ? $userId : null,
+        ':updated_at' => nowIso(),
+        ':workspace_id' => $workspaceId,
+        ':document_id' => $documentId,
+        ':expected_revision' => $expectedRevision,
+    ]);
+    if ($stmt->rowCount() <= 0) {
+        return null;
+    }
+    archiveWorkspaceDocumentRevision($pdo, $currentDocument);
+    return workspaceDocumentById($workspaceId, $documentId);
+}
+
+function touchWorkspaceDocumentPresence(PDO $pdo, int $workspaceId, int $documentId, int $userId): array
+{
+    if ($workspaceId <= 0 || $documentId <= 0 || $userId <= 0 || workspaceDocumentById($workspaceId, $documentId) === null) {
+        return [];
+    }
+
+    $now = nowIso();
+    if (dbDriverName($pdo) === 'pgsql') {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_document_presence (document_id, user_id, updated_at)
+             VALUES (:document_id, :user_id, :updated_at)
+             ON CONFLICT (document_id, user_id) DO UPDATE SET updated_at = EXCLUDED.updated_at'
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO workspace_document_presence (document_id, user_id, updated_at)
+             VALUES (:document_id, :user_id, :updated_at)
+             ON CONFLICT(document_id, user_id) DO UPDATE SET updated_at = excluded.updated_at'
+        );
+    }
+    $stmt->execute([':document_id' => $documentId, ':user_id' => $userId, ':updated_at' => $now]);
+
+    $cutoff = date('Y-m-d H:i:s', time() - 50);
+    $activeStmt = $pdo->prepare(
+        'SELECT u.id, u.name
+         FROM workspace_document_presence p
+         INNER JOIN users u ON u.id = p.user_id
+         WHERE p.document_id = :document_id AND p.updated_at >= :cutoff
+         ORDER BY u.name ASC'
+    );
+    $activeStmt->execute([':document_id' => $documentId, ':cutoff' => $cutoff]);
+    return $activeStmt->fetchAll() ?: [];
 }
 
 function trashWorkspaceDocument(PDO $pdo, int $workspaceId, int $documentId): bool

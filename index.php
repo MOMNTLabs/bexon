@@ -680,17 +680,33 @@ if ($currentUser && $currentWorkspaceId !== null) {
 }
 $inventoryEntriesByGroup = $currentUser ? inventoryEntriesByGroup($inventoryEntries, $inventoryGroups) : [];
 $documentsSearch = trim((string) ($_GET['document_search'] ?? ''));
+$documentsScope = trim((string) ($_GET['documents_scope'] ?? '')) === 'trash' ? 'trash' : 'all';
 $documents = [];
 $selectedDocument = null;
+$documentHistory = [];
 $selectedDocumentId = max(0, (int) ($_GET['document'] ?? 0));
 if ($currentUser && $currentWorkspaceId !== null) {
     try {
-        $documents = workspaceDocumentsList($currentWorkspaceId, false, $documentsSearch);
+        $documents = workspaceDocumentsList(
+            $currentWorkspaceId,
+            false,
+            $documentsSearch,
+            $documentsScope === 'trash'
+        );
         if ($selectedDocumentId > 0) {
-            $selectedDocument = workspaceDocumentById($currentWorkspaceId, $selectedDocumentId);
+            $candidateDocument = workspaceDocumentById($currentWorkspaceId, $selectedDocumentId, $documentsScope === 'trash');
+            if (
+                $candidateDocument !== null
+                && (($documentsScope === 'trash') === !empty($candidateDocument['deleted_at']))
+            ) {
+                $selectedDocument = $candidateDocument;
+            }
         }
         if ($selectedDocument === null && $documents) {
             $selectedDocument = $documents[0];
+        }
+        if ($selectedDocument !== null && empty($selectedDocument['deleted_at'])) {
+            $documentHistory = workspaceDocumentRevisionHistory($currentWorkspaceId, (int) $selectedDocument['id']);
         }
     } catch (Throwable $e) {
         $appendDashboardLoadError('Não foi possível carregar os documentos deste workspace.', $e);
@@ -866,6 +882,8 @@ foreach ($taskGroups as $taskGroupName) {
 }
 $allTasks = [];
 $tasks = [];
+$documentLinkTasks = [];
+$documentsByLinkedTask = [];
 $showEmptyGroups = $currentUser
     && $taskPageMode === 'all'
     && $groupFilter === null
@@ -902,6 +920,19 @@ if ($currentUser && $currentWorkspaceId !== null) {
         $stats = dashboardStats($allTasks);
         $myOpenTasks = countMyAssignedTasks($allTasks, (int) $currentUser['id']);
         $completionRate = $stats['total'] > 0 ? (int) round(($stats['done'] / $stats['total']) * 100) : 0;
+        $documentLinkTasks = $taskPageMode === 'mine'
+            ? array_values(array_filter(
+                allTasks($currentWorkspaceId),
+                static function (array $task) use ($taskVisibleKeys): bool {
+                    $groupKey = mb_strtolower(normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral')));
+                    return isset($taskVisibleKeys[$groupKey]);
+                }
+            ))
+            : $allTasks;
+        $documentsByLinkedTask = workspaceDocumentsByLinkedTaskIds(
+            $currentWorkspaceId,
+            array_map(static fn (array $task): int => (int) ($task['id'] ?? 0), $documentLinkTasks)
+        );
     } catch (Throwable $e) {
         $appendDashboardLoadError('Não foi possível carregar as tarefas deste workspace.', $e);
     }

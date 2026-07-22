@@ -201,6 +201,9 @@
                     $taskSubtasksCompleted = (int) ($taskSubtasksProgress['completed'] ?? 0);
                     $taskTitleTag = normalizeTaskTitleTag((string) ($task['title_tag'] ?? ''));
                     $taskTitleTagColor = taskTitleTagColorForTag($taskTitleTag, $taskTitleTagColors);
+                    $taskLinkedDocuments = is_array($documentsByLinkedTask[$taskId] ?? null)
+                        ? $documentsByLinkedTask[$taskId]
+                        : [];
                     $hasActiveRevisionRequest = taskHasActiveRevisionRequest(
                         (string) ($task['description'] ?? ''),
                         is_array($task['history'] ?? null) ? $task['history'] : []
@@ -269,6 +272,13 @@
                                         aria-label="Título da tarefa"
                                         required
                                     >
+                                    <?php foreach (array_slice($taskLinkedDocuments, 0, 2) as $linkedDocument): ?>
+                                        <a
+                                            href="<?= e(dashboardPath('documents', ['document' => (string) ($linkedDocument['id'] ?? 0)])) ?>"
+                                            class="task-linked-document"
+                                            title="Abrir documento vinculado"
+                                        ><?= e(normalizeWorkspaceDocumentTitle((string) ($linkedDocument['title'] ?? 'Documento'))) ?></a>
+                                    <?php endforeach; ?>
                                     <?php if ($taskIsPersonalInbox): ?>
                                         <a
                                             href="#"

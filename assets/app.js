@@ -21497,7 +21497,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const titleInput = root.querySelector("[data-document-title]");
   const editor = root.querySelector("[data-document-editor]");
   const saveState = root.querySelector("[data-document-save-state]");
+  const projectField = root.querySelector("[data-document-project]");
+  const taskField = root.querySelector("[data-document-task]");
+  const favoriteButton = root.querySelector("[data-document-favorite]");
+  const editorsState = root.querySelector("[data-document-editors]");
   let saveTimer = 0;
+  let presenceTimer = 0;
   let saving = false;
   let isDirty = false;
 
@@ -21505,6 +21510,56 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!(saveState instanceof HTMLElement)) return;
     saveState.textContent = label;
     saveState.dataset.tone = tone;
+  };
+
+  const requestDocumentAction = async (fields) => {
+    const response = await fetch(window.location.pathname, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: new URLSearchParams(fields).toString(),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) {
+      const error = new Error(String(result?.error || "Nao foi possivel atualizar o documento."));
+      error.code = String(result?.code || "");
+      throw error;
+    }
+    return result;
+  };
+
+  const updateEditorsState = (activeEditors) => {
+    if (!(editorsState instanceof HTMLElement)) return;
+    const names = Array.isArray(activeEditors)
+      ? activeEditors.map((person) => String(person?.name || "").trim()).filter(Boolean)
+      : [];
+    editorsState.textContent = names.length > 1 ? `Editando agora: ${names.join(", ")}` : "";
+  };
+
+  const touchDocumentPresence = async () => {
+    const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+    const csrfToken = String(root.dataset.documentCsrf || "");
+    if (documentId <= 0 || !csrfToken) return;
+    try {
+      const result = await requestDocumentAction({
+        action: "touch_workspace_document_presence",
+        csrf_token: csrfToken,
+        document_id: String(documentId),
+      });
+      updateEditorsState(result.active_editors);
+    } catch (_error) {
+      // Presence is informative and must not interrupt writing.
+    }
+  };
+
+  const startDocumentPresence = () => {
+    void touchDocumentPresence();
+    window.clearInterval(presenceTimer);
+    presenceTimer = window.setInterval(() => void touchDocumentPresence(), 20000);
   };
 
   const saveDocument = async () => {
@@ -21531,6 +21586,9 @@ document.addEventListener("DOMContentLoaded", () => {
       expected_revision: String(revision),
       title: titleInput.value,
       content_html: editor.innerHTML,
+      task_group_name: projectField instanceof HTMLSelectElement ? projectField.value : "",
+      linked_task_id: taskField instanceof HTMLSelectElement ? taskField.value : "",
+      is_favorite: favoriteButton instanceof HTMLElement && favoriteButton.getAttribute("aria-pressed") === "true" ? "1" : "",
     });
 
     try {
@@ -21547,6 +21605,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result?.ok) {
         if (result?.code === "document_conflict") {
+          isDirty = false;
           setSaveState("Alterado por outra pessoa", "error");
           return;
         }
@@ -21580,13 +21639,74 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (editor instanceof HTMLElement) {
     editor.addEventListener("input", scheduleSave);
-    editor.addEventListener("blur", () => void saveDocument());
+    editor.addEventListener("focus", startDocumentPresence);
+    editor.addEventListener("blur", () => {
+      window.clearInterval(presenceTimer);
+      void saveDocument();
+    });
     editor.addEventListener("paste", (event) => {
       event.preventDefault();
       const text = event.clipboardData?.getData("text/plain") || "";
       document.execCommand("insertText", false, text);
     });
+    editor.addEventListener("change", (event) => {
+      const checkbox = event.target instanceof HTMLInputElement ? event.target : null;
+      if (checkbox?.matches("input[data-document-checkbox]")) {
+        checkbox.toggleAttribute("checked", checkbox.checked);
+        scheduleSave();
+      }
+    });
+    editor.addEventListener("click", (event) => {
+      const checkbox = event.target instanceof HTMLInputElement ? event.target : null;
+      if (checkbox?.matches("input[data-document-checkbox]")) {
+        window.setTimeout(() => {
+          checkbox.toggleAttribute("checked", checkbox.checked);
+          scheduleSave();
+        }, 0);
+      }
+    });
+    editor.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      const selection = window.getSelection();
+      const focusNode = selection?.focusNode;
+      const focusElement = focusNode instanceof Element ? focusNode : focusNode?.parentElement;
+      const block = focusElement?.closest?.("p, div, li");
+      if (!(block instanceof HTMLElement) || !editor.contains(block)) return;
+      const marker = String(block.textContent || "").trim();
+      const listType = /^[-*]$/.test(marker) ? "ul" : /^1\.$/.test(marker) ? "ol" : "";
+      if (!listType && marker !== "[]") return;
+      event.preventDefault();
+      const replacement = listType ? document.createElement(listType) : document.createElement("p");
+      const item = listType ? document.createElement("li") : replacement;
+      if (listType) replacement.appendChild(item);
+      if (marker === "[]") {
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.dataset.documentCheckbox = "1";
+        item.append(checkbox, document.createTextNode(" "));
+      } else {
+        item.appendChild(document.createElement("br"));
+      }
+      block.replaceWith(replacement);
+      const range = document.createRange();
+      range.selectNodeContents(item);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      scheduleSave();
+    });
   }
+  [projectField, taskField].forEach((field) => {
+    if (!(field instanceof HTMLSelectElement)) return;
+    field.addEventListener("change", () => {
+      if (field === taskField && projectField instanceof HTMLSelectElement) {
+        const selectedTask = taskField.options[taskField.selectedIndex];
+        const project = String(selectedTask?.dataset.project || "");
+        if (project) projectField.value = project;
+      }
+      scheduleSave();
+    });
+  });
 
   document.addEventListener("click", async (event) => {
     const target = event.target instanceof Element ? event.target : null;
@@ -21598,11 +21718,26 @@ document.addEventListener("DOMContentLoaded", () => {
       editor.focus();
       const command = String(commandButton.dataset.documentCommand || "");
       let value = String(commandButton.dataset.documentCommandValue || "");
+      if (command === "insertCheckbox") {
+        document.execCommand("insertHTML", false, '<input type="checkbox" data-document-checkbox="1"> ');
+        scheduleSave();
+        return;
+      }
       if (command === "createLink") {
         value = window.prompt("Cole o link", "https://") || "";
         if (!/^https?:\/\//i.test(value) && !/^mailto:/i.test(value)) return;
       }
       document.execCommand(command, false, value || null);
+      scheduleSave();
+      return;
+    }
+
+    const favorite = target.closest("[data-document-favorite]");
+    if (favorite instanceof HTMLElement) {
+      event.preventDefault();
+      const active = favorite.getAttribute("aria-pressed") !== "true";
+      favorite.setAttribute("aria-pressed", active ? "true" : "false");
+      favorite.classList.toggle("is-active", active);
       scheduleSave();
       return;
     }
@@ -21670,17 +21805,67 @@ document.addEventListener("DOMContentLoaded", () => {
         window.alert("Não foi possível mover o documento para a lixeira.");
       }
     }
+
+    const restoreButton = target.closest("[data-document-restore]");
+    if (restoreButton instanceof HTMLElement) {
+      event.preventDefault();
+      const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+      const csrfToken = String(root.dataset.documentCsrf || "");
+      if (documentId <= 0 || !csrfToken) return;
+      try {
+        const result = await requestDocumentAction({
+          action: "restore_workspace_document",
+          csrf_token: csrfToken,
+          document_id: String(documentId),
+        });
+        if (result.redirect_path) window.location.assign(String(result.redirect_path));
+      } catch (error) {
+        console.error(error);
+        window.alert("Nao foi possivel restaurar o documento.");
+      }
+      return;
+    }
+
+    const restoreRevisionButton = target.closest("[data-document-restore-revision]");
+    if (restoreRevisionButton instanceof HTMLElement) {
+      event.preventDefault();
+      if (!window.confirm("Restaurar esta versao? A versao atual ficara no historico.")) return;
+      const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+      const revisionId = Number.parseInt(restoreRevisionButton.dataset.documentRevisionId || "0", 10) || 0;
+      const revision = Number.parseInt(root.dataset.documentRevision || "0", 10) || 0;
+      const csrfToken = String(root.dataset.documentCsrf || "");
+      if (documentId <= 0 || revisionId <= 0 || revision <= 0 || !csrfToken) return;
+      try {
+        const result = await requestDocumentAction({
+          action: "restore_workspace_document_revision",
+          csrf_token: csrfToken,
+          document_id: String(documentId),
+          revision_id: String(revisionId),
+          expected_revision: String(revision),
+        });
+        if (result.redirect_path) window.location.assign(String(result.redirect_path));
+      } catch (error) {
+        console.error(error);
+        window.alert("Nao foi possivel restaurar esta versao.");
+      }
+    }
   });
 
   const searchInput = root.querySelector("[data-document-search]");
   if (searchInput instanceof HTMLInputElement) {
     searchInput.addEventListener("input", () => {
       const query = searchInput.value.trim().toLocaleLowerCase();
+      let results = 0;
       root.querySelectorAll("[data-document-list-item]").forEach((item) => {
         if (!(item instanceof HTMLElement)) return;
         const source = String(item.dataset.documentSearchText || "");
         item.hidden = query !== "" && !source.includes(query);
+        if (!item.hidden) results += 1;
       });
+      const searchState = root.querySelector("[data-document-search-state]");
+      if (searchState instanceof HTMLElement) {
+        searchState.textContent = query ? `${results} resultado${results === 1 ? "" : "s"}` : "";
+      }
     });
   }
 
