@@ -5173,6 +5173,27 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const isMobileTaskGroupAccordionViewport = () =>
+    typeof window.matchMedia === "function" && window.matchMedia("(max-width: 760px)").matches;
+
+  const normalizeMobileTaskGroupAccordion = (root = document) => {
+    if (!isMobileTaskGroupAccordionViewport()) return;
+
+    const groupSections = Array.from(root.querySelectorAll("[data-task-group]")).filter(
+      (section) =>
+        section instanceof HTMLElement &&
+        section.querySelector("[data-task-group-head-toggle]") instanceof HTMLElement
+    );
+    if (groupSections.length < 2) return;
+
+    const expandedGroup =
+      groupSections.find((section) => !section.classList.contains("is-collapsed")) || groupSections[0];
+
+    groupSections.forEach((section) => {
+      setTaskGroupCollapsed(section, section !== expandedGroup);
+    });
+  };
+
   const setTaskGroupDoneHidden = (groupSection, hideDone, options = {}) => {
     if (!(groupSection instanceof HTMLElement)) return;
     const shouldHideDone = Boolean(hideDone);
@@ -6563,6 +6584,7 @@ window.addEventListener("DOMContentLoaded", () => {
         });
         refreshTaskGroupSection(section);
       });
+      normalizeMobileTaskGroupAccordion(taskGroupsRoot);
 
       taskGroupsRoot.querySelectorAll("[data-task-autosave-form]").forEach((form) => {
         syncTaskRevisionBadge(form);
@@ -10358,6 +10380,17 @@ window.addEventListener("DOMContentLoaded", () => {
       const groupSection = taskGroupHeadToggle.closest("[data-task-group]");
       if (groupSection instanceof HTMLElement) {
         const shouldCollapse = !groupSection.classList.contains("is-collapsed");
+        if (!shouldCollapse && isMobileTaskGroupAccordionViewport()) {
+          const taskGroupsRoot = taskGroupsListElement || document;
+          taskGroupsRoot.querySelectorAll("[data-task-group]").forEach((otherGroupSection) => {
+            if (
+              otherGroupSection !== groupSection &&
+              otherGroupSection.querySelector("[data-task-group-head-toggle]") instanceof HTMLElement
+            ) {
+              setTaskGroupCollapsed(otherGroupSection, true);
+            }
+          });
+        }
         setTaskGroupCollapsed(groupSection, shouldCollapse);
       }
       return;
@@ -18092,6 +18125,7 @@ window.addEventListener("DOMContentLoaded", () => {
       });
       refreshTaskGroupSection(section);
     });
+    normalizeMobileTaskGroupAccordion();
     document.querySelectorAll("[data-vault-group]").forEach((section) => {
       setVaultGroupCollapsed(section, resolveInitialGroupCollapsedState("vault", section), {
         persist: false,

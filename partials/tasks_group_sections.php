@@ -44,6 +44,11 @@
                         <input type="hidden" name="action" value="rename_group">
                         <input type="hidden" name="old_group_name" value="<?= e((string) $groupName) ?>">
                         <h3 id="group-<?= e(md5((string) $groupName)) ?>">
+                            <?= renderTaskGroupVisual(
+                                $taskGroupVisual,
+                                'task-project-visual task-project-visual-heading task-project-visual-group-heading',
+                                'span'
+                            ) ?>
                             <span class="task-group-name-shell">
                                 <span class="task-group-name-display" data-group-name-display><?= e((string) $groupName) ?></span>
                                 <?php if ($taskGroupCanAccess): ?>

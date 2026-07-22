@@ -10214,6 +10214,93 @@ body.is-dashboard .task-calendar-card.is-dragging {
     }
 }
 
+/* Compact project identity and task cards on small screens. */
+body.is-dashboard .task-group-head h3 {
+    gap: 8px;
+}
+
+body.is-dashboard .task-project-visual-group-heading {
+    width: 22px;
+    height: 22px;
+    flex-basis: 22px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+    body.is-dashboard .task-groups-list {
+        gap: 8px;
+    }
+
+    body.is-dashboard .tasklist-wrap .task-group {
+        border-radius: 15px;
+    }
+
+    body.is-dashboard .tasklist-wrap .task-group .task-group-head,
+    body.is-dashboard .task-group-head {
+        min-height: 48px;
+        padding: 8px 10px;
+    }
+
+    body.is-dashboard .task-group.is-collapsed .task-group-head {
+        border-bottom-color: transparent;
+    }
+
+    body.is-dashboard .task-group-head h3 {
+        gap: 7px;
+        font-size: 0.92rem;
+    }
+
+    body.is-dashboard .task-project-visual-group-heading {
+        width: 26px;
+        height: 26px;
+        flex-basis: 26px;
+        border-width: 2px;
+    }
+
+    body.is-dashboard .task-group-name-shell {
+        gap: 5px;
+    }
+
+    body.is-dashboard .task-group-head-actions {
+        gap: 5px;
+    }
+
+    body.is-dashboard .group-add-button,
+    body.is-dashboard .task-group-actions-trigger,
+    body.is-dashboard .task-group-head-actions .group-add-button.task-group-add-button {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+    }
+
+    body.is-dashboard .task-list-rows {
+        gap: 7px;
+        padding: 7px;
+    }
+
+    body.is-dashboard .task-list-item,
+    body.is-dashboard .task-list-item[data-status-color] {
+        border-radius: 14px;
+    }
+
+    body.is-dashboard .task-list-form {
+        padding: 7px;
+    }
+
+    body.is-dashboard .task-line-row {
+        gap: 5px;
+    }
+
+    body.is-dashboard .task-line-title {
+        min-height: 42px;
+        padding-block: 2px;
+    }
+
+    body.is-dashboard .task-line-title .task-title-input {
+        font-size: clamp(0.94rem, 4vw, 1.05rem);
+    }
+}
+
 /* Keep the source workspace in a fixed column in the personal task inbox. */
 @media (min-width: 901px) {
     body.is-dashboard .task-line-row.has-workspace-source {
