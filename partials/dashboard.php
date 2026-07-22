@@ -2030,7 +2030,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         }
         $createGroupPermissionRows[] = [
             'id' => $memberId,
-            'name' => (string) ($workspaceMember['name'] ?? 'UsuÃ¡rio'),
+            'name' => (string) ($workspaceMember['name'] ?? 'Usuário'),
             'email' => (string) ($workspaceMember['email'] ?? ''),
             'enabled' => $memberEnabled,
             'required' => $memberId === $createGroupCurrentUserId,
@@ -2084,7 +2084,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     </summary>
                     <div class="group-permissions-list">
                         <?php if (!$createGroupPermissionRows): ?>
-                            <p class="group-permissions-empty">Nenhum usuÃ¡rio disponÃ­vel para configurar.</p>
+                            <p class="group-permissions-empty">Nenhum usu&aacute;rio dispon&iacute;vel para configurar.</p>
                         <?php else: ?>
                             <?php foreach ($createGroupPermissionRows as $createGroupPermissionRow): ?>
                                 <div class="group-permissions-row">
@@ -2103,7 +2103,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                             <?= !empty($createGroupPermissionRow['required']) ? 'disabled' : '' ?>
                                             data-permission-enabled-checkbox
                                         >
-                                        <span><?= !empty($createGroupPermissionRow['required']) ? 'ObrigatÃ³rio' : 'Permitido' ?></span>
+                                        <span><?= !empty($createGroupPermissionRow['required']) ? 'Obrigatório' : 'Permitido' ?></span>
                                     </label>
                                 </div>
                             <?php endforeach; ?>
@@ -2323,7 +2323,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             </div>
 
             <label>
-                <span>Estoque mÃ­nimo</span>
+                <span>Estoque m&iacute;nimo</span>
                 <input type="number" name="min_quantity_value" min="0" step="1" data-inventory-entry-min-quantity>
             </label>
 
@@ -2380,7 +2380,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
             </div>
 
             <label>
-                <span>Estoque mÃ­nimo</span>
+                <span>Estoque m&iacute;nimo</span>
                 <input type="number" name="min_quantity_value" min="0" step="1" data-inventory-entry-edit-min-quantity>
             </label>
 
@@ -2438,7 +2438,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         }
                         $taskPermissionRows[] = [
                             'id' => $memberId,
-                            'name' => (string) ($workspaceMember['name'] ?? 'UsuÃ¡rio'),
+                            'name' => (string) ($workspaceMember['name'] ?? 'Usuário'),
                             'email' => (string) ($workspaceMember['email'] ?? ''),
                             'enabled' => $memberEnabled,
                             'required' => $isRequiredMember,
@@ -2465,12 +2465,12 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <details class="group-permissions-members" open>
                         <summary>
-                            <span>UsuÃ¡rios do workspace</span>
+                            <span>Usu&aacute;rios do workspace</span>
                             <span class="group-permissions-summary-count" data-permission-summary-count><?= e($taskCounterLabel) ?></span>
                         </summary>
                         <div class="group-permissions-list">
                             <?php if (!$taskPermissionRows): ?>
-                                <p class="group-permissions-empty">Nenhum usuÃ¡rio disponÃ­vel para configurar.</p>
+                                <p class="group-permissions-empty">Nenhum usu&aacute;rio dispon&iacute;vel para configurar.</p>
                             <?php else: ?>
                                 <?php foreach ($taskPermissionRows as $taskPermissionRow): ?>
                                     <div class="group-permissions-row">
@@ -2489,7 +2489,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                                                 <?= !empty($taskPermissionRow['required']) ? 'disabled' : '' ?>
                                                 data-permission-enabled-checkbox
                                             >
-                                            <span><?= !empty($taskPermissionRow['required']) ? 'ObrigatÃ³rio' : 'Permitido' ?></span>
+                                            <span><?= !empty($taskPermissionRow['required']) ? 'Obrigatório' : 'Permitido' ?></span>
                                         </label>
                                     </div>
                                 <?php endforeach; ?>
@@ -2499,7 +2499,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <div class="modal-actions">
                         <button type="button" class="btn btn-mini btn-ghost" data-close-group-permissions-modal>Cancelar</button>
-                        <button type="submit" class="btn btn-pill">Salvar permissÃµes</button>
+                        <button type="submit" class="btn btn-pill">Salvar permiss&otilde;es</button>
                     </div>
                 </form>
             </section>
@@ -2546,7 +2546,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                         }
                         $vaultPermissionRows[] = [
                             'id' => $memberId,
-                            'name' => (string) ($workspaceMember['name'] ?? 'UsuÃ¡rio'),
+                            'name' => (string) ($workspaceMember['name'] ?? 'Usuário'),
                             'email' => (string) ($workspaceMember['email'] ?? ''),
                             'enabled' => $memberEnabled,
                         ];
@@ -2571,12 +2571,12 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <details class="group-permissions-members" open>
                         <summary>
-                            <span>UsuÃ¡rios do workspace</span>
+                            <span>Usu&aacute;rios do workspace</span>
                             <span class="group-permissions-summary-count" data-permission-summary-count><?= e($vaultCounterLabel) ?></span>
                         </summary>
                         <div class="group-permissions-list">
                             <?php if (!$vaultPermissionRows): ?>
-                                <p class="group-permissions-empty">Nenhum usuÃ¡rio disponÃ­vel para configurar.</p>
+                                <p class="group-permissions-empty">Nenhum usu&aacute;rio dispon&iacute;vel para configurar.</p>
                             <?php else: ?>
                                 <?php foreach ($vaultPermissionRows as $vaultPermissionRow): ?>
                                     <div class="group-permissions-row">
@@ -2603,7 +2603,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
 
                     <div class="modal-actions">
                         <button type="button" class="btn btn-mini btn-ghost" data-close-group-permissions-modal>Cancelar</button>
-                        <button type="submit" class="btn btn-pill">Salvar permissÃµes</button>
+                        <button type="submit" class="btn btn-pill">Salvar permiss&otilde;es</button>
                     </div>
                 </form>
             </section>
