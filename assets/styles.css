@@ -8058,6 +8058,75 @@ body.is-dashboard.is-account-settings .app-shell::-webkit-scrollbar-thumb:hover 
     opacity: 0.9;
 }
 
+.task-list-item.is-personal-inbox-task {
+    border-color: rgba(117, 173, 245, 0.28);
+    background: linear-gradient(90deg, rgba(117, 173, 245, 0.09), rgba(7, 11, 23, 0.75) 38%);
+}
+
+.task-list-item.is-personal-inbox-task .task-row-fieldset[disabled] {
+    opacity: 1;
+}
+
+.task-inbox-workspace-source {
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px 3px 4px;
+    border: 1px solid rgba(117, 173, 245, 0.28);
+    border-radius: 999px;
+    color: rgba(206, 227, 255, 0.92);
+    background: rgba(44, 79, 124, 0.17);
+    font-size: 0.69rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.task-inbox-workspace-source .task-inbox-workspace-avatar {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    font-size: 0.58rem;
+}
+
+.task-inbox-workspace-source > span:not(.avatar) {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.task-inbox-workspace-source small {
+    max-width: 88px;
+    overflow: hidden;
+    color: rgba(173, 200, 234, 0.8);
+    font-size: 0.64rem;
+    text-overflow: ellipsis;
+}
+
+.task-inbox-source-form {
+    display: flex;
+    justify-content: flex-end;
+    margin: -3px 10px 7px;
+}
+
+.task-inbox-source-open {
+    min-height: 26px;
+    border: 0;
+    padding: 3px 8px;
+    border-radius: 8px;
+    color: rgba(182, 215, 255, 0.9);
+    background: transparent;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.task-inbox-source-open:hover,
+.task-inbox-source-open:focus-visible {
+    color: #fff;
+    background: rgba(117, 173, 245, 0.16);
+}
+
 .task-list-item.task-status-in_progress {
     --task-status-rgb: 255, 150, 72;
 }

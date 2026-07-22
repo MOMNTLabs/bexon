@@ -10479,7 +10479,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const groupName = String(currentUrl.searchParams.get("group") || "").trim();
     const groupKey = groupName.toLocaleLowerCase();
     const rawScope = String(currentUrl.searchParams.get("task_scope") || "").trim().toLowerCase();
-    const taskScope = rawScope === "project" && groupKey !== "" ? "project" : "all";
+    const taskScope =
+      rawScope === "project" && groupKey !== ""
+        ? "project"
+        : rawScope === "mine"
+          ? "mine"
+          : "all";
     return { taskScope, groupKey };
   };
 
@@ -10506,7 +10511,8 @@ window.addEventListener("DOMContentLoaded", () => {
       const isActive =
         isTasksView &&
         ((linkScope === "project" && linkGroupKey !== "" && linkGroupKey === groupKey) ||
-          (linkScope !== "project" && taskScope !== "project"));
+          (linkScope === "mine" && taskScope === "mine") ||
+          (linkScope === "all" && taskScope === "all"));
       link.classList.toggle("is-active", isActive);
       if (isActive) {
         link.setAttribute("aria-current", "page");
@@ -19921,7 +19927,7 @@ window.addEventListener("DOMContentLoaded", () => {
         ? (calendarMonthField.value || "").trim()
         : "";
 
-    if (taskScopeValue !== "project") {
+    if (taskScopeValue !== "project" && taskScopeValue !== "mine") {
       taskScopeValue = "all";
     }
     if (taskLayoutValue !== "calendar") {

@@ -148,6 +148,18 @@
                 <?php foreach ($groupTasks as $task): ?>
                     <?php
                     $taskId = (int) $task['id'];
+                    $taskIsPersonalInbox = !empty($task['is_personal_task_inbox']);
+                    $taskSourceWorkspace = is_array($task['inbox_source_workspace'] ?? null)
+                        ? $task['inbox_source_workspace']
+                        : [];
+                    $taskSourceWorkspaceId = (int) ($task['inbox_source_workspace_id'] ?? 0);
+                    $taskSourceWorkspaceName = trim((string) ($task['inbox_source_workspace_name'] ?? 'Workspace'));
+                    $taskSourceGroupName = normalizeTaskGroupName((string) ($task['inbox_source_group_name'] ?? 'Geral'));
+                    $taskSourceRedirectPath = dashboardPath('tasks', [
+                        'task_scope' => 'project',
+                        'group' => $taskSourceGroupName,
+                    ]);
+                    $taskRowCanAccess = !$taskIsPersonalInbox && $taskGroupCanAccess;
                     $priorityKey = normalizeTaskPriority((string) $task['priority']);
                     $statusKey = normalizeTaskStatus((string) $task['status']);
                     $statusMeta = $statusMetaByKey[$statusKey] ?? taskStatusMeta($statusKey);
@@ -188,17 +200,17 @@
                     }
                     ?>
                     <article
-                        class="task-list-item task-status-<?= e($statusKind) ?><?= $isOverdueMarked ? ' has-overdue-flag' : '' ?><?= $hasReviewFile ? ' has-review-file' : '' ?>"
+                        class="task-list-item task-status-<?= e($statusKind) ?><?= $isOverdueMarked ? ' has-overdue-flag' : '' ?><?= $hasReviewFile ? ' has-review-file' : '' ?><?= $taskIsPersonalInbox ? ' is-personal-inbox-task' : '' ?>"
                         id="task-<?= e((string) $taskId) ?>"
                         data-task-item
-                        data-task-readonly="<?= $taskGroupCanAccess ? '0' : '1' ?>"
+                        data-task-readonly="<?= $taskRowCanAccess ? '0' : '1' ?>"
                         data-group-name="<?= e((string) ($task['group_name'] ?? 'Geral')) ?>"
                         data-status-value="<?= e($statusKey) ?>"
                         data-status-kind="<?= e($statusKind) ?>"
                         data-status-color="<?= e($statusColor) ?>"
                         data-status-order="<?= e((string) $statusOrder) ?>"
                         style="<?= e($statusCssVars) ?>"
-                        draggable="<?= $taskGroupCanAccess ? 'true' : 'false' ?>"
+                        draggable="<?= $taskRowCanAccess ? 'true' : 'false' ?>"
                         <?= $taskStartsHidden ? 'hidden' : '' ?>
                     >
                         <form method="post" class="task-list-form" id="update-task-<?= e((string) $taskId) ?>" data-task-autosave-form>
@@ -221,7 +233,7 @@
                             <input type="hidden" name="has_active_revision" value="<?= $hasActiveRevisionRequest ? '1' : '0' ?>" data-task-has-active-revision>
                             <input type="hidden" name="expected_updated_at" value="<?= e((string) ($task['updated_at'] ?? '')) ?>" data-task-expected-updated-at>
 
-                            <fieldset class="task-row-fieldset" <?= $taskGroupCanAccess ? '' : 'disabled' ?>>
+                            <fieldset class="task-row-fieldset" <?= $taskRowCanAccess ? '' : 'disabled' ?>>
                             <div class="task-line-row">
                                 <div class="task-line-title">
                                     <span
@@ -240,6 +252,13 @@
                                         aria-label="Título da tarefa"
                                         required
                                     >
+                                    <?php if ($taskIsPersonalInbox): ?>
+                                        <span class="task-inbox-workspace-source" title="<?= e($taskSourceWorkspaceName . ' · ' . $taskSourceGroupName) ?>">
+                                            <?= renderWorkspaceAvatar($taskSourceWorkspace, 'avatar small task-inbox-workspace-avatar', false, 'span') ?>
+                                            <span><?= e($taskSourceWorkspaceName) ?></span>
+                                            <small><?= e($taskSourceGroupName) ?></small>
+                                        </span>
+                                    <?php endif; ?>
                                     <div
                                         class="task-subtasks-progress<?= $taskSubtasksTotal > 0 ? '' : ' is-hidden' ?>"
                                         data-task-subtasks-progress
@@ -511,6 +530,18 @@
                             </div>
                             </fieldset>
                         </form>
+
+                        <?php if ($taskIsPersonalInbox && $taskSourceWorkspaceId > 0): ?>
+                            <form method="post" class="task-inbox-source-form">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                <input type="hidden" name="action" value="switch_workspace">
+                                <input type="hidden" name="workspace_id" value="<?= e((string) $taskSourceWorkspaceId) ?>">
+                                <input type="hidden" name="redirect_to" value="<?= e($taskSourceRedirectPath) ?>">
+                                <button type="submit" class="task-inbox-source-open">
+                                    Abrir em <?= e($taskSourceWorkspaceName) ?>
+                                </button>
+                            </form>
+                        <?php endif; ?>
 
                         <form method="post" id="delete-task-<?= e((string) $taskId) ?>" class="task-delete-form">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">

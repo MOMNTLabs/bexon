@@ -218,7 +218,7 @@ function normalizeDashboardViewKey(string $view): string
 function normalizeTaskPageMode(string $mode): string
 {
     $normalized = strtolower(trim($mode));
-    return in_array($normalized, ['select', 'all', 'project'], true)
+    return in_array($normalized, ['select', 'all', 'project', 'mine'], true)
         ? $normalized
         : '';
 }

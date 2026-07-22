@@ -4,7 +4,8 @@ if ($taskPageMode === '' || $taskPageMode === 'select') {
     $taskPageMode = 'all';
 }
 $taskPageIsChooser = $taskPageMode === 'select';
-$taskPageIsProject = $taskPageMode === 'project' && trim((string) ($groupFilter ?? '')) !== '';
+$taskPageIsPersonalInbox = $taskPageMode === 'mine' && !empty($isPersonalWorkspace);
+$taskPageIsProject = ($taskPageMode === 'project' && trim((string) ($groupFilter ?? '')) !== '') || $taskPageIsPersonalInbox;
 $taskPageShowsProjectFilter = $taskPageMode === 'all';
 $taskLayout = normalizeTaskLayoutKey((string) ($taskLayout ?? ''));
 if ($taskLayout === '') {
@@ -17,7 +18,9 @@ if ($taskCalendarMonth === '') {
 $taskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
 $taskPageBackPath = $taskAllProjectsPath;
 $taskShowBackButton = $taskPageIsProject;
-$taskCurrentProjectName = $taskPageIsProject ? normalizeTaskGroupName((string) ($groupFilter ?? '')) : '';
+$taskCurrentProjectName = $taskPageIsPersonalInbox
+    ? personalTaskInboxName()
+    : ($taskPageIsProject ? normalizeTaskGroupName((string) ($groupFilter ?? '')) : '');
 $taskCurrentProjectPermission = $taskPageIsProject
     ? ($taskGroupPermissions[$taskCurrentProjectName] ?? ['can_view' => true, 'can_access' => true])
     : ['can_view' => false, 'can_access' => false];
@@ -37,9 +40,9 @@ foreach (($allTasks ?? []) as $taskProjectCountItem) {
 }
 
 $taskViewBaseParams = [
-    'task_scope' => $taskPageIsProject ? 'project' : 'all',
+    'task_scope' => $taskPageIsPersonalInbox ? 'mine' : ($taskPageIsProject ? 'project' : 'all'),
 ];
-if ($taskPageIsProject && $taskCurrentProjectName !== '') {
+if ($taskPageIsProject && !$taskPageIsPersonalInbox && $taskCurrentProjectName !== '') {
     $taskViewBaseParams['group'] = $taskCurrentProjectName;
 } elseif ($taskPageShowsProjectFilter && trim((string) ($groupFilter ?? '')) !== '') {
     $taskViewBaseParams['group'] = normalizeTaskGroupName((string) $groupFilter);
@@ -78,7 +81,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
             <?php if ($taskPageIsChooser): ?>
                 <p>Escolha um projeto ou veja tudo na mesma página.</p>
             <?php elseif ($taskPageIsProject): ?>
-                <p><?= e($taskCurrentProjectName) ?></p>
+                <p><?= $taskPageIsPersonalInbox ? 'Tarefas atribuÃ­das a vocÃª em todos os workspaces.' : e($taskCurrentProjectName) ?></p>
             <?php else: ?>
                 <p>Todos projetos</p>
             <?php endif; ?>
@@ -206,10 +209,10 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
         id="task-filters"
         data-task-filter-form
     >
-        <input type="hidden" name="task_scope" value="<?= e($taskPageIsProject ? 'project' : 'all') ?>">
+        <input type="hidden" name="task_scope" value="<?= e($taskPageIsPersonalInbox ? 'mine' : ($taskPageIsProject ? 'project' : 'all')) ?>">
         <input type="hidden" name="task_layout" value="<?= e($taskLayout) ?>">
         <input type="hidden" name="calendar_month" value="<?= e($taskCalendarMonth) ?>">
-        <?php if ($taskPageIsProject && $taskCurrentProjectName !== ''): ?>
+        <?php if ($taskPageIsProject && !$taskPageIsPersonalInbox && $taskCurrentProjectName !== ''): ?>
             <input type="hidden" name="group" value="<?= e($taskCurrentProjectName) ?>">
         <?php endif; ?>
         <button
@@ -405,7 +408,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
             </label>
         </div>
 
-        <?php if ($taskPageShowsProjectFilter || $taskPageIsProject): ?>
+        <?php if ($taskPageShowsProjectFilter || ($taskPageIsProject && !$taskPageIsPersonalInbox)): ?>
             <div class="task-filters-create<?= $taskPageIsProject ? ' task-filters-create-project' : '' ?>">
                 <div class="task-view-toggle-group" role="tablist" aria-label="Visualização das tarefas">
                     <a

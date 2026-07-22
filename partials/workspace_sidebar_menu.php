@@ -14,6 +14,9 @@ $sidebarTaskScope = normalizeTaskPageMode((string) ($_GET['task_scope'] ?? ''));
 if ($sidebarTaskScope === '' || $sidebarTaskScope === 'select') {
     $sidebarTaskScope = 'all';
 }
+if ($sidebarTaskScope === 'mine' && empty($currentWorkspace['is_personal'])) {
+    $sidebarTaskScope = 'all';
+}
 $sidebarTaskCurrentGroup = isset($_GET['group']) && trim((string) $_GET['group']) !== ''
     ? normalizeTaskGroupName((string) $_GET['group'])
     : '';
@@ -23,6 +26,8 @@ if ($sidebarTaskScope === 'project' && $sidebarTaskCurrentGroup === '') {
 $sidebarTaskProjectsOpen = $currentSidebarView === 'tasks';
 $sidebarTaskAllProjectsPath = dashboardPath('tasks', ['task_scope' => 'all']);
 $sidebarTaskAllProjectsActive = $currentSidebarView === 'tasks' && $sidebarTaskScope !== 'project';
+$sidebarTaskInboxPath = dashboardPath('tasks', ['task_scope' => 'mine']);
+$sidebarTaskInboxActive = $currentSidebarView === 'tasks' && $sidebarTaskScope === 'mine';
 ?>
 
 <nav class="sidebar-view-menu" id="workspace-sidebar-menu" aria-label="Menu do workspace">
@@ -81,10 +86,18 @@ $sidebarTaskAllProjectsActive = $currentSidebarView === 'tasks' && $sidebarTaskS
                     </div>
                     <a
                         href="<?= e($sidebarTaskAllProjectsPath) ?>"
-                        class="sidebar-task-project-link<?= $sidebarTaskAllProjectsActive ? ' is-active' : '' ?>"
+                        class="sidebar-task-project-link<?= $sidebarTaskAllProjectsActive && $sidebarTaskScope !== 'mine' ? ' is-active' : '' ?>"
                         data-sidebar-task-project-link
                         data-task-scope="all"
                     >Todos projetos</a>
+                    <?php if (!empty($currentWorkspace['is_personal'])): ?>
+                        <a
+                            href="<?= e($sidebarTaskInboxPath) ?>"
+                            class="sidebar-task-project-link sidebar-task-inbox-link<?= $sidebarTaskInboxActive ? ' is-active' : '' ?>"
+                            data-sidebar-task-project-link
+                            data-task-scope="mine"
+                        >Minhas tarefas</a>
+                    <?php endif; ?>
                     <?php foreach ($sidebarTaskGroups as $sidebarTaskProjectName): ?>
                         <?php
                         $sidebarTaskProjectPath = dashboardPath('tasks', [

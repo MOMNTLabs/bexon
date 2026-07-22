@@ -102,6 +102,9 @@ function respondTaskPanelSnapshot(): void
     if ($taskPageMode === '') {
         $taskPageMode = 'all';
     }
+    if ($taskPageMode === 'mine' && !$isPersonalWorkspace) {
+        $taskPageMode = 'all';
+    }
     $workspaceUserIds = array_map(
         static fn (array $user): int => (int) ($user['id'] ?? 0),
         is_array($users) ? $users : []
@@ -122,19 +125,32 @@ function respondTaskPanelSnapshot(): void
         $assigneeFilterId = null;
     }
 
+    if ($taskPageMode === 'mine') {
+        $groupFilter = null;
+        $taskLayout = 'list';
+        $taskGroupPermissions[personalTaskInboxName()] = [
+            'can_view' => true,
+            'can_access' => false,
+        ];
+    }
+
     $taskVisibleKeys = [];
     foreach ($taskGroups as $taskGroupName) {
         $taskVisibleKeys[mb_strtolower(normalizeTaskGroupName($taskGroupName))] = true;
     }
 
-    $allTasks = allTasks($currentWorkspaceId);
-    $allTasks = array_values(array_filter(
-        $allTasks,
-        static function (array $task) use ($taskVisibleKeys): bool {
-            $groupKey = mb_strtolower(normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral')));
-            return isset($taskVisibleKeys[$groupKey]);
-        }
-    ));
+    if ($taskPageMode === 'mine') {
+        $allTasks = personalTaskInboxTasks($currentUserId);
+    } else {
+        $allTasks = allTasks($currentWorkspaceId);
+        $allTasks = array_values(array_filter(
+            $allTasks,
+            static function (array $task) use ($taskVisibleKeys): bool {
+                $groupKey = mb_strtolower(normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral')));
+                return isset($taskVisibleKeys[$groupKey]);
+            }
+        ));
+    }
     $tasks = filterTasks($allTasks, $groupFilter, $creatorFilterId, $assigneeFilterId);
     $showEmptyGroups = $taskPageMode === 'all'
         && $groupFilter === null
@@ -143,6 +159,8 @@ function respondTaskPanelSnapshot(): void
     $groupingSource = null;
     if ($showEmptyGroups) {
         $groupingSource = $taskGroups;
+    } elseif ($taskPageMode === 'mine') {
+        $groupingSource = [personalTaskInboxName()];
     } elseif ($groupFilter !== null) {
         $groupingSource = [$groupFilter];
     }

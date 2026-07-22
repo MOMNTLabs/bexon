@@ -17667,6 +17667,85 @@ function allTasks(?int $workspaceId = null): array
     return $tasks;
 }
 
+/**
+ * Nome reservado para a visão pessoal que reúne tarefas de outros workspaces.
+ * Ela não é gravada em task_groups: assim não pode ser renomeada ou excluída.
+ */
+function personalTaskInboxName(): string
+{
+    return 'Minhas tarefas';
+}
+
+/**
+ * Reúne, no workspace pessoal, as tarefas que pertencem ao usuário nos
+ * workspaces aos quais ele tem acesso. As tarefas continuam pertencendo ao
+ * workspace de origem; esta é apenas uma visualização de consulta.
+ */
+function personalTaskInboxTasks(int $userId): array
+{
+    if ($userId <= 0) {
+        return [];
+    }
+
+    $inboxName = personalTaskInboxName();
+    $tasks = [];
+
+    foreach (workspacesForUser($userId) as $workspace) {
+        $workspaceId = (int) ($workspace['id'] ?? 0);
+        if ($workspaceId <= 0) {
+            continue;
+        }
+
+        foreach (allTasks($workspaceId) as $task) {
+            $sourceGroupName = normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral'));
+            if (!userCanViewTaskGroup($userId, $workspaceId, $sourceGroupName)) {
+                continue;
+            }
+
+            $assigneeIds = is_array($task['assignee_ids'] ?? null) ? $task['assignee_ids'] : [];
+            $isAssignedToUser = in_array($userId, $assigneeIds, true);
+            $isCreatedByUserWithoutAssignee = !$assigneeIds
+                && (int) ($task['created_by'] ?? 0) === $userId;
+            if (!$isAssignedToUser && !$isCreatedByUserWithoutAssignee) {
+                continue;
+            }
+
+            $task['inbox_source_workspace_id'] = $workspaceId;
+            $task['inbox_source_workspace'] = $workspace;
+            $task['inbox_source_workspace_name'] = (string) ($workspace['name'] ?? 'Workspace');
+            $task['inbox_source_group_name'] = $sourceGroupName;
+            $task['inbox_source_can_access'] = userCanAccessTaskGroup($userId, $workspaceId, $sourceGroupName);
+            $task['is_personal_task_inbox'] = true;
+            $task['group_name'] = $inboxName;
+            $tasks[] = $task;
+        }
+    }
+
+    usort($tasks, static function (array $left, array $right): int {
+        $leftDone = taskDoneStatusFromTask($left) ? 1 : 0;
+        $rightDone = taskDoneStatusFromTask($right) ? 1 : 0;
+        if ($leftDone !== $rightDone) {
+            return $leftDone <=> $rightDone;
+        }
+
+        $priorityCompare = taskPriorityOrder((string) ($left['priority'] ?? 'medium'))
+            <=> taskPriorityOrder((string) ($right['priority'] ?? 'medium'));
+        if ($priorityCompare !== 0) {
+            return $priorityCompare;
+        }
+
+        $leftDueDate = dueDateForStorage((string) ($left['due_date'] ?? '')) ?? '9999-12-31';
+        $rightDueDate = dueDateForStorage((string) ($right['due_date'] ?? '')) ?? '9999-12-31';
+        if ($leftDueDate !== $rightDueDate) {
+            return strcmp($leftDueDate, $rightDueDate);
+        }
+
+        return strcmp((string) ($right['updated_at'] ?? ''), (string) ($left['updated_at'] ?? ''));
+    });
+
+    return $tasks;
+}
+
 function tasksByStatus(array $tasks, ?int $workspaceId = null, ?array $workspace = null): array
 {
     $grouped = [];
