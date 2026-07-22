@@ -6958,6 +6958,7 @@ window.addEventListener("DOMContentLoaded", () => {
     vault: "Gerenciador de acessos",
     inventory: "Estoque",
     accounting: "Contabilidade",
+    documents: "Documentos",
   };
 
   const normalizeWorkspaceSidebarToolCandidate = (value) => {
@@ -7172,6 +7173,7 @@ window.addEventListener("DOMContentLoaded", () => {
     "workspace_demote_member",
     "workspace_remove_member",
     "workspace_update_sidebar_tools",
+    "workspace_add_sidebar_tool",
   ]);
 
   const submitWorkspaceUsersActionForm = async (
@@ -19043,6 +19045,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const sidebarToolsAddButton = target.closest("[data-sidebar-tools-add-button]");
     if (sidebarToolsAddButton instanceof HTMLButtonElement) {
+      event.preventDefault();
       const form = sidebarToolsAddButton.closest("[data-sidebar-tools-form]");
       if (!(form instanceof HTMLFormElement)) return;
       const addSelect = form.querySelector("[data-sidebar-tools-add-select]");
@@ -19059,15 +19062,28 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      const nextRow = createWorkspaceSidebarToolRow(form, toolToAdd);
-      const list = form.querySelector("[data-sidebar-tools-list]");
-      if (nextRow instanceof HTMLElement && list instanceof HTMLElement) {
-        list.appendChild(nextRow);
-      }
-      syncWorkspaceSidebarToolsFormState(form);
-      if (form.dataset.sidebarToolsAutosaveAdd === "1") {
-        persistWorkspaceSidebarToolsForm(form);
-      }
+      // Persist directly, then refresh this panel with the server's version.
+      // This avoids a visual change that can be lost before the form is saved.
+      const actionField = form.querySelector('input[name="action"]');
+      if (!(actionField instanceof HTMLInputElement)) return;
+
+      const originalAction = actionField.value;
+      const toolField = document.createElement("input");
+      toolField.type = "hidden";
+      toolField.name = "sidebar_tool";
+      toolField.value = toolToAdd;
+      form.appendChild(toolField);
+      actionField.value = "workspace_add_sidebar_tool";
+
+      void submitWorkspaceUsersActionForm(form, {
+        successMessage: "Ferramenta adicionada ao sidebar.",
+        fallbackError: "Falha ao adicionar ferramenta ao sidebar.",
+      })
+        .catch(() => {})
+        .finally(() => {
+          actionField.value = originalAction;
+          toolField.remove();
+        });
       return;
     }
 
@@ -20642,6 +20658,7 @@ window.addEventListener("DOMContentLoaded", () => {
       workspace_demote_member: "Permissão alterada para usuário.",
       workspace_remove_member: "Usuário removido do workspace.",
       workspace_update_sidebar_tools: "Ferramentas atualizadas.",
+      workspace_add_sidebar_tool: "Ferramenta adicionada ao sidebar.",
     };
 
     const fallbackErrorByAction = {

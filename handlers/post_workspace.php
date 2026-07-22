@@ -265,14 +265,22 @@ function handleWorkspacePostAction(PDO $pdo, string $action): bool
                     $enabledOptionalTools[] = $toolToAdd;
                 }
 
-                workspaceUpdateSidebarToolsConfiguration($pdo, $workspaceId, $enabledOptionalTools);
+                $sidebarConfig = workspaceUpdateSidebarToolsConfiguration($pdo, $workspaceId, $enabledOptionalTools);
+                $workspaceSidebarMessage = 'Ferramenta adicionada ao sidebar.';
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'message' => $workspaceSidebarMessage,
+                        'enabled_tools' => (array) ($sidebarConfig['enabled'] ?? []),
+                    ]);
+                }
 
                 $redirectPath = appPath(trim((string) ($_POST['redirect_to'] ?? '')));
                 if (!in_array($redirectPath, $allowedSwitchWorkspaceRedirects, true)) {
                     $redirectPath = dashboardPath('users');
                 }
 
-                flash('success', 'Ferramenta adicionada ao sidebar.');
+                flash('success', $workspaceSidebarMessage);
                 redirectTo($redirectPath);
 
             case 'workspace_add_member':
