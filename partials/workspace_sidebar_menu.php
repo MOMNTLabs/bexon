@@ -108,6 +108,8 @@ $sidebarTaskInboxActive = $currentSidebarView === 'tasks' && $sidebarTaskScope =
                             $currentSidebarView === 'tasks'
                             && $sidebarTaskScope === 'project'
                             && mb_strtolower($sidebarTaskCurrentGroup) === mb_strtolower($sidebarTaskProjectName);
+                        $sidebarTaskProjectVisual = $taskGroupVisuals[$sidebarTaskProjectName]
+                            ?? taskGroupVisual($sidebarTaskProjectName, $currentWorkspaceId ?? null);
                         ?>
                         <a
                             href="<?= e($sidebarTaskProjectPath) ?>"
@@ -115,7 +117,7 @@ $sidebarTaskInboxActive = $currentSidebarView === 'tasks' && $sidebarTaskScope =
                             data-sidebar-task-project-link
                             data-task-scope="project"
                             data-task-group-key="<?= e(mb_strtolower($sidebarTaskProjectName)) ?>"
-                        ><?= e($sidebarTaskProjectName) ?></a>
+                        ><?= renderTaskGroupVisual($sidebarTaskProjectVisual, 'task-project-visual task-project-visual-sidebar', 'span') ?><span><?= e($sidebarTaskProjectName) ?></span></a>
                     <?php endforeach; ?>
                 </div>
             </div>

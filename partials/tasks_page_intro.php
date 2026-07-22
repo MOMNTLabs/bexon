@@ -80,6 +80,8 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
             <h2>Lista de tarefas</h2>
             <?php if ($taskPageIsChooser): ?>
                 <p>Escolha um projeto ou veja tudo na mesma página.</p>
+            <?php elseif ($taskPageIsPersonalInbox): ?>
+                <p>Tarefas atribu&iacute;das a voc&ecirc; em todos os workspaces.</p>
             <?php elseif ($taskPageIsProject): ?>
                 <p><?= $taskPageIsPersonalInbox ? 'Tarefas atribuÃ­das a vocÃª em todos os workspaces.' : e($taskCurrentProjectName) ?></p>
             <?php else: ?>
@@ -102,6 +104,9 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
             $taskProjectPermission = $taskGroupPermissions[$taskProjectName] ?? ['can_view' => true, 'can_access' => true];
             $taskProjectCanAccess = !empty($taskProjectPermission['can_access']);
             $taskProjectPermissionsModalKey = 'task-group-perm-' . md5($taskProjectName);
+            $taskProjectVisual = $taskGroupVisuals[$taskProjectName]
+                ?? taskGroupVisual($taskProjectName, $currentWorkspaceId ?? null);
+            $taskProjectVisualModalKey = 'task-group-visual-' . md5($taskProjectName);
             ?>
             <div
                 class="task-project-choice task-project-choice-entry<?= $taskProjectCanAccess ? '' : ' is-readonly' ?>"
@@ -120,6 +125,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                     <input type="hidden" name="action" value="rename_group">
                     <input type="hidden" name="old_group_name" value="<?= e($taskProjectName) ?>">
                     <span class="task-project-choice-label-shell">
+                        <?= renderTaskGroupVisual($taskProjectVisual, 'task-project-visual task-project-visual-choice', 'span') ?>
                         <span class="task-project-choice-label" data-group-name-display><?= e($taskProjectName) ?></span>
                         <?php if ($taskProjectCanAccess): ?>
                             <button
@@ -156,6 +162,15 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
 
                 <?php if ($taskProjectCanAccess): ?>
                     <div class="task-project-choice-actions">
+                        <button
+                            type="button"
+                            class="task-project-choice-action task-project-choice-action-icon"
+                            data-open-group-visual-modal="<?= e($taskProjectVisualModalKey) ?>"
+                            aria-label="Editar cor ou imagem do projeto <?= e($taskProjectName) ?>"
+                            title="Cor ou imagem"
+                        >
+                            <span aria-hidden="true">●</span>
+                        </button>
                         <?php if (!empty($canManageWorkspace)): ?>
                             <button
                                 type="button"
@@ -408,7 +423,7 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
             </label>
         </div>
 
-        <?php if ($taskPageShowsProjectFilter || ($taskPageIsProject && !$taskPageIsPersonalInbox)): ?>
+        <?php if ($taskPageShowsProjectFilter || $taskPageIsProject): ?>
             <div class="task-filters-create<?= $taskPageIsProject ? ' task-filters-create-project' : '' ?>">
                 <div class="task-view-toggle-group" role="tablist" aria-label="Visualização das tarefas">
                     <a

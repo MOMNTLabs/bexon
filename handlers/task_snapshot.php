@@ -56,6 +56,7 @@ function respondTaskPanelSnapshot(): void
     $users = usersList($currentWorkspaceId);
     $canManageWorkspace = userCanManageWorkspace((int) $currentUser['id'], $currentWorkspaceId);
     $taskGroupsAll = taskGroupsList($currentWorkspaceId);
+    $taskGroupVisuals = taskGroupVisualsMap($currentWorkspaceId);
 
     $taskGroupPermissions = [];
     $taskGroups = [];
@@ -127,7 +128,6 @@ function respondTaskPanelSnapshot(): void
 
     if ($taskPageMode === 'mine') {
         $groupFilter = null;
-        $taskLayout = 'list';
         $taskGroupPermissions[personalTaskInboxName()] = [
             'can_view' => true,
             'can_access' => false,

@@ -5424,6 +5424,81 @@ window.addEventListener("DOMContentLoaded", () => {
     expectedUpdatedAtField.value = String(updatedAtValue || "").trim();
   };
 
+  const submitTaskProjectMove = async (form, groupField, sourceGroupName = "") => {
+    if (!(form instanceof HTMLFormElement) || !(groupField instanceof HTMLSelectElement)) {
+      return false;
+    }
+    if (form.dataset.projectMoveSubmitting === "1") return false;
+
+    const taskItem = form.closest("[data-task-item]");
+    if (!(taskItem instanceof HTMLElement)) return false;
+
+    const taskIdField = form.querySelector('input[name="task_id"]');
+    const csrfField = form.querySelector('input[name="csrf_token"]');
+    const taskId = String(taskIdField?.value || "").trim();
+    const csrfToken = String(csrfField?.value || "").trim();
+    const destinationGroupName = String(groupField.value || "").trim() || "Geral";
+    const currentGroupName =
+      String(sourceGroupName || taskItem.dataset.groupName || "").trim() || "Geral";
+
+    if (!taskId || !csrfToken || destinationGroupName === currentGroupName) {
+      return false;
+    }
+
+    const pendingAutosaveTimer = autosaveTimers.get(form);
+    if (pendingAutosaveTimer) {
+      window.clearTimeout(pendingAutosaveTimer);
+      autosaveTimers.delete(form);
+    }
+
+    const waitStartedAt = Date.now();
+    while (form.dataset.autosaveSubmitting === "1" && Date.now() - waitStartedAt < 5000) {
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    }
+
+    form.dataset.projectMoveSubmitting = "1";
+    setTaskAutosaveStatus(form, "saving", "Movendo...");
+
+    try {
+      const data = await postActionJson(
+        "move_task_project",
+        {
+          csrf_token: csrfToken,
+          task_id: taskId,
+          group_name: destinationGroupName,
+        },
+        { showLoading: false }
+      );
+      const task = data?.task && typeof data.task === "object" ? data.task : {};
+      const savedGroupName = String(task.group_name || destinationGroupName).trim() || destinationGroupName;
+
+      groupField.value = savedGroupName;
+      syncInlineSelectPicker(groupField);
+      moveTaskItemToGroupDom(taskItem, savedGroupName);
+      syncTaskGroupInputs();
+      syncTaskExpectedUpdatedAt(form, task.updated_at || "");
+      refreshTaskUpdatedAtMeta(form, task.updated_at_label || "");
+      renderDashboardSummary(data.dashboard);
+      syncTaskHistoryControls(data.undo_state);
+      setTaskAutosaveStatus(form, "saved", "Movido");
+      if (form.dataset.autosaveDirty === "1") {
+        scheduleTaskAutosave(form, 80);
+      }
+      return true;
+    } catch (error) {
+      groupField.value = currentGroupName;
+      syncInlineSelectPicker(groupField);
+      setTaskAutosaveStatus(form, "error", "Erro ao mover");
+      showClientFlash(
+        "error",
+        error instanceof Error ? error.message : "Não foi possível mover a tarefa de projeto."
+      );
+      return false;
+    } finally {
+      delete form.dataset.projectMoveSubmitting;
+    }
+  };
+
   const isDatabaseLockedMessage = (message) => {
     const normalized = String(message || "").trim().toLowerCase();
     if (!normalized) return false;
@@ -5526,7 +5601,10 @@ window.addEventListener("DOMContentLoaded", () => {
       : submitRequest();
   };
 
-  const postActionJson = async (action, payload = {}) => runWithAppLoading(async () => {
+  const postActionJson = async (action, payload = {}, options = {}) => {
+    const showLoading = options?.showLoading !== false;
+    const loadingLabel = String(options?.loadingLabel || "Carregando...");
+    const submitRequest = async () => {
     const formData = new FormData();
     formData.append("action", String(action || "").trim());
     Object.entries(payload || {}).forEach(([key, value]) => {
@@ -5568,8 +5646,13 @@ window.addEventListener("DOMContentLoaded", () => {
       throw new Error(message);
     }
 
-    return data;
-  }, { label: "Carregando..." });
+      return data;
+    };
+
+    return showLoading
+      ? runWithAppLoading(submitRequest, { label: loadingLabel })
+      : submitRequest();
+  };
 
   let currentTaskHistoryState = {};
 
@@ -9203,6 +9286,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
+    if (target instanceof HTMLInputElement && target.matches("[data-group-visual-image-input]")) {
+      void readGroupVisualImage(target);
+      return;
+    }
+
     if (target instanceof HTMLInputElement && target.matches(uppercaseRequiredInputSelector)) {
       applyFirstLetterUppercaseToInput(target);
     }
@@ -9263,8 +9351,9 @@ window.addEventListener("DOMContentLoaded", () => {
       if (target.matches("[data-task-group-select]")) {
         const taskItem = target.closest("[data-task-item]");
         if (taskItem instanceof HTMLElement) {
-          moveTaskItemToGroupDom(taskItem, target.value || "Geral");
-          syncTaskGroupInputs();
+          const sourceGroupName = String(taskItem.dataset.groupName || "").trim() || "Geral";
+          void submitTaskProjectMove(form, target, sourceGroupName);
+          return;
         }
       }
       if (target instanceof HTMLSelectElement && target.matches(".status-select")) {
@@ -9987,12 +10076,10 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     field.value = nextGroup;
-    draggedTaskItem.dataset.groupName = nextGroup;
+    syncInlineSelectPicker(field);
 
     if (currentGroup !== nextGroup) {
-      moveTaskItemToGroupDom(draggedTaskItem, nextGroup);
-      syncTaskGroupInputs();
-      scheduleTaskAutosave(form, 60);
+      void submitTaskProjectMove(form, field, currentGroup);
     }
   });
 
@@ -10198,6 +10285,15 @@ window.addEventListener("DOMContentLoaded", () => {
       if (groupSection instanceof HTMLElement) {
         const shouldHideDone = !groupSection.classList.contains("is-done-hidden");
         setTaskGroupDoneHidden(groupSection, shouldHideDone);
+      } else {
+        const groupName = String(groupDoneToggleButton.dataset.taskGroupToggleName || "").trim();
+        if (groupName) {
+          const shouldHideDone = !Boolean(getStoredTaskGroupDoneHiddenState(groupName));
+          setStoredTaskGroupDoneHiddenState(groupName, shouldHideDone);
+          if (isTaskCalendarLayoutActive()) {
+            window.location.reload();
+          }
+        }
       }
       const actionsMenu = groupDoneToggleButton.closest("[data-task-group-actions-menu]");
       if (actionsMenu instanceof HTMLDetailsElement) {
@@ -11133,6 +11229,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const googleDriveBrowserBackRootButton = document.querySelector("[data-google-drive-browser-back-root]");
   const groupPermissionModals = Array.from(
     document.querySelectorAll("[data-group-permissions-modal]")
+  );
+  const groupVisualModals = Array.from(
+    document.querySelectorAll("[data-group-visual-modal]")
   );
   let confirmModalAction = null;
   let confirmModalCloseAction = null;
@@ -17214,6 +17313,7 @@ window.addEventListener("DOMContentLoaded", () => {
       googleDriveBrowserModal,
       confirmModal,
       ...groupPermissionModals,
+      ...groupVisualModals,
     ].some(
       (modal) => modal && !modal.hidden
     );
@@ -18111,6 +18211,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (createGroupForm) {
       createGroupForm.reset();
     }
+    if (createGroupModal instanceof HTMLElement) {
+      updateGroupVisualPreview(createGroupModal.querySelector("[data-group-visual-fields]"), "");
+    }
     syncGroupPermissionsModal(createGroupModal);
     createGroupModal.hidden = false;
     syncBodyModalLock();
@@ -18123,6 +18226,82 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!createGroupModal) return;
     createGroupModal.hidden = true;
     syncBodyModalLock();
+  };
+
+  const openGroupVisualModal = (modalKey = "") => {
+    const key = String(modalKey || "").trim();
+    if (!key) return;
+    const modal = document.querySelector(
+      `[data-group-visual-modal="${CSS.escape(key)}"]`
+    );
+    if (!(modal instanceof HTMLElement)) return;
+    const form = modal.querySelector("[data-group-visual-form]");
+    if (form instanceof HTMLFormElement) form.reset();
+    updateGroupVisualPreview(modal.querySelector("[data-group-visual-fields]"));
+    modal.hidden = false;
+    syncBodyModalLock();
+  };
+
+  const closeGroupVisualModal = (modalElement = null) => {
+    if (modalElement instanceof HTMLElement) {
+      modalElement.hidden = true;
+    } else {
+      groupVisualModals.forEach((modal) => {
+        if (modal instanceof HTMLElement) modal.hidden = true;
+      });
+    }
+    syncBodyModalLock();
+  };
+
+  const updateGroupVisualPreview = (scope, value = "") => {
+    if (!(scope instanceof HTMLElement)) return;
+    const imageValue = scope.querySelector("[data-group-visual-image-value]");
+    const preview = scope.querySelector("[data-group-visual-image-preview]");
+    const removeButton = scope.querySelector("[data-group-visual-image-remove]");
+    if (!(imageValue instanceof HTMLInputElement) || !(preview instanceof HTMLElement)) return;
+
+    const source = String(value || imageValue.value || "").trim();
+    imageValue.value = source;
+    preview.replaceChildren();
+    const hasImage = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(source);
+    preview.hidden = !hasImage;
+    preview.classList.toggle("has-image", hasImage);
+    if (removeButton instanceof HTMLButtonElement) {
+      removeButton.hidden = !hasImage;
+    }
+    if (!hasImage) return;
+
+    const image = document.createElement("img");
+    image.src = source;
+    image.alt = "Imagem do projeto";
+    preview.appendChild(image);
+  };
+
+  const chooseGroupVisualImage = async (scope) => {
+    if (!(scope instanceof HTMLElement)) return;
+    const input = scope.querySelector("[data-group-visual-image-input]");
+    if (!(input instanceof HTMLInputElement)) return;
+    input.click();
+  };
+
+  const readGroupVisualImage = async (input) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    const file = input.files?.[0] || null;
+    if (!(file instanceof File)) return;
+    if (!/^(image\/(?:png|jpeg|webp|gif))$/i.test(file.type || "") || file.size > 1000000) {
+      showClientFlash("error", "Use uma imagem PNG, JPG, WEBP ou GIF de até 1 MB.");
+      input.value = "";
+      return;
+    }
+
+    try {
+      const source = await readFileAsDataUrl(file);
+      updateGroupVisualPreview(input.closest("[data-group-visual-fields]"), source);
+    } catch (_error) {
+      showClientFlash("error", "Não foi possível preparar a imagem do projeto.");
+    } finally {
+      input.value = "";
+    }
   };
 
   const openGroupPermissionsModal = (modalKey = "") => {
@@ -18766,6 +18945,38 @@ window.addEventListener("DOMContentLoaded", () => {
     if (!(target instanceof Element)) return;
     closeOpenWorkspaceSidebarPickers(target);
 
+    const inboxSourceTrigger = target.closest("[data-inbox-source-open]");
+    if (inboxSourceTrigger instanceof HTMLElement) {
+      event.preventDefault();
+      const workspaceId = Math.max(
+        0,
+        Number.parseInt(String(inboxSourceTrigger.dataset.sourceWorkspaceId || "0"), 10) || 0
+      );
+      const redirectPath = String(inboxSourceTrigger.dataset.sourceRedirectPath || "").trim();
+      const csrfToken = String(inboxSourceTrigger.dataset.csrfToken || "").trim();
+      if (!workspaceId || !redirectPath || !csrfToken) return;
+
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = window.location.pathname + window.location.search;
+      form.dataset.loadingLabel = "Abrindo projeto...";
+      [
+        ["csrf_token", csrfToken],
+        ["action", "switch_workspace"],
+        ["workspace_id", String(workspaceId)],
+        ["redirect_to", redirectPath],
+      ].forEach(([name, value]) => {
+        const field = document.createElement("input");
+        field.type = "hidden";
+        field.name = name;
+        field.value = value;
+        form.appendChild(field);
+      });
+      document.body.appendChild(form);
+      form.requestSubmit();
+      return;
+    }
+
     if (
       fabWrap &&
       fabToggleButton &&
@@ -19170,6 +19381,26 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const openGroupVisualTrigger = target.closest("[data-open-group-visual-modal]");
+    if (openGroupVisualTrigger instanceof HTMLElement) {
+      const actionsMenu = openGroupVisualTrigger.closest("[data-task-group-actions-menu]");
+      if (actionsMenu instanceof HTMLDetailsElement) actionsMenu.open = false;
+      openGroupVisualModal(openGroupVisualTrigger.dataset.openGroupVisualModal || "");
+      return;
+    }
+
+    const groupVisualImageChoose = target.closest("[data-group-visual-image-choose]");
+    if (groupVisualImageChoose instanceof HTMLButtonElement) {
+      void chooseGroupVisualImage(groupVisualImageChoose.closest("[data-group-visual-fields]"));
+      return;
+    }
+
+    const groupVisualImageRemove = target.closest("[data-group-visual-image-remove]");
+    if (groupVisualImageRemove instanceof HTMLButtonElement) {
+      updateGroupVisualPreview(groupVisualImageRemove.closest("[data-group-visual-fields]"), "");
+      return;
+    }
+
     const openGroupPermissionsTrigger = target.closest(
       "[data-open-group-permissions-modal]"
     );
@@ -19506,6 +19737,9 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     if (createGroupModal && !createGroupModal.hidden) {
       closeCreateGroupModal();
+    }
+    if (groupVisualModals.some((modal) => modal instanceof HTMLElement && !modal.hidden)) {
+      closeGroupVisualModal();
     }
     if (vaultGroupModal && !vaultGroupModal.hidden) {
       closeVaultGroupModal();
@@ -20711,6 +20945,12 @@ window.addEventListener("DOMContentLoaded", () => {
     if (settleRemainingButton instanceof HTMLButtonElement) {
       event.preventDefault();
       stageAccountingRemainingDiscount(settleRemainingButton);
+      return;
+    }
+
+    const closeGroupVisualTrigger = target.closest("[data-close-group-visual-modal]");
+    if (closeGroupVisualTrigger instanceof HTMLElement) {
+      closeGroupVisualModal(closeGroupVisualTrigger.closest("[data-group-visual-modal]"));
       return;
     }
 

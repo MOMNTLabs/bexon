@@ -11,6 +11,11 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                     throw new RuntimeException('Workspace ativo não encontrado.');
                 }
                 $groupName = normalizeTaskGroupName((string) ($_POST['group_name'] ?? ''));
+                $groupColor = normalizeTaskGroupColor(
+                    (string) ($_POST['group_color'] ?? ''),
+                    taskGroupDefaultColor($groupName)
+                );
+                $groupImageDataUrl = normalizeTaskGroupImageDataUrl($_POST['group_image_data_url'] ?? '');
 
                 if (findTaskGroupByName($groupName, $workspaceId) !== null) {
                     throw new RuntimeException('Este grupo já existe.');
@@ -29,6 +34,19 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                 $pdo->beginTransaction();
                 try {
                     upsertTaskGroup($pdo, $groupName, (int) $authUser['id'], $workspaceId);
+                    $visualStmt = $pdo->prepare(
+                        'UPDATE task_groups
+                         SET color_hex = :color_hex,
+                             image_data_url = :image_data_url
+                         WHERE workspace_id = :workspace_id
+                           AND name = :name'
+                    );
+                    $visualStmt->execute([
+                        ':color_hex' => $groupColor,
+                        ':image_data_url' => $groupImageDataUrl,
+                        ':workspace_id' => $workspaceId,
+                        ':name' => $groupName,
+                    ]);
                     saveTaskGroupPermissions(
                         $pdo,
                         $workspaceId,
@@ -44,6 +62,52 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
                     throw $e;
                 }
                 flash('success', 'Grupo criado.');
+                redirectTo(tasksRedirectPathFromRequest());
+
+            case 'update_task_group_visual':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $groupInput = normalizeTaskGroupName((string) ($_POST['group_name'] ?? ''));
+                $existingGroupName = findTaskGroupByName($groupInput, $workspaceId);
+                if ($existingGroupName === null) {
+                    throw new RuntimeException('Projeto nÃ£o encontrado.');
+                }
+                if (!userCanAccessTaskGroup((int) $authUser['id'], $workspaceId, $existingGroupName)) {
+                    throw new RuntimeException('VocÃª nÃ£o possui acesso para alterar este projeto.');
+                }
+
+                $color = normalizeTaskGroupColor(
+                    (string) ($_POST['group_color'] ?? ''),
+                    taskGroupDefaultColor($existingGroupName)
+                );
+                $imageDataUrl = normalizeTaskGroupImageDataUrl($_POST['group_image_data_url'] ?? '');
+                $stmt = $pdo->prepare(
+                    'UPDATE task_groups
+                     SET color_hex = :color_hex,
+                         image_data_url = :image_data_url
+                     WHERE workspace_id = :workspace_id
+                       AND name = :name'
+                );
+                $stmt->execute([
+                    ':color_hex' => $color,
+                    ':image_data_url' => $imageDataUrl,
+                    ':workspace_id' => $workspaceId,
+                    ':name' => $existingGroupName,
+                ]);
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'group_name' => $existingGroupName,
+                        'visual' => taskGroupVisual($existingGroupName, $workspaceId),
+                    ]);
+                }
+
+                flash('success', 'Identidade visual do projeto atualizada.');
                 redirectTo(tasksRedirectPathFromRequest());
 
             case 'rename_group':
@@ -388,6 +452,7 @@ function handleTaskGroupPostAction(PDO $pdo, string $action): bool
 
     return in_array($action, [
         'create_group',
+        'update_task_group_visual',
         'rename_group',
         'delete_group',
         'restore_deleted_group',

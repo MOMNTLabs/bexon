@@ -2064,6 +2064,23 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
                     <input type="text" name="group_name" maxlength="60" required data-create-group-name-input>
                 </label>
 
+                <div class="task-project-visual-fields" data-group-visual-fields>
+                    <label class="task-project-color-field">
+                        <span>Cor</span>
+                        <input type="color" name="group_color" value="#4e82ba" data-group-visual-color-input>
+                    </label>
+                    <div class="task-project-image-field">
+                        <span>Imagem <small>opcional</small></span>
+                        <input type="hidden" name="group_image_data_url" value="" data-group-visual-image-value>
+                        <div class="task-project-image-field-actions">
+                            <button type="button" class="btn btn-mini btn-ghost" data-group-visual-image-choose>Adicionar imagem</button>
+                            <button type="button" class="btn btn-mini btn-ghost" data-group-visual-image-remove hidden>Remover</button>
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-group-visual-image-input hidden>
+                        </div>
+                        <span class="task-project-image-preview" data-group-visual-image-preview hidden></span>
+                    </div>
+                </div>
+
                 <div class="group-permissions-scope" data-group-permissions-scope>
                     <label class="group-permissions-toggle group-permissions-toggle-master">
                         <input
@@ -2119,6 +2136,64 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         </section>
     </div>
 <?php endif; ?>
+
+<?php foreach (($taskGroups ?? []) as $taskGroupVisualOption): ?>
+    <?php
+    $taskGroupVisualName = normalizeTaskGroupName((string) $taskGroupVisualOption);
+    $taskGroupVisualPermission = $taskGroupPermissions[$taskGroupVisualName] ?? ['can_access' => false];
+    if (empty($taskGroupVisualPermission['can_access'])) {
+        continue;
+    }
+    $taskGroupVisualData = $taskGroupVisuals[$taskGroupVisualName]
+        ?? taskGroupVisual($taskGroupVisualName, $currentWorkspaceId ?? null);
+    $taskGroupVisualModalKey = 'task-group-visual-' . md5($taskGroupVisualName);
+    $taskGroupVisualImage = taskGroupImageSrc($taskGroupVisualData);
+    ?>
+    <div class="modal-backdrop" data-group-visual-modal="<?= e($taskGroupVisualModalKey) ?>" hidden>
+        <div class="modal-scrim" data-close-group-visual-modal></div>
+        <section class="modal-card create-group-modal task-group-visual-modal-card" role="dialog" aria-modal="true" aria-labelledby="task-group-visual-title-<?= e(md5($taskGroupVisualName)) ?>">
+            <header class="modal-head">
+                <h2 id="task-group-visual-title-<?= e(md5($taskGroupVisualName)) ?>">Identidade do projeto</h2>
+                <button type="button" class="modal-close-button" data-close-group-visual-modal aria-label="Fechar modal"><span aria-hidden="true">&#10005;</span></button>
+            </header>
+            <form method="post" class="form-stack modal-form" data-group-visual-form>
+                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                <input type="hidden" name="action" value="update_task_group_visual">
+                <input type="hidden" name="group_name" value="<?= e($taskGroupVisualName) ?>">
+                <input type="hidden" name="redirect_task_scope" value="<?= e($taskPageMode === 'project' ? 'project' : 'all') ?>">
+                <input type="hidden" name="redirect_task_layout" value="<?= e($taskLayout) ?>">
+                <input type="hidden" name="redirect_calendar_month" value="<?= e($taskCalendarMonth) ?>">
+                <input type="hidden" name="redirect_group" value="<?= e((string) ($groupFilter ?? '')) ?>">
+
+                <p class="task-project-visual-modal-project">
+                    <?= renderTaskGroupVisual($taskGroupVisualData, 'task-project-visual task-project-visual-modal', 'span') ?>
+                    <strong><?= e($taskGroupVisualName) ?></strong>
+                </p>
+                <div class="task-project-visual-fields" data-group-visual-fields>
+                    <label class="task-project-color-field">
+                        <span>Cor</span>
+                        <input type="color" name="group_color" value="<?= e((string) ($taskGroupVisualData['color'] ?? '#4e82ba')) ?>" data-group-visual-color-input>
+                    </label>
+                    <div class="task-project-image-field">
+                        <span>Imagem <small>opcional</small></span>
+                        <input type="hidden" name="group_image_data_url" value="<?= e((string) ($taskGroupVisualData['image_data_url'] ?? '')) ?>" data-group-visual-image-value>
+                        <div class="task-project-image-field-actions">
+                            <button type="button" class="btn btn-mini btn-ghost" data-group-visual-image-choose>Trocar imagem</button>
+                            <button type="button" class="btn btn-mini btn-ghost" data-group-visual-image-remove<?= $taskGroupVisualImage === '' ? ' hidden' : '' ?>>Remover</button>
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-group-visual-image-input hidden>
+                        </div>
+                        <span class="task-project-image-preview<?= $taskGroupVisualImage === '' ? '' : ' has-image' ?>" data-group-visual-image-preview<?= $taskGroupVisualImage === '' ? ' hidden' : '' ?>><?php if ($taskGroupVisualImage !== ''): ?><img src="<?= e($taskGroupVisualImage) ?>" alt="Imagem do projeto"><?php endif; ?></span>
+                    </div>
+                </div>
+                <p class="form-helper-text">A imagem aparece em miniatura; sem imagem, a cor identifica o projeto.</p>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-mini btn-ghost" data-close-group-visual-modal>Cancelar</button>
+                    <button type="submit" class="btn btn-pill">Salvar identidade</button>
+                </div>
+            </form>
+        </section>
+    </div>
+<?php endforeach; ?>
 
 <div class="modal-backdrop" data-vault-group-modal hidden>
     <div class="modal-scrim" data-close-vault-group-modal></div>

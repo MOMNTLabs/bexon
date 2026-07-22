@@ -1727,6 +1727,8 @@ function ensureTaskGroupsSchema(PDO $pdo): void
                 id BIGSERIAL PRIMARY KEY,
                 workspace_id BIGINT DEFAULT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 name TEXT NOT NULL,
+                color_hex TEXT NOT NULL DEFAULT \'\',
+                image_data_url TEXT NOT NULL DEFAULT \'\',
                 created_by BIGINT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )'
@@ -1737,12 +1739,21 @@ function ensureTaskGroupsSchema(PDO $pdo): void
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workspace_id INTEGER DEFAULT NULL,
                 name TEXT NOT NULL,
+                color_hex TEXT NOT NULL DEFAULT \'\',
+                image_data_url TEXT NOT NULL DEFAULT \'\',
                 created_by INTEGER DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
                 FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
             )'
         );
+    }
+
+    if (!tableHasColumn($pdo, 'task_groups', 'color_hex')) {
+        $pdo->exec("ALTER TABLE task_groups ADD COLUMN color_hex TEXT NOT NULL DEFAULT ''");
+    }
+    if (!tableHasColumn($pdo, 'task_groups', 'image_data_url')) {
+        $pdo->exec("ALTER TABLE task_groups ADD COLUMN image_data_url TEXT NOT NULL DEFAULT ''");
     }
 
     $pdo->exec(
@@ -16778,6 +16789,158 @@ function upsertTaskGroup(PDO $pdo, string $groupName, ?int $createdBy = null, ?i
     return $normalizedName;
 }
 
+function taskGroupDefaultColor(string $groupName): string
+{
+    $colors = ['#4e82ba', '#8a68b8', '#1b9a83', '#cf7b45', '#b75c73', '#5d8f6f', '#5879b7'];
+    $index = abs((int) crc32(mb_strtolower(normalizeTaskGroupName($groupName)))) % count($colors);
+    return $colors[$index];
+}
+
+function normalizeTaskGroupColor(string $value, string $fallback = ''): string
+{
+    $value = trim($value);
+    if (preg_match('/^#?([a-f0-9]{6})$/i', $value, $matches) === 1) {
+        return '#' . strtolower((string) $matches[1]);
+    }
+
+    return $fallback;
+}
+
+function normalizeTaskGroupImageDataUrl($value): string
+{
+    $value = trim((string) $value);
+    if ($value === '' || strlen($value) > 1500000) {
+        return '';
+    }
+
+    if (preg_match('#^data:(image/(?:png|jpe?g|webp|gif));base64,([a-z0-9+/=]+)$#i', $value, $matches) !== 1) {
+        return '';
+    }
+
+    $bytes = base64_decode((string) $matches[2], true);
+    if (!is_string($bytes) || $bytes === '' || strlen($bytes) > 1000000) {
+        return '';
+    }
+
+    $imageInfo = @getimagesizefromstring($bytes);
+    $mime = strtolower((string) ($imageInfo['mime'] ?? ''));
+    if (!in_array($mime, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], true)) {
+        return '';
+    }
+
+    return 'data:' . $mime . ';base64,' . base64_encode($bytes);
+}
+
+function taskGroupVisualsMap(?int $workspaceId = null): array
+{
+    $workspaceId = $workspaceId && $workspaceId > 0 ? $workspaceId : activeWorkspaceId();
+    if ($workspaceId === null) {
+        return [];
+    }
+
+    $visuals = [];
+    $stmt = db()->prepare(
+        'SELECT id, name, color_hex, image_data_url
+         FROM task_groups
+         WHERE workspace_id = :workspace_id'
+    );
+    $stmt->execute([':workspace_id' => $workspaceId]);
+
+    foreach ($stmt->fetchAll() as $row) {
+        $name = normalizeTaskGroupName((string) ($row['name'] ?? 'Geral'));
+        $visuals[$name] = [
+            'id' => (int) ($row['id'] ?? 0),
+            'name' => $name,
+            'color' => normalizeTaskGroupColor(
+                (string) ($row['color_hex'] ?? ''),
+                taskGroupDefaultColor($name)
+            ),
+            'image_data_url' => normalizeTaskGroupImageDataUrl($row['image_data_url'] ?? ''),
+        ];
+    }
+
+    foreach (taskGroupsList($workspaceId) as $name) {
+        $name = normalizeTaskGroupName((string) $name);
+        if (!isset($visuals[$name])) {
+            $visuals[$name] = [
+                'id' => 0,
+                'name' => $name,
+                'color' => taskGroupDefaultColor($name),
+                'image_data_url' => '',
+            ];
+        }
+    }
+
+    return $visuals;
+}
+
+function taskGroupVisual(string $groupName, ?int $workspaceId = null): array
+{
+    $name = normalizeTaskGroupName($groupName);
+    $visuals = taskGroupVisualsMap($workspaceId);
+    return $visuals[$name] ?? [
+        'id' => 0,
+        'name' => $name,
+        'color' => taskGroupDefaultColor($name),
+        'image_data_url' => '',
+    ];
+}
+
+function taskGroupImageSrc(array $visual): string
+{
+    return avatarImageResponseUrl(
+        'task_group_image',
+        (int) ($visual['id'] ?? 0),
+        (string) ($visual['image_data_url'] ?? '')
+    );
+}
+
+function renderTaskGroupVisual(array $visual, string $class = 'task-project-visual', string $tag = 'span'): string
+{
+    $tag = avatarTagName($tag);
+    $color = normalizeTaskGroupColor((string) ($visual['color'] ?? ''), '#4e82ba');
+    $imageSrc = taskGroupImageSrc($visual);
+    $classes = trim($class . ($imageSrc !== '' ? ' has-image' : ''));
+    $style = ' style="--task-project-color: ' . e($color) . ';"';
+
+    if ($imageSrc !== '') {
+        return '<' . $tag . ' class="' . e($classes) . '"' . $style . '><img src="' . e($imageSrc) . '" alt=""></' . $tag . '>';
+    }
+
+    return '<' . $tag . ' class="' . e($classes) . '"' . $style . ' aria-hidden="true"></' . $tag . '>';
+}
+
+function respondTaskGroupImage(): void
+{
+    $currentUser = currentUser();
+    $groupId = (int) ($_GET['id'] ?? 0);
+    if (!$currentUser || $groupId <= 0) {
+        http_response_code(404);
+        exit;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT workspace_id, name, image_data_url
+         FROM task_groups
+         WHERE id = :id
+         LIMIT 1'
+    );
+    $stmt->execute([':id' => $groupId]);
+    $group = $stmt->fetch();
+    $workspaceId = (int) ($group['workspace_id'] ?? 0);
+    if (
+        !$group
+        || $workspaceId <= 0
+        || workspaceRoleForUser((int) $currentUser['id'], $workspaceId) === null
+        || !userCanViewTaskGroup((int) $currentUser['id'], $workspaceId, (string) ($group['name'] ?? ''))
+    ) {
+        http_response_code(404);
+        exit;
+    }
+
+    outputAvatarImageSource((string) ($group['image_data_url'] ?? ''));
+}
+
 function taskGroupsList(?int $workspaceId = null): array
 {
     $pdo = db();
@@ -16924,6 +17087,8 @@ function taskUndoGroupColumns(): array
         'id',
         'workspace_id',
         'name',
+        'color_hex',
+        'image_data_url',
         'created_by',
         'created_at',
     ];
@@ -17327,11 +17492,13 @@ function taskUndoRestoreGroupSnapshot(PDO $pdo, int $workspaceId, array $snapsho
     $groupId = (int) ($group['id'] ?? 0);
     if ($groupId > 0) {
         $stmt = $pdo->prepare(
-            'INSERT INTO task_groups (id, workspace_id, name, created_by, created_at)
-             VALUES (:id, :workspace_id, :name, :created_by, :created_at)
+            'INSERT INTO task_groups (id, workspace_id, name, color_hex, image_data_url, created_by, created_at)
+             VALUES (:id, :workspace_id, :name, :color_hex, :image_data_url, :created_by, :created_at)
              ON CONFLICT (id) DO UPDATE SET
                 workspace_id = excluded.workspace_id,
                 name = excluded.name,
+                color_hex = excluded.color_hex,
+                image_data_url = excluded.image_data_url,
                 created_by = excluded.created_by,
                 created_at = excluded.created_at'
         );
@@ -17339,6 +17506,8 @@ function taskUndoRestoreGroupSnapshot(PDO $pdo, int $workspaceId, array $snapsho
             ':id' => $groupId,
             ':workspace_id' => $workspaceId,
             ':name' => $groupName,
+            ':color_hex' => normalizeTaskGroupColor((string) ($group['color_hex'] ?? '')),
+            ':image_data_url' => normalizeTaskGroupImageDataUrl($group['image_data_url'] ?? ''),
             ':created_by' => isset($group['created_by']) ? (int) $group['created_by'] : null,
             ':created_at' => trim((string) ($group['created_at'] ?? '')) !== ''
                 ? (string) $group['created_at']
@@ -17696,6 +17865,7 @@ function personalTaskInboxTasks(int $userId): array
             continue;
         }
 
+        $groupVisuals = taskGroupVisualsMap($workspaceId);
         foreach (allTasks($workspaceId) as $task) {
             $sourceGroupName = normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral'));
             if (!userCanViewTaskGroup($userId, $workspaceId, $sourceGroupName)) {
@@ -17714,6 +17884,7 @@ function personalTaskInboxTasks(int $userId): array
             $task['inbox_source_workspace'] = $workspace;
             $task['inbox_source_workspace_name'] = (string) ($workspace['name'] ?? 'Workspace');
             $task['inbox_source_group_name'] = $sourceGroupName;
+            $task['inbox_source_group_visual'] = $groupVisuals[$sourceGroupName] ?? taskGroupVisual($sourceGroupName, $workspaceId);
             $task['inbox_source_can_access'] = userCanAccessTaskGroup($userId, $workspaceId, $sourceGroupName);
             $task['is_personal_task_inbox'] = true;
             $task['group_name'] = $inboxName;

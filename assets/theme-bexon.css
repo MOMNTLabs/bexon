@@ -62,39 +62,20 @@
     flex: 0 0 auto;
     border-radius: 999px;
     border: 3px solid rgba(var(--color-accent-500-rgb), 0.18);
-    border-top-color: var(--color-accent-400);
-    border-right-color: var(--color-accent-500);
-    border-bottom-color: rgba(var(--color-accent-700-rgb), 0.72);
-    background: radial-gradient(circle at center, rgba(18, 20, 24, 0.92) 0 45%, transparent 46%);
-    box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.04),
-        0 0 18px rgba(var(--color-accent-500-rgb), 0.22);
+    border-top-color: var(--color-accent-300);
+    border-right-color: var(--color-accent-400);
+    border-bottom-color: var(--color-accent-500);
+    background: transparent;
+    box-shadow: none;
     animation: appLoadingSpin 820ms linear infinite;
 }
 
 .app-loading-spinner::before {
-    content: "";
-    position: absolute;
-    inset: 9px;
-    border-radius: 999px;
-    background:
-        radial-gradient(circle at 34% 34%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 36%),
-        linear-gradient(145deg, rgba(var(--color-accent-400-rgb), 0.92), rgba(var(--color-accent-700-rgb), 0.88));
-    box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-        0 0 12px rgba(var(--color-accent-500-rgb), 0.24);
+    content: none;
 }
 
 .app-loading-spinner::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    right: 4px;
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: #ffffff;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+    content: none;
 }
 
 .app-loading-copy {
@@ -4321,6 +4302,165 @@ body.is-dashboard .task-calendar-card-meta,
 body.is-dashboard .task-calendar-sidebar-meta,
 body.is-dashboard .task-calendar-sidebar-empty {
     color: rgba(75, 93, 118, 0.74);
+}
+
+/* Project identity: color is always present; the optional image replaces the swatch. */
+body.is-dashboard .task-project-visual {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+    display: inline-grid;
+    place-items: center;
+    overflow: hidden;
+    border: 2px solid color-mix(in srgb, var(--task-project-color) 24%, #fff);
+    border-radius: 50%;
+    background: var(--task-project-color);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--task-project-color) 38%, transparent);
+}
+
+body.is-dashboard .task-project-visual.has-image {
+    border-color: color-mix(in srgb, var(--task-project-color) 64%, #fff);
+    background: #fff;
+}
+
+body.is-dashboard .task-project-visual img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+body.is-dashboard .task-project-visual-sidebar {
+    width: 10px;
+    height: 10px;
+    flex-basis: 10px;
+    border-width: 1px;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link {
+    gap: 8px;
+}
+
+body.is-dashboard .task-project-visual-heading,
+body.is-dashboard .task-project-visual-choice,
+body.is-dashboard .task-project-visual-current,
+body.is-dashboard .task-project-visual-modal {
+    width: 18px;
+    height: 18px;
+    flex-basis: 18px;
+}
+
+body.is-dashboard .task-current-project-subtitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+body.is-dashboard .task-project-choice-label-shell {
+    gap: 9px;
+}
+
+body.is-dashboard .task-project-choice-action-icon {
+    color: var(--color-accent-600);
+}
+
+body.is-dashboard .task-calendar-card-project-meta {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+body.is-dashboard .task-project-visual-calendar {
+    width: 9px;
+    height: 9px;
+    flex-basis: 9px;
+    border-width: 1px;
+}
+
+body.is-dashboard .task-project-visual-inbox {
+    width: 10px;
+    height: 10px;
+    flex-basis: 10px;
+    border-width: 1px;
+}
+
+body.is-dashboard .task-project-visual-fields {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.36fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: end;
+}
+
+body.is-dashboard .task-project-color-field,
+body.is-dashboard .task-project-image-field {
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+}
+
+body.is-dashboard .task-project-color-field > span,
+body.is-dashboard .task-project-image-field > span {
+    color: var(--bexon-text-soft);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+body.is-dashboard .task-project-image-field small {
+    color: var(--bexon-text-muted);
+    font-weight: 500;
+}
+
+body.is-dashboard .task-project-color-field input[type="color"] {
+    width: 100%;
+    min-height: 38px;
+    padding: 3px;
+    border: 1px solid rgba(32, 36, 43, 0.13);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+
+body.is-dashboard .task-project-image-field-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+body.is-dashboard .task-project-image-preview {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(32, 36, 43, 0.12);
+    border-radius: 12px;
+    background: #f6f8fb;
+}
+
+body.is-dashboard .task-project-image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+body.is-dashboard .task-project-visual-modal-project {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--bexon-text-strong);
+}
+
+body.is-dashboard .task-group-visual-modal-card .form-helper-text {
+    margin: -2px 0 0;
+}
+
+@media (max-width: 620px) {
+    body.is-dashboard .task-project-visual-fields {
+        grid-template-columns: 1fr;
+    }
 }
 
 body.is-dashboard .task-calendar-nav-link {

@@ -144,6 +144,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         respondWorkspaceAvatarImage();
     }
 
+    if ($getAction === 'task_group_image') {
+        respondTaskGroupImage();
+    }
+
     if ($getAction === 'google_auth') {
         handleGoogleOAuthStart($pdo);
     }
@@ -499,6 +503,7 @@ $workspaceEnabledViews = ($currentUser && $currentWorkspaceId !== null)
     ? workspaceEnabledDashboardViews($currentWorkspaceId, $currentWorkspace, !empty($showUsersDashboardTab))
     : [];
 $taskGroupsAll = ($currentUser && $currentWorkspaceId !== null) ? taskGroupsList($currentWorkspaceId) : ['Geral'];
+$taskGroupVisuals = ($currentUser && $currentWorkspaceId !== null) ? taskGroupVisualsMap($currentWorkspaceId) : [];
 $vaultGroupsAll = ($currentUser && $currentWorkspaceId !== null) ? vaultGroupsList($currentWorkspaceId) : ['Geral'];
 $dueGroupsAll = ($currentUser && $currentWorkspaceId !== null) ? dueGroupsList($currentWorkspaceId) : ['Geral'];
 $inventoryGroupsAll = ($currentUser && $currentWorkspaceId !== null) ? inventoryGroupsList($currentWorkspaceId) : ['Geral'];
@@ -826,7 +831,6 @@ if ($taskPageMode === 'select') {
 }
 if ($taskPageMode === 'mine') {
     $groupFilter = null;
-    $taskLayout = 'list';
     $taskGroupPermissions[personalTaskInboxName()] = [
         'can_view' => true,
         'can_access' => false,

@@ -86,7 +86,9 @@ require __DIR__ . '/tasks_page_intro.php';
                 $statusOptions,
                 $taskTitleTagColors,
                 $storedTaskGroupDoneHiddenMap,
-                $taskGroupPermissions
+                $taskGroupPermissions,
+                $taskGroupVisuals,
+                $currentWorkspaceId
             ): ?array {
                 $groupName = normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral'));
                 $statusKey = normalizeTaskStatus((string) ($task['status'] ?? ''));
@@ -106,11 +108,22 @@ require __DIR__ . '/tasks_page_intro.php';
                 );
                 $titleTag = normalizeTaskTitleTag((string) ($task['title_tag'] ?? ''));
                 $titleTagColor = taskTitleTagColorForTag($titleTag, $taskTitleTagColors);
+                $groupVisual = $taskGroupVisuals[$groupName]
+                    ?? taskGroupVisual($groupName, $currentWorkspaceId ?? null);
+                $sourceWorkspaceName = trim((string) ($task['inbox_source_workspace_name'] ?? ''));
+                $sourceGroupName = normalizeTaskGroupName((string) ($task['inbox_source_group_name'] ?? ''));
+                $sourceGroupVisual = is_array($task['inbox_source_group_visual'] ?? null)
+                    ? $task['inbox_source_group_visual']
+                    : $groupVisual;
 
                 return [
                     'id' => (int) ($task['id'] ?? 0),
                     'title' => normalizeTaskTitle((string) ($task['title'] ?? '')),
                     'group_name' => $groupName,
+                    'group_visual' => $groupVisual,
+                    'source_workspace_name' => $sourceWorkspaceName,
+                    'source_group_name' => $sourceGroupName,
+                    'source_group_visual' => $sourceGroupVisual,
                     'due_date' => dueDateForStorage((string) ($task['due_date'] ?? '')),
                     'status_label' => $statusLabel,
                     'status_kind' => $statusKind,
@@ -242,7 +255,19 @@ require __DIR__ . '/tasks_page_intro.php';
                                         <div class="task-calendar-day-list">
                                             <?php foreach ($calendarDayTasks as $calendarTask): ?>
                                                 <?php
-                                                $calendarGroupMeta = !$taskPageIsProject ? (string) $calendarTask['group_name'] : '';
+                                                $calendarIsPersonalInboxTask = !empty($taskPageIsPersonalInbox);
+                                                $calendarGroupMeta = !$taskPageIsProject
+                                                    ? (string) $calendarTask['group_name']
+                                                    : ($calendarIsPersonalInboxTask
+                                                        ? trim((string) ($calendarTask['source_workspace_name'] ?? ''))
+                                                            . ' · '
+                                                            . trim((string) ($calendarTask['source_group_name'] ?? ''))
+                                                        : '');
+                                                $calendarGroupVisual = $calendarIsPersonalInboxTask && is_array($calendarTask['source_group_visual'] ?? null)
+                                                    ? $calendarTask['source_group_visual']
+                                                    : (is_array($calendarTask['group_visual'] ?? null)
+                                                        ? $calendarTask['group_visual']
+                                                        : taskGroupVisual($calendarGroupMeta, $currentWorkspaceId ?? null));
                                                 $calendarAssigneeSummary = (string) ($calendarTask['assignee_summary'] ?? '');
                                                 $calendarAssignees = is_array($calendarTask['assignees'] ?? null)
                                                     ? array_values($calendarTask['assignees'])
@@ -274,7 +299,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                     <?php if ($calendarGroupMeta !== '' || $calendarHasAssigneeVisual): ?>
                                                         <span class="task-calendar-card-meta-row">
                                                             <?php if ($calendarGroupMeta !== ''): ?>
-                                                                <span class="task-calendar-card-meta"><?= e($calendarGroupMeta) ?></span>
+                                                                <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= renderTaskGroupVisual($calendarGroupVisual, 'task-project-visual task-project-visual-calendar', 'span') ?><?= e($calendarGroupMeta) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($calendarHasAssigneeVisual && is_array($calendarPrimaryAssignee)): ?>
                                                                 <span
@@ -336,7 +361,19 @@ require __DIR__ . '/tasks_page_intro.php';
                                             <div class="task-calendar-mobile-day-items">
                                                 <?php foreach ($calendarAgendaTasks as $calendarTask): ?>
                                                     <?php
-                                                    $calendarGroupMeta = !$taskPageIsProject ? (string) $calendarTask['group_name'] : '';
+                                                    $calendarIsPersonalInboxTask = !empty($taskPageIsPersonalInbox);
+                                                    $calendarGroupMeta = !$taskPageIsProject
+                                                        ? (string) $calendarTask['group_name']
+                                                        : ($calendarIsPersonalInboxTask
+                                                            ? trim((string) ($calendarTask['source_workspace_name'] ?? ''))
+                                                                . ' · '
+                                                                . trim((string) ($calendarTask['source_group_name'] ?? ''))
+                                                            : '');
+                                                    $calendarGroupVisual = $calendarIsPersonalInboxTask && is_array($calendarTask['source_group_visual'] ?? null)
+                                                        ? $calendarTask['source_group_visual']
+                                                        : (is_array($calendarTask['group_visual'] ?? null)
+                                                            ? $calendarTask['group_visual']
+                                                            : taskGroupVisual($calendarGroupMeta, $currentWorkspaceId ?? null));
                                                     $calendarAssigneeSummary = (string) ($calendarTask['assignee_summary'] ?? '');
                                                     $calendarAssignees = is_array($calendarTask['assignees'] ?? null)
                                                         ? array_values($calendarTask['assignees'])
@@ -368,7 +405,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                         <?php if ($calendarGroupMeta !== '' || $calendarHasAssigneeVisual): ?>
                                                             <span class="task-calendar-card-meta-row">
                                                                 <?php if ($calendarGroupMeta !== ''): ?>
-                                                                    <span class="task-calendar-card-meta"><?= e($calendarGroupMeta) ?></span>
+                                                                    <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= renderTaskGroupVisual($calendarGroupVisual, 'task-project-visual task-project-visual-calendar', 'span') ?><?= e($calendarGroupMeta) ?></span>
                                                                 <?php endif; ?>
                                                                 <?php if ($calendarHasAssigneeVisual && is_array($calendarPrimaryAssignee)): ?>
                                                                     <span

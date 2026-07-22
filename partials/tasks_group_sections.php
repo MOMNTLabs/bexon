@@ -20,6 +20,9 @@
         $taskGroupDoneToggleLabel = $taskGroupDoneHidden ? 'Exibir concluídas' : 'Ocultar concluídas';
         $groupVisibleTaskCount = 0;
         $groupHiddenDoneCount = 0;
+        $taskGroupVisual = $taskGroupVisuals[$groupName]
+            ?? taskGroupVisual((string) $groupName, $currentWorkspaceId ?? null);
+        $taskGroupVisualModalKey = 'task-group-visual-' . md5((string) $groupName);
         $taskGroupIsProjectView = !empty($taskPageIsProject);
         ?>
         <section
@@ -38,6 +41,7 @@
                         <input type="hidden" name="old_group_name" value="<?= e((string) $groupName) ?>">
                         <h3 id="group-<?= e(md5((string) $groupName)) ?>">
                             <span class="task-group-name-shell">
+                                <?= renderTaskGroupVisual($taskGroupVisual, 'task-project-visual task-project-visual-heading', 'span') ?>
                                 <span class="task-group-name-display" data-group-name-display><?= e((string) $groupName) ?></span>
                                 <?php if ($taskGroupCanAccess): ?>
                                     <button
@@ -98,6 +102,13 @@
                                     aria-pressed="<?= $taskGroupDoneHidden ? 'true' : 'false' ?>"
                                     aria-label="<?= e($taskGroupDoneToggleLabel) ?> do grupo <?= e((string) $groupName) ?>"
                                 ><?= e($taskGroupDoneToggleLabel) ?></button>
+                                <button
+                                    type="button"
+                                    class="task-group-actions-menu-item"
+                                    data-open-group-visual-modal="<?= e($taskGroupVisualModalKey) ?>"
+                                    role="menuitem"
+                                    aria-label="Editar cor ou imagem do projeto <?= e((string) $groupName) ?>"
+                                >Aparência</button>
                                 <?php if (!empty($canManageWorkspace) && empty($isPersonalWorkspace)): ?>
                                     <button
                                         type="button"
@@ -155,6 +166,9 @@
                     $taskSourceWorkspaceId = (int) ($task['inbox_source_workspace_id'] ?? 0);
                     $taskSourceWorkspaceName = trim((string) ($task['inbox_source_workspace_name'] ?? 'Workspace'));
                     $taskSourceGroupName = normalizeTaskGroupName((string) ($task['inbox_source_group_name'] ?? 'Geral'));
+                    $taskSourceGroupVisual = is_array($task['inbox_source_group_visual'] ?? null)
+                        ? $task['inbox_source_group_visual']
+                        : taskGroupVisual($taskSourceGroupName, $taskSourceWorkspaceId);
                     $taskSourceRedirectPath = dashboardPath('tasks', [
                         'task_scope' => 'project',
                         'group' => $taskSourceGroupName,
@@ -253,11 +267,21 @@
                                         required
                                     >
                                     <?php if ($taskIsPersonalInbox): ?>
-                                        <span class="task-inbox-workspace-source" title="<?= e($taskSourceWorkspaceName . ' · ' . $taskSourceGroupName) ?>">
+                                        <a
+                                            href="#"
+                                            class="task-inbox-workspace-source"
+                                            data-inbox-source-open
+                                            data-source-workspace-id="<?= e((string) $taskSourceWorkspaceId) ?>"
+                                            data-source-redirect-path="<?= e($taskSourceRedirectPath) ?>"
+                                            data-csrf-token="<?= e(csrfToken()) ?>"
+                                            title="<?= e($taskSourceWorkspaceName . ' · ' . $taskSourceGroupName) ?>"
+                                            aria-label="Abrir projeto <?= e($taskSourceGroupName) ?> no workspace <?= e($taskSourceWorkspaceName) ?>"
+                                        >
                                             <?= renderWorkspaceAvatar($taskSourceWorkspace, 'avatar small task-inbox-workspace-avatar', false, 'span') ?>
                                             <span><?= e($taskSourceWorkspaceName) ?></span>
+                                            <?= renderTaskGroupVisual($taskSourceGroupVisual, 'task-project-visual task-project-visual-inbox', 'span') ?>
                                             <small><?= e($taskSourceGroupName) ?></small>
-                                        </span>
+                                        </a>
                                     <?php endif; ?>
                                     <div
                                         class="task-subtasks-progress<?= $taskSubtasksTotal > 0 ? '' : ' is-hidden' ?>"
@@ -530,18 +554,6 @@
                             </div>
                             </fieldset>
                         </form>
-
-                        <?php if ($taskIsPersonalInbox && $taskSourceWorkspaceId > 0): ?>
-                            <form method="post" class="task-inbox-source-form">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                                <input type="hidden" name="action" value="switch_workspace">
-                                <input type="hidden" name="workspace_id" value="<?= e((string) $taskSourceWorkspaceId) ?>">
-                                <input type="hidden" name="redirect_to" value="<?= e($taskSourceRedirectPath) ?>">
-                                <button type="submit" class="task-inbox-source-open">
-                                    Abrir em <?= e($taskSourceWorkspaceName) ?>
-                                </button>
-                            </form>
-                        <?php endif; ?>
 
                         <form method="post" id="delete-task-<?= e((string) $taskId) ?>" class="task-delete-form">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">

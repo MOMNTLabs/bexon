@@ -1170,6 +1170,108 @@ function handleTaskPostAction(PDO $pdo, string $action): bool
                 flash('success', 'Status atualizado.');
                 redirectTo(taskDetailRedirectPathFromRequest($taskId));
 
+            case 'move_task_project':
+                $authUser = requireAuth();
+                $workspaceId = activeWorkspaceId($authUser);
+                if ($workspaceId === null) {
+                    throw new RuntimeException('Workspace ativo nÃ£o encontrado.');
+                }
+
+                $actorUserId = (int) $authUser['id'];
+                $taskId = (int) ($_POST['task_id'] ?? 0);
+                if ($taskId <= 0) {
+                    throw new RuntimeException('Tarefa invÃ¡lida.');
+                }
+
+                $requestedGroupName = normalizeTaskGroupName((string) ($_POST['group_name'] ?? ''));
+                if ($requestedGroupName === '') {
+                    throw new RuntimeException('Informe o projeto de destino.');
+                }
+                $existingDestinationGroup = findTaskGroupByName($requestedGroupName, $workspaceId);
+                $destinationGroupName = $existingDestinationGroup ?? $requestedGroupName;
+
+                $taskStmt = $pdo->prepare(
+                    'SELECT group_name, updated_at
+                     FROM tasks
+                     WHERE id = :id
+                       AND workspace_id = :workspace_id
+                     LIMIT 1'
+                );
+                $taskStmt->execute([
+                    ':id' => $taskId,
+                    ':workspace_id' => $workspaceId,
+                ]);
+                $taskRow = $taskStmt->fetch();
+                if (!$taskRow) {
+                    throw new RuntimeException('Tarefa invÃ¡lida.');
+                }
+
+                $currentGroupName = normalizeTaskGroupName((string) ($taskRow['group_name'] ?? 'Geral'));
+                if (!userCanAccessTaskGroup($actorUserId, $workspaceId, $currentGroupName)) {
+                    throw new RuntimeException('VocÃª nÃ£o possui acesso para mover esta tarefa.');
+                }
+                if (!userCanAccessTaskGroup($actorUserId, $workspaceId, $destinationGroupName)) {
+                    throw new RuntimeException('VocÃª nÃ£o possui acesso ao projeto de destino.');
+                }
+
+                $updatedAt = trim((string) ($taskRow['updated_at'] ?? ''));
+                if ($currentGroupName !== $destinationGroupName) {
+                    upsertTaskGroup($pdo, $destinationGroupName, $actorUserId, $workspaceId);
+                    $undoBeforeTask = taskUndoTaskSnapshot($pdo, $workspaceId, $taskId);
+                    $updatedAt = taskVersionTimestamp();
+
+                    $updateStmt = $pdo->prepare(
+                        'UPDATE tasks
+                         SET group_name = :group_name,
+                             updated_at = :updated_at
+                         WHERE id = :id
+                           AND workspace_id = :workspace_id'
+                    );
+                    $updateStmt->execute([
+                        ':group_name' => $destinationGroupName,
+                        ':updated_at' => $updatedAt,
+                        ':id' => $taskId,
+                        ':workspace_id' => $workspaceId,
+                    ]);
+
+                    logTaskHistory(
+                        $pdo,
+                        $taskId,
+                        'group_changed',
+                        ['old' => $currentGroupName, 'new' => $destinationGroupName],
+                        $actorUserId,
+                        $updatedAt
+                    );
+                    taskUndoPushOperation(
+                        $workspaceId,
+                        taskUndoBuildOperation(
+                            'update',
+                            $taskId,
+                            $undoBeforeTask,
+                            taskUndoTaskSnapshot($pdo, $workspaceId, $taskId)
+                        )
+                    );
+                }
+
+                if (requestExpectsJson()) {
+                    respondJson([
+                        'ok' => true,
+                        'task' => [
+                            'id' => $taskId,
+                            'group_name' => $destinationGroupName,
+                            'updated_at' => $updatedAt,
+                            'updated_at_label' => $updatedAt !== ''
+                                ? (new DateTimeImmutable($updatedAt))->format('d/m H:i')
+                                : '',
+                        ],
+                        'dashboard' => dashboardSummaryPayloadForUser($actorUserId, $workspaceId),
+                        'undo_state' => taskUndoState($workspaceId),
+                    ]);
+                }
+
+                flash('success', 'Tarefa movida de projeto.');
+                redirectTo(taskDetailRedirectPathFromRequest($taskId));
+
             case 'load_task_detail':
                 $authUser = requireAuth();
                 $workspaceId = activeWorkspaceId($authUser);
