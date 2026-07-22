@@ -4450,7 +4450,28 @@ body.is-dashboard .task-project-visual-modal-project {
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    color: var(--bexon-text-strong);
+    color: var(--ui-modal-text-strong);
+}
+
+/* The project identity form sits on the dark modal surface, not on a card. */
+body.is-dashboard .task-group-visual-modal-card .task-project-visual-modal-project strong {
+    color: var(--ui-modal-text-strong);
+}
+
+body.is-dashboard .task-group-visual-modal-card .task-project-color-field > span,
+body.is-dashboard .task-group-visual-modal-card .task-project-image-field > span {
+    color: var(--ui-modal-label);
+}
+
+body.is-dashboard .task-group-visual-modal-card .task-project-image-field small,
+body.is-dashboard .task-group-visual-modal-card .form-helper-text {
+    color: var(--ui-modal-text-soft);
+    opacity: 1;
+}
+
+body.is-dashboard .task-group-visual-modal-card .task-project-image-preview {
+    border-color: var(--ui-modal-section-border);
+    background: var(--ui-modal-section-bg);
 }
 
 body.is-dashboard .task-group-visual-modal-card .form-helper-text {
