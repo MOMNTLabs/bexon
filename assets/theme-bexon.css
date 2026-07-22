@@ -10166,6 +10166,54 @@ body.is-dashboard .top-nav.dashboard-nav .btn-logout::after {
     }
 }
 
+/* Project identity is carried by a subtle surface tint instead of a separate color dot. */
+body.is-dashboard .task-group-head {
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 18%, #ffffff) 0%,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 8%, #ffffff) 42%,
+            #ffffff 78%
+        ) !important;
+}
+
+body.is-dashboard .task-calendar-card,
+body.is-dashboard .task-calendar-sidebar-item {
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 16%, #ffffff) 0%,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 7%, #ffffff) 44%,
+            rgba(255, 255, 255, 0.96) 78%
+        );
+}
+
+body.is-dashboard .task-calendar-card:hover,
+body.is-dashboard .task-calendar-card:focus-visible,
+body.is-dashboard .task-calendar-sidebar-item:hover,
+body.is-dashboard .task-calendar-sidebar-item:focus-visible,
+body.is-dashboard .task-calendar-card.is-dragging {
+    background:
+        linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 23%, #ffffff) 0%,
+            color-mix(in srgb, var(--task-project-color, #4e82ba) 10%, #ffffff) 44%,
+            #ffffff 78%
+        );
+}
+
+@media (max-width: 760px) {
+    body.is-dashboard .task-calendar-day .task-calendar-card {
+        background:
+            linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--task-project-color, #4e82ba) 24%, #ffffff) 0%,
+                color-mix(in srgb, var(--task-project-color, #4e82ba) 10%, #ffffff) 70%,
+                #ffffff 100%
+            );
+    }
+}
+
 @media (max-width: 360px) {
     body.is-dashboard .create-task-modal .task-detail-inline-controls,
     body.is-dashboard .task-detail-modal .task-detail-inline-controls {

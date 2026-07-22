@@ -283,7 +283,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                     data-task-calendar-open-task="<?= e((string) $calendarTask['id']) ?>"
                                                     data-task-calendar-task-id="<?= e((string) $calendarTask['id']) ?>"
                                                     data-task-calendar-date="<?= e($calendarCellDate) ?>"
-                                                    style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>;"
+                                                    style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>; --task-project-color: <?= e(normalizeTaskGroupColor((string) ($calendarGroupVisual['color'] ?? ''), '#4e82ba')) ?>;"
                                                     aria-label="Abrir tarefa <?= e((string) $calendarTask['title']) ?>"
                                                     draggable="<?= !empty($calendarTask['can_drag']) ? 'true' : 'false' ?>"
                                                 >
@@ -299,7 +299,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                     <?php if ($calendarGroupMeta !== '' || $calendarHasAssigneeVisual): ?>
                                                         <span class="task-calendar-card-meta-row">
                                                             <?php if ($calendarGroupMeta !== ''): ?>
-                                                                <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= renderTaskGroupVisual($calendarGroupVisual, 'task-project-visual task-project-visual-calendar', 'span') ?><?= e($calendarGroupMeta) ?></span>
+                                                                <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= e($calendarGroupMeta) ?></span>
                                                             <?php endif; ?>
                                                             <?php if ($calendarHasAssigneeVisual && is_array($calendarPrimaryAssignee)): ?>
                                                                 <span
@@ -389,7 +389,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                         data-task-calendar-open-task="<?= e((string) $calendarTask['id']) ?>"
                                                         data-task-calendar-task-id="<?= e((string) $calendarTask['id']) ?>"
                                                         data-task-calendar-date="<?= e((string) $calendarAgendaDate) ?>"
-                                                        style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>;"
+                                                        style="--task-calendar-accent: <?= e((string) $calendarTask['status_color']) ?>; --task-project-color: <?= e(normalizeTaskGroupColor((string) ($calendarGroupVisual['color'] ?? ''), '#4e82ba')) ?>;"
                                                         aria-label="Abrir tarefa <?= e((string) $calendarTask['title']) ?>"
                                                         draggable="<?= !empty($calendarTask['can_drag']) ? 'true' : 'false' ?>"
                                                     >
@@ -405,7 +405,7 @@ require __DIR__ . '/tasks_page_intro.php';
                                                         <?php if ($calendarGroupMeta !== '' || $calendarHasAssigneeVisual): ?>
                                                             <span class="task-calendar-card-meta-row">
                                                                 <?php if ($calendarGroupMeta !== ''): ?>
-                                                                    <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= renderTaskGroupVisual($calendarGroupVisual, 'task-project-visual task-project-visual-calendar', 'span') ?><?= e($calendarGroupMeta) ?></span>
+                                                                    <span class="task-calendar-card-meta task-calendar-card-project-meta"><?= e($calendarGroupMeta) ?></span>
                                                                 <?php endif; ?>
                                                                 <?php if ($calendarHasAssigneeVisual && is_array($calendarPrimaryAssignee)): ?>
                                                                     <span

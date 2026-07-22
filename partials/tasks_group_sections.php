@@ -33,7 +33,11 @@
             data-group-can-access="<?= $taskGroupCanAccess ? '1' : '0' ?>"
         >
             <?php if (!$taskGroupIsProjectView): ?>
-            <header class="task-group-head" data-task-group-head-toggle>
+            <header
+                class="task-group-head"
+                data-task-group-head-toggle
+                style="--task-project-color: <?= e(normalizeTaskGroupColor((string) ($taskGroupVisual['color'] ?? ''), '#4e82ba')) ?>;"
+            >
                 <div class="task-group-head-main">
                     <form method="post" class="task-group-rename-form" data-group-rename-form>
                         <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
@@ -41,7 +45,6 @@
                         <input type="hidden" name="old_group_name" value="<?= e((string) $groupName) ?>">
                         <h3 id="group-<?= e(md5((string) $groupName)) ?>">
                             <span class="task-group-name-shell">
-                                <?= renderTaskGroupVisual($taskGroupVisual, 'task-project-visual task-project-visual-heading', 'span') ?>
                                 <span class="task-group-name-display" data-group-name-display><?= e((string) $groupName) ?></span>
                                 <?php if ($taskGroupCanAccess): ?>
                                     <button
