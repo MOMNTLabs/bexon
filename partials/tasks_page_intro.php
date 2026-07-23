@@ -230,6 +230,31 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
         <?php if ($taskPageIsProject && !$taskPageIsPersonalInbox && $taskCurrentProjectName !== ''): ?>
             <input type="hidden" name="group" value="<?= e($taskCurrentProjectName) ?>">
         <?php endif; ?>
+        <?php
+        $taskActiveFilterChips = [];
+        if ($taskPageShowsProjectFilter && trim((string) ($groupFilter ?? '')) !== '') {
+            $taskActiveFilterChips[] = [
+                'field' => 'group',
+                'label' => 'Projeto: ' . (string) $groupFilter,
+            ];
+        }
+        foreach (($users ?? []) as $filterUser) {
+            $filterUserId = (int) ($filterUser['id'] ?? 0);
+            $filterUserName = trim((string) ($filterUser['name'] ?? ''));
+            if ($filterUserId > 0 && $creatorFilterId === $filterUserId) {
+                $taskActiveFilterChips[] = [
+                    'field' => 'created_by',
+                    'label' => 'Criado por: ' . $filterUserName,
+                ];
+            }
+            if ($filterUserId > 0 && $assigneeFilterId === $filterUserId) {
+                $taskActiveFilterChips[] = [
+                    'field' => 'assignee',
+                    'label' => 'Responsável: ' . $filterUserName,
+                ];
+            }
+        }
+        ?>
         <?php if (!$taskPageIsPersonalInbox): ?>
         <button
             type="button"
@@ -246,6 +271,22 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
                 <span class="task-filters-active-count"><?= e((string) $taskActiveFilterCount) ?></span>
             <?php endif; ?>
         </button>
+
+        <?php if ($taskActiveFilterChips): ?>
+            <div class="task-filter-active-chips" aria-label="Filtros ativos">
+                <?php foreach ($taskActiveFilterChips as $taskActiveFilterChip): ?>
+                    <button
+                        type="button"
+                        class="task-filter-active-chip"
+                        data-task-filter-clear-field="<?= e((string) $taskActiveFilterChip['field']) ?>"
+                        aria-label="Remover filtro <?= e((string) $taskActiveFilterChip['label']) ?>"
+                    >
+                        <span><?= e((string) $taskActiveFilterChip['label']) ?></span>
+                        <span aria-hidden="true">×</span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
 
         <div class="task-filters-fields" id="task-filters-panel" data-task-filters-panel>
             <div class="task-filters-panel-head">

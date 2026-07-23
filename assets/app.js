@@ -4854,24 +4854,28 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const syncTaskGroupDoneVisibility = (groupSection) => {
     if (!(groupSection instanceof HTMLElement)) {
-      return { totalTaskCount: 0, visibleTaskCount: 0, hiddenDoneCount: 0 };
+      return { totalTaskCount: 0, visibleTaskCount: 0, hiddenDoneCount: 0, doneTaskCount: 0 };
     }
 
     const dropzone = groupSection.querySelector("[data-task-dropzone]");
     if (!(dropzone instanceof HTMLElement)) {
-      return { totalTaskCount: 0, visibleTaskCount: 0, hiddenDoneCount: 0 };
+      return { totalTaskCount: 0, visibleTaskCount: 0, hiddenDoneCount: 0, doneTaskCount: 0 };
     }
 
     const hideDone = groupSection.classList.contains("is-done-hidden");
     let totalTaskCount = 0;
     let visibleTaskCount = 0;
     let hiddenDoneCount = 0;
+    let doneTaskCount = 0;
 
     dropzone.querySelectorAll("[data-task-item]").forEach((taskItem) => {
       if (!(taskItem instanceof HTMLElement)) return;
       totalTaskCount += 1;
 
       const isDoneTask = isDoneTaskItem(taskItem);
+      if (isDoneTask) {
+        doneTaskCount += 1;
+      }
       const shouldHide = hideDone && isDoneTask;
 
       taskItem.hidden = shouldHide;
@@ -4882,7 +4886,7 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    return { totalTaskCount, visibleTaskCount, hiddenDoneCount };
+    return { totalTaskCount, visibleTaskCount, hiddenDoneCount, doneTaskCount };
   };
 
   const refreshTaskGroupSection = (groupSection) => {
@@ -4890,12 +4894,27 @@ window.addEventListener("DOMContentLoaded", () => {
     const dropzone = groupSection.querySelector("[data-task-dropzone]");
     if (!(dropzone instanceof HTMLElement)) return;
 
-    const { totalTaskCount, visibleTaskCount, hiddenDoneCount } =
+    const { totalTaskCount, visibleTaskCount, hiddenDoneCount, doneTaskCount } =
       syncTaskGroupDoneVisibility(groupSection);
     sortGroupTaskItemsByStatus(dropzone);
 
-    const countEl = groupSection.querySelector(".task-group-count");
-    if (countEl) countEl.textContent = String(totalTaskCount);
+    groupSection.dataset.taskGroupTotal = String(totalTaskCount);
+    const progressEl = groupSection.querySelector(".task-group-progress");
+    if (progressEl instanceof HTMLElement) {
+      progressEl.replaceChildren();
+      if (totalTaskCount > 0) {
+        const doneEl = document.createElement("strong");
+        doneEl.textContent = String(doneTaskCount);
+        progressEl.append(doneEl, `/${totalTaskCount}`);
+      } else {
+        progressEl.textContent = "0";
+      }
+      progressEl.setAttribute(
+        "aria-label",
+        `${doneTaskCount} de ${totalTaskCount} tarefas concluídas`
+      );
+      progressEl.title = `${doneTaskCount} de ${totalTaskCount} concluídas`;
+    }
 
     const emptyRow = dropzone.querySelector(".task-group-empty-row");
     const doneHiddenRow = dropzone.querySelector("[data-task-group-hidden-done-row]");
@@ -10286,7 +10305,8 @@ window.addEventListener("DOMContentLoaded", () => {
         "este grupo";
       const groupCountText =
         groupSection?.querySelector(".task-group-count")?.textContent?.trim() || "0";
-      const groupTaskCount = Number.parseInt(groupCountText, 10) || 0;
+      const groupTaskCount =
+        Number.parseInt(String(groupSection?.dataset.taskGroupTotal || groupCountText), 10) || 0;
       const message =
         groupTaskCount > 0
           ? `Remover o grupo ${groupName}? As tarefas desse grupo tambem serao excluidas.`
@@ -17953,16 +17973,18 @@ window.addEventListener("DOMContentLoaded", () => {
         button.setAttribute("aria-label", `Criar tarefa no grupo ${nextGroupName}`);
       });
 
-      const deleteGroupNameField = groupSection?.querySelector(
-        '.task-group-delete-form input[name="group_name"]'
-      );
-      if (deleteGroupNameField instanceof HTMLInputElement) {
-        deleteGroupNameField.value = nextGroupName;
-      }
-      const deleteGroupButton = groupSection?.querySelector("[data-group-delete]");
-      if (deleteGroupButton instanceof HTMLElement) {
-        deleteGroupButton.setAttribute("aria-label", `Excluir grupo ${nextGroupName}`);
-      }
+      groupSection
+        ?.querySelectorAll('.task-group-delete-form input[name="group_name"]')
+        .forEach((deleteGroupNameField) => {
+          if (deleteGroupNameField instanceof HTMLInputElement) {
+            deleteGroupNameField.value = nextGroupName;
+          }
+        });
+      groupSection?.querySelectorAll("[data-group-delete]").forEach((deleteGroupButton) => {
+        if (deleteGroupButton instanceof HTMLElement) {
+          deleteGroupButton.setAttribute("aria-label", `Excluir grupo ${nextGroupName}`);
+        }
+      });
 
       groupSection?.querySelectorAll("[data-task-item]").forEach((taskItem) => {
         if (!(taskItem instanceof HTMLElement)) return;
@@ -19048,6 +19070,25 @@ window.addEventListener("DOMContentLoaded", () => {
           syncInlineSelectPicker(select);
         });
         applyTaskFilterForm(form);
+      }
+      return;
+    }
+
+    const taskFilterChipClear = target.closest("[data-task-filter-clear-field]");
+    if (taskFilterChipClear instanceof HTMLElement) {
+      const form = taskFilterChipClear.closest("[data-task-filter-form]");
+      const filterField = String(taskFilterChipClear.dataset.taskFilterClearField || "").trim();
+      if (
+        form instanceof HTMLFormElement &&
+        ["group", "created_by", "assignee"].includes(filterField)
+      ) {
+        const select = form.querySelector(`select[name="${filterField}"]`);
+        if (select instanceof HTMLSelectElement) {
+          select.value = "";
+          syncSelectColor(select);
+          syncInlineSelectPicker(select);
+          applyTaskFilterForm(form);
+        }
       }
       return;
     }

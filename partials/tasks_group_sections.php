@@ -24,6 +24,14 @@
             ?? taskGroupVisual((string) $groupName, $currentWorkspaceId ?? null);
         $taskGroupVisualModalKey = 'task-group-visual-' . md5((string) $groupName);
         $taskGroupIsProjectView = !empty($taskPageIsProject);
+        $groupDoneTaskCount = 0;
+        foreach ($groupTasks as $groupTask) {
+            $groupTaskStatusMeta = taskStatusMeta(normalizeTaskStatus((string) ($groupTask['status'] ?? '')));
+            $groupTaskStatusKind = (string) ($groupTask['status_kind'] ?? ($groupTaskStatusMeta['kind'] ?? ''));
+            if ($groupTaskStatusKind === 'done') {
+                $groupDoneTaskCount++;
+            }
+        }
         ?>
         <section
             class="task-group<?= $taskGroupCanAccess ? '' : ' task-group-readonly' ?><?= $taskGroupDoneHidden ? ' is-done-hidden' : '' ?><?= $taskGroupIsProjectView ? ' task-group-project-view' : '' ?>"
@@ -31,6 +39,7 @@
             data-task-group
             data-group-name="<?= e((string) $groupName) ?>"
             data-group-can-access="<?= $taskGroupCanAccess ? '1' : '0' ?>"
+            data-task-group-total="<?= e((string) count($groupTasks)) ?>"
         >
             <?php if (!$taskGroupIsProjectView): ?>
             <header
@@ -128,6 +137,18 @@
                                         Acesso
                                     </button>
                                 <?php endif; ?>
+                                <form method="post" class="task-group-delete-form task-group-delete-menu-form" data-group-delete-form>
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                    <input type="hidden" name="action" value="delete_group">
+                                    <input type="hidden" name="group_name" value="<?= e((string) $groupName) ?>">
+                                    <button
+                                        type="button"
+                                        class="task-group-actions-menu-item task-group-delete-menu-item"
+                                        data-group-delete
+                                        role="menuitem"
+                                        aria-label="Excluir grupo <?= e((string) $groupName) ?>"
+                                    >Excluir projeto</button>
+                                </form>
                             </div>
                         </details>
                         <form method="post" class="task-group-delete-form" data-group-delete-form>
@@ -145,7 +166,17 @@
                     <?php if (!$taskGroupCanAccess): ?>
                         <span class="task-group-readonly-tag">Somente leitura</span>
                     <?php endif; ?>
-                    <span class="task-group-count task-group-count-subtle"><?= e((string) count($groupTasks)) ?></span>
+                    <span
+                        class="task-group-progress"
+                        aria-label="<?= e($groupDoneTaskCount . ' de ' . count($groupTasks) . ' tarefas concluídas') ?>"
+                        title="<?= e($groupDoneTaskCount . ' de ' . count($groupTasks) . ' concluídas') ?>"
+                    >
+                        <?php if (count($groupTasks) > 0): ?>
+                            <strong><?= e((string) $groupDoneTaskCount) ?></strong>/<?= e((string) count($groupTasks)) ?>
+                        <?php else: ?>
+                            0
+                        <?php endif; ?>
+                    </span>
                 </div>
             </header>
             <?php endif; ?>
