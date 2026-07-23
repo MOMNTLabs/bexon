@@ -10240,6 +10240,35 @@ body.is-dashboard .task-filter-active-chips {
     display: none;
 }
 
+/* Project thumbnails must remain a compact identifier, even when the source image is large. */
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link {
+    overflow: hidden;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link .task-project-visual-sidebar {
+    width: 18px !important;
+    min-width: 18px;
+    max-width: 18px;
+    height: 18px !important;
+    min-height: 18px;
+    max-height: 18px;
+    flex: 0 0 18px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link .task-project-visual-sidebar img {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    display: block;
+    object-fit: cover !important;
+    object-position: center;
+}
+
 body.is-dashboard .task-project-visual-group-heading {
     width: 22px;
     height: 22px;
@@ -10276,6 +10305,37 @@ body.is-dashboard .task-project-visual-group-heading {
         height: 26px;
         flex-basis: 26px;
         border-width: 2px;
+    }
+
+    body.is-dashboard .tasklist-wrap .task-group .task-group-head,
+    body.is-dashboard .task-group-head {
+        background:
+            linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--task-project-color, #4e82ba) 16%, #ffffff) 0%,
+                color-mix(in srgb, var(--task-project-color, #4e82ba) 6%, #ffffff) 44%,
+                #ffffff 88%
+            ) !important;
+    }
+
+    body.is-dashboard .task-group-head h3,
+    body.is-dashboard .task-group-head .task-group-name-display,
+    body.is-dashboard .task-group-head .task-group-name-input,
+    body.is-dashboard .task-group-head .task-group-progress {
+        color: #24313f !important;
+        -webkit-text-fill-color: currentColor;
+        text-shadow: none;
+    }
+
+    body.is-dashboard .task-group-head .task-group-name-edit-button,
+    body.is-dashboard .task-group-head .task-group-collapse,
+    body.is-dashboard .task-group-head .task-group-delete {
+        color: rgba(56, 69, 84, 0.72) !important;
+    }
+
+    body.is-dashboard .task-group-progress strong {
+        color: #855811 !important;
+        -webkit-text-fill-color: currentColor;
     }
 
     body.is-dashboard .task-group-name-shell {
