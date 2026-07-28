@@ -5765,6 +5765,7 @@ window.addEventListener("DOMContentLoaded", () => {
   const taskNotificationState = {
     isPolling: false,
     isSyncingTasks: false,
+    isSyncingWorkspaceTools: false,
     intervalId: null,
     lastHistoryId: 0,
     syncVersion: String(document.body?.dataset?.taskSyncVersion || "").trim(),
@@ -6137,6 +6138,46 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const normalizeWorkspaceEnabledViewsPayload = (views) => {
+    const candidates = Array.isArray(views)
+      ? views
+      : String(views || "")
+          .split(",")
+          .map((view) => view.trim());
+    return Array.from(
+      new Set(
+        candidates
+          .map((view) => String(view || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  };
+
+  const workspaceEnabledViewsSignature = (views) =>
+    normalizeWorkspaceEnabledViewsPayload(views).sort().join(",");
+
+  const syncWorkspaceToolsAfterRemoteChange = async (remoteViews) => {
+    if (taskNotificationState.isSyncingWorkspaceTools) return false;
+
+    const remoteSignature = workspaceEnabledViewsSignature(remoteViews);
+    const localSignature = workspaceEnabledViewsSignature(
+      document.body?.dataset?.workspaceEnabledViews || ""
+    );
+    if (!remoteSignature || remoteSignature === localSignature) {
+      return false;
+    }
+
+    taskNotificationState.isSyncingWorkspaceTools = true;
+    try {
+      await refreshWorkspaceUsersSectionFromServer();
+      return true;
+    } catch (error) {
+      return false;
+    } finally {
+      taskNotificationState.isSyncingWorkspaceTools = false;
+    }
+  };
+
   const pollTaskNotifications = async ({ initialize = false } = {}) => {
     if (taskNotificationState.isPolling) return;
 
@@ -6150,6 +6191,9 @@ window.addEventListener("DOMContentLoaded", () => {
       const notifications = Array.isArray(data.notifications) ? data.notifications : [];
       const latestHistoryId = Number.parseInt(String(data.latest_history_id || "0"), 10) || 0;
       const remoteSyncVersion = String(data.task_sync_version || "").trim();
+      const remoteWorkspaceEnabledViews = normalizeWorkspaceEnabledViewsPayload(
+        data.workspace_enabled_views || []
+      );
       mergeTaskNotifications(notifications);
 
       let maxHistoryId = Math.max(taskNotificationState.lastHistoryId, latestHistoryId);
@@ -6177,6 +6221,10 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       } else if (taskNotificationState.pendingTasksSync) {
         await syncTaskSectionAfterWorkspaceChange();
+      }
+
+      if (remoteWorkspaceEnabledViews.length > 0) {
+        await syncWorkspaceToolsAfterRemoteChange(remoteWorkspaceEnabledViews);
       }
 
       if (!initialize) {
@@ -6922,6 +6970,11 @@ window.addEventListener("DOMContentLoaded", () => {
         currentSidebarMenu.replaceWith(nextSidebarMenu);
       }
     }
+
+    const enabledViews = Array.isArray(snapshotData?.workspace_enabled_views)
+      ? snapshotData.workspace_enabled_views
+      : String(nextDoc.body?.dataset?.workspaceEnabledViews || "");
+    syncDashboardEnabledViews(enabledViews);
   };
 
   const submitVaultActionForm = async (
@@ -10486,24 +10539,32 @@ window.addEventListener("DOMContentLoaded", () => {
   const dashboardViewPanels = Array.from(
     document.querySelectorAll("[data-dashboard-view-panel]")
   );
-  const dashboardViewToggleButtons = Array.from(
-    document.querySelectorAll("[data-dashboard-view-toggle]")
-  );
-  const sidebarTaskProjectsRoot = document.querySelector("[data-sidebar-task-projects]");
-  const sidebarTaskProjectsToggleButton = document.querySelector("[data-sidebar-task-projects-toggle]");
-  const sidebarTaskProjectsPanel = document.querySelector("[data-sidebar-task-projects-panel]");
-  const sidebarTaskProjectLinks = Array.from(
-    document.querySelectorAll("[data-sidebar-task-project-link]")
-  );
-  dashboardViewToggleButtons.forEach((button) => {
-    if (!(button instanceof HTMLElement) || !button.hasAttribute("data-dashboard-return-toggle")) {
-      return;
-    }
-    if (!button.dataset.dashboardForwardLabel) {
-      button.dataset.dashboardForwardLabel =
-        button.getAttribute("aria-label") || button.getAttribute("title") || "";
-    }
-  });
+  let dashboardViewToggleButtons = [];
+  let sidebarTaskProjectsRoot = null;
+  let sidebarTaskProjectsToggleButton = null;
+  let sidebarTaskProjectsPanel = null;
+  let sidebarTaskProjectLinks = [];
+  const refreshDashboardNavigationBindings = () => {
+    dashboardViewToggleButtons = Array.from(
+      document.querySelectorAll("[data-dashboard-view-toggle]")
+    );
+    sidebarTaskProjectsRoot = document.querySelector("[data-sidebar-task-projects]");
+    sidebarTaskProjectsToggleButton = document.querySelector("[data-sidebar-task-projects-toggle]");
+    sidebarTaskProjectsPanel = document.querySelector("[data-sidebar-task-projects-panel]");
+    sidebarTaskProjectLinks = Array.from(
+      document.querySelectorAll("[data-sidebar-task-project-link]")
+    );
+    dashboardViewToggleButtons.forEach((button) => {
+      if (!(button instanceof HTMLElement) || !button.hasAttribute("data-dashboard-return-toggle")) {
+        return;
+      }
+      if (!button.dataset.dashboardForwardLabel) {
+        button.dataset.dashboardForwardLabel =
+          button.getAttribute("aria-label") || button.getAttribute("title") || "";
+      }
+    });
+  };
+  refreshDashboardNavigationBindings();
   const usersSidebar = document.querySelector(".users-sidebar");
   const workspaceSidebarHeader = document.querySelector(".workspace-sidebar-header");
   const dashboardMobileHeaderActions = document.querySelector("[data-dashboard-mobile-header-actions]");
@@ -10588,6 +10649,31 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   const defaultDashboardView = dashboardViews.has("overview") ? "overview" : "tasks";
+  const syncDashboardEnabledViews = (rawViews) => {
+    const nextViews = normalizeWorkspaceEnabledViewsPayload(rawViews)
+      .map((view) => normalizeDashboardViewCandidate(view))
+      .filter(Boolean);
+    if (nextViews.length === 0) return;
+
+    dashboardViews.clear();
+    nextViews.forEach((view) => dashboardViews.add(view));
+    dashboardViews.add("tasks");
+    refreshDashboardNavigationBindings();
+
+    if (document.body instanceof HTMLBodyElement) {
+      document.body.dataset.workspaceEnabledViews = Array.from(dashboardViews).join(",");
+    }
+
+    const activeCandidate = normalizeDashboardViewCandidate(
+      document.body instanceof HTMLBodyElement ? document.body.dataset.dashboardView || "" : ""
+    );
+    const nextView = activeCandidate && dashboardViews.has(activeCandidate)
+      ? activeCandidate
+      : dashboardViewFromUrl();
+    setDashboardView(nextView, {
+      updateUrl: Boolean(activeCandidate && !dashboardViews.has(activeCandidate)),
+    });
+  };
   let syncTaskDetailModalFromUrl = null;
   const dashboardReturnStateStorageKey = "bexon.dashboard.returnState";
 

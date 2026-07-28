@@ -345,12 +345,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $limit = max(1, min(60, (int) ($_GET['limit'] ?? 24)));
             $latestHistoryId = latestTaskHistoryIdForWorkspace($workspaceId);
             $taskSyncVersion = workspaceTaskPanelSyncVersion($pdo, $workspaceId);
+            $workspaceEnabledViews = workspaceEnabledDashboardViews($workspaceId);
 
             if ($initialize) {
                 respondJson([
                     'ok' => true,
                     'latest_history_id' => $latestHistoryId,
                     'task_sync_version' => $taskSyncVersion,
+                    'workspace_enabled_views' => $workspaceEnabledViews,
                     'notifications' => [],
                 ]);
             }
@@ -366,6 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'ok' => true,
                 'latest_history_id' => $latestHistoryId,
                 'task_sync_version' => $taskSyncVersion,
+                'workspace_enabled_views' => $workspaceEnabledViews,
                 'notifications' => $notifications,
             ]);
         } catch (Throwable $e) {

@@ -289,6 +289,7 @@ function respondUsersPanelSnapshot(): void
         'workspace_picker_list_html' => $workspacePickerListHtml,
         'workspace_picker_summary_html' => $workspacePickerSummaryHtml,
         'workspace_sidebar_menu_html' => $workspaceSidebarMenuHtml,
+        'workspace_enabled_views' => workspaceEnabledDashboardViews($workspaceId, $currentWorkspace),
         'workspace_picker_title' => (string) ($currentWorkspace['name'] ?? 'Workspace'),
     ]);
 }
