@@ -56,7 +56,15 @@ $productInitial = $selectedProduct !== null ? mb_strtoupper(mb_substr((string) (
 
         <?php if ($selectedProduct !== null): ?>
             <div class="product-detail" data-product-calculator data-material-unit-cents="<?= e((string) ((int) ($productSummary['material_unit_cents'] ?? 0))) ?>">
-                <form method="post" class="product-main-form" data-product-main-form>
+                <div class="product-save-toolbar" data-product-save-toolbar>
+                    <div class="product-save-toolbar-copy">
+                        <strong>Dados do produto</strong>
+                        <span data-product-save-status>Salvo no workspace</span>
+                    </div>
+                    <button type="submit" class="btn btn-pill" form="product-main-form" data-product-save-button disabled>Salvar produto</button>
+                </div>
+
+                <form method="post" class="product-main-form" id="product-main-form" data-product-main-form>
                     <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                     <input type="hidden" name="action" value="update_workspace_product">
                     <input type="hidden" name="product_id" value="<?= e((string) $selectedProductId) ?>">
@@ -132,10 +140,6 @@ $productInitial = $selectedProduct !== null ? mb_strtoupper(mb_substr((string) (
                         </div>
                     </section>
 
-                    <div class="product-save-row">
-                        <span>Os cálculos mudam enquanto você simula. Salve para compartilhar com o workspace.</span>
-                        <button type="submit" class="btn btn-pill">Salvar produto</button>
-                    </div>
                 </form>
 
                 <section class="product-results" aria-label="Resultado da precificação">

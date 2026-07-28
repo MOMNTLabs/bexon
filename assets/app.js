@@ -22127,7 +22127,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const preview = container?.querySelector("[data-product-image-preview]");
       try {
         const dataUrl = await prepareImage(file);
-        if (valueInput instanceof HTMLInputElement) valueInput.value = dataUrl;
+        if (valueInput instanceof HTMLInputElement) {
+          valueInput.value = dataUrl;
+          valueInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         if (preview instanceof HTMLElement) preview.innerHTML = `<img src="${dataUrl}" alt="">`;
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Não foi possível preparar a imagem.");
@@ -22139,6 +22142,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const calculator = root.querySelector("[data-product-calculator]");
   const form = root.querySelector("[data-product-main-form]");
   if (!(calculator instanceof HTMLElement) || !(form instanceof HTMLFormElement)) return;
+  const saveToolbar = root.querySelector("[data-product-save-toolbar]");
+  const saveButton = root.querySelector("[data-product-save-button]");
+  const saveStatus = root.querySelector("[data-product-save-status]");
+
+  const setProductFormDirty = (dirty) => {
+    const isDirty = Boolean(dirty);
+    saveToolbar?.classList.toggle("is-dirty", isDirty);
+    if (saveButton instanceof HTMLButtonElement) {
+      saveButton.disabled = !isDirty;
+    }
+    if (saveStatus instanceof HTMLElement) {
+      saveStatus.textContent = isDirty
+        ? "Alterações ainda não salvas"
+        : "Salvo no workspace";
+    }
+  };
 
   const parseNumber = (value) => {
     let raw = String(value || "").replace(/R\$/gi, "").replace(/\s/g, "").trim();
@@ -22191,8 +22210,22 @@ document.addEventListener("DOMContentLoaded", () => {
     [profitNode, batchProfitNode].forEach((node) => node?.classList.toggle("is-negative", profit < 0));
   };
 
-  form.addEventListener("input", recalculate);
-  form.addEventListener("change", recalculate);
+  const handleProductFormChange = () => {
+    recalculate();
+    setProductFormDirty(true);
+  };
+  form.addEventListener("input", handleProductFormChange);
+  form.addEventListener("change", handleProductFormChange);
+  form.addEventListener("submit", () => {
+    if (saveButton instanceof HTMLButtonElement) {
+      saveButton.disabled = true;
+      saveButton.setAttribute("aria-busy", "true");
+    }
+    if (saveStatus instanceof HTMLElement) {
+      saveStatus.textContent = "Salvando...";
+    }
+  });
   updatePricingFieldVisibility();
   recalculate();
+  setProductFormDirty(false);
 });
