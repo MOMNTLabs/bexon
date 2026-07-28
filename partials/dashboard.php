@@ -861,6 +861,7 @@ $workspaceSwitchRedirectPath = dashboardPath($serverSelectedDashboardView, $work
         </section>
 
         <?php require __DIR__ . '/documents_panel.php'; ?>
+        <?php require __DIR__ . '/products_panel.php'; ?>
         <script>
             (() => {
                 const workspaceId = String(document.body?.dataset?.workspaceId || "").trim() || "0";

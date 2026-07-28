@@ -210,7 +210,7 @@ function normalizeDashboardViewKey(string $view): string
         return 'accounting';
     }
 
-    return in_array($normalized, ['overview', 'tasks', 'vault', 'inventory', 'accounting', 'documents', 'users'], true)
+    return in_array($normalized, ['overview', 'tasks', 'vault', 'inventory', 'accounting', 'documents', 'products', 'users'], true)
         ? $normalized
         : '';
 }

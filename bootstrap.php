@@ -45,6 +45,7 @@ require_once __DIR__ . '/lib/bootstrap/workspace-core.php';
 require_once __DIR__ . '/lib/bootstrap/auth-core.php';
 require_once __DIR__ . '/lib/bootstrap/password-reset.php';
 require_once __DIR__ . '/lib/bootstrap/workspace-invitations.php';
+require_once __DIR__ . '/lib/bootstrap/products.php';
 
 
 
@@ -67,6 +68,7 @@ function migrate(PDO $pdo): void
     ensureWorkspaceDocumentsSchema($pdo);
     ensureWorkspaceDueSchema($pdo);
     ensureWorkspaceInventorySchema($pdo);
+    ensureWorkspaceProductsSchema($pdo);
     ensureWorkspaceAccountingSchema($pdo);
     ensureWorkspaceAccountingSubitemSchema($pdo);
     ensureWorkspaceAccountingDiscountSchema($pdo);
@@ -14300,6 +14302,7 @@ function workspaceSidebarOptionalToolLabels(): array
         'inventory' => 'Estoque',
         'accounting' => 'Contabilidade',
         'documents' => 'Documentos',
+        'products' => 'Produtos',
     ];
 }
 

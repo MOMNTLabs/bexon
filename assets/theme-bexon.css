@@ -74,6 +74,10 @@
     content: none;
 }
 
+body.is-dashboard .products-wrap .products-header h2 {
+    color: #17263d !important;
+}
+
 .app-loading-spinner::after {
     content: none;
 }

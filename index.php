@@ -65,6 +65,7 @@ require_once __DIR__ . '/handlers/post_vault.php';
 require_once __DIR__ . '/handlers/post_dues.php';
 require_once __DIR__ . '/handlers/post_inventory.php';
 require_once __DIR__ . '/handlers/post_documents.php';
+require_once __DIR__ . '/handlers/post_products.php';
 require_once __DIR__ . '/handlers/post_accounting.php';
 require_once __DIR__ . '/handlers/post_task_groups.php';
 require_once __DIR__ . '/handlers/dashboard_overview.php';
@@ -425,6 +426,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (handleDocumentsPostAction($pdo, $action)) {
                     break;
                 }
+                if (handleProductsPostAction($pdo, $action)) {
+                    break;
+                }
                 if (handleAccountingPostAction($pdo, $action)) {
                     break;
                 }
@@ -679,6 +683,28 @@ if ($currentUser && $currentWorkspaceId !== null) {
     }
 }
 $inventoryEntriesByGroup = $currentUser ? inventoryEntriesByGroup($inventoryEntries, $inventoryGroups) : [];
+$products = [];
+$selectedProduct = null;
+$selectedProductMaterials = [];
+$selectedProductSummary = null;
+$selectedProductId = max(0, (int) ($_GET['product'] ?? 0));
+if ($currentUser && $currentWorkspaceId !== null) {
+    try {
+        $products = workspaceProductsList($currentWorkspaceId);
+        if ($selectedProductId > 0) {
+            $selectedProduct = workspaceProductById($currentWorkspaceId, $selectedProductId);
+        }
+        if ($selectedProduct === null && $products) {
+            $selectedProduct = workspaceProductById($currentWorkspaceId, (int) ($products[0]['id'] ?? 0));
+        }
+        if ($selectedProduct !== null) {
+            $selectedProductMaterials = workspaceProductMaterials($currentWorkspaceId, (int) $selectedProduct['id']);
+            $selectedProductSummary = productCostSummary($selectedProduct, $selectedProductMaterials);
+        }
+    } catch (Throwable $e) {
+        $appendDashboardLoadError('Não foi possível carregar os produtos deste workspace.', $e);
+    }
+}
 $documentsSearch = trim((string) ($_GET['document_search'] ?? ''));
 $documentsScope = trim((string) ($_GET['documents_scope'] ?? '')) === 'trash' ? 'trash' : 'all';
 $documents = [];

@@ -191,6 +191,24 @@ $sidebarTaskInboxActive = $currentSidebarView === 'tasks' && $sidebarTaskScope =
                 </span>
                 <span class="sidebar-view-toggle-label">Documentos</span>
             </button>
+        <?php elseif ($sidebarToolView === 'products'): ?>
+            <button
+                type="button"
+                class="sidebar-view-toggle"
+                data-dashboard-view-toggle
+                data-view="products"
+                aria-pressed="false"
+            >
+                <span class="sidebar-view-toggle-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                        <path d="M5 7.5 12 4l7 3.5v9L12 20l-7-3.5v-9Z"></path>
+                        <path d="m5 7.5 7 3.5 7-3.5"></path>
+                        <path d="M12 11v9"></path>
+                        <path d="M9 5.5 16 9"></path>
+                    </svg>
+                </span>
+                <span class="sidebar-view-toggle-label">Produtos</span>
+            </button>
         <?php endif; ?>
     <?php endforeach; ?>
 </nav>

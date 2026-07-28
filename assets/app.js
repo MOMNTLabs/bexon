@@ -7010,6 +7010,7 @@ window.addEventListener("DOMContentLoaded", () => {
     inventory: "Estoque",
     accounting: "Contabilidade",
     documents: "Documentos",
+    products: "Produtos",
   };
 
   const normalizeWorkspaceSidebarToolCandidate = (value) => {
@@ -10547,6 +10548,7 @@ window.addEventListener("DOMContentLoaded", () => {
       normalized === "inventory" ||
       normalized === "accounting" ||
       normalized === "documents" ||
+      normalized === "products" ||
       normalized === "users"
       ? normalized
       : "";
@@ -21947,4 +21949,164 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("beforeunload", () => {
     if (isDirty) void saveDocument();
   });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const root = document.querySelector("#products[data-dashboard-view-panel]");
+  if (!(root instanceof HTMLElement)) return;
+
+  const modal = root.querySelector("[data-product-create-modal]");
+  const createName = root.querySelector("[data-product-create-name]");
+  const setCreateOpen = (open) => {
+    if (!(modal instanceof HTMLElement)) return;
+    modal.hidden = !open;
+    document.body.classList.toggle("modal-open", open);
+    if (open && createName instanceof HTMLInputElement) {
+      window.setTimeout(() => createName.focus(), 20);
+    }
+  };
+
+  root.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("[data-open-product-create]")) {
+      event.preventDefault();
+      setCreateOpen(true);
+      return;
+    }
+    if (target.closest("[data-close-product-create]")) {
+      event.preventDefault();
+      setCreateOpen(false);
+      return;
+    }
+    if (target.closest("[data-toggle-product-material]")) {
+      event.preventDefault();
+      const form = root.querySelector("[data-product-material-create]");
+      if (form instanceof HTMLElement) {
+        form.hidden = !form.hidden;
+        if (!form.hidden) form.querySelector("input[name='material_name']")?.focus();
+      }
+    }
+  });
+
+  root.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    const message = String(form.dataset.confirm || "").trim();
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+
+  const prepareImage = async (file) => {
+    if (!(file instanceof File) || !file.type.startsWith("image/")) {
+      throw new Error("Selecione uma imagem válida.");
+    }
+    if (file.type === "image/gif") {
+      if (file.size > 950000) throw new Error("Use um GIF menor que 1 MB.");
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Não foi possível ler a imagem."));
+        reader.readAsDataURL(file);
+      });
+    }
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const preview = new Image();
+        preview.onload = () => resolve(preview);
+        preview.onerror = () => reject(new Error("Não foi possível abrir a imagem."));
+        preview.src = objectUrl;
+      });
+      const maxSide = 900;
+      const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Não foi possível preparar a imagem.");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", 0.82);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  root.querySelectorAll("[data-product-image-input]").forEach((input) => {
+    if (!(input instanceof HTMLInputElement)) return;
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const container = input.closest("form") || input.parentElement;
+      const valueInput = container?.querySelector("[data-product-image-value]");
+      const preview = container?.querySelector("[data-product-image-preview]");
+      try {
+        const dataUrl = await prepareImage(file);
+        if (valueInput instanceof HTMLInputElement) valueInput.value = dataUrl;
+        if (preview instanceof HTMLElement) preview.innerHTML = `<img src="${dataUrl}" alt="">`;
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Não foi possível preparar a imagem.");
+        input.value = "";
+      }
+    });
+  });
+
+  const calculator = root.querySelector("[data-product-calculator]");
+  const form = root.querySelector("[data-product-main-form]");
+  if (!(calculator instanceof HTMLElement) || !(form instanceof HTMLFormElement)) return;
+
+  const parseNumber = (value) => {
+    let raw = String(value || "").replace(/R\$/gi, "").replace(/\s/g, "").trim();
+    if (!raw) return 0;
+    if (raw.includes(",")) raw = raw.replace(/\./g, "").replace(",", ".");
+    const number = Number.parseFloat(raw);
+    return Number.isFinite(number) ? Math.max(0, number) : 0;
+  };
+  const moneyCents = (inputName) => Math.round(parseNumber(form.elements.namedItem(inputName)?.value) * 100);
+  const currency = (cents, signed = false) => {
+    const value = Number.isFinite(cents) ? cents : 0;
+    const label = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Math.abs(value) / 100);
+    if (!signed || value === 0) return label;
+    return `${value < 0 ? "−" : "+"}${label}`;
+  };
+  const setText = (selector, value) => {
+    const node = calculator.querySelector(selector);
+    if (node instanceof HTMLElement) node.textContent = value;
+    return node;
+  };
+
+  const updatePricingFieldVisibility = () => {
+    const mode = String(form.elements.namedItem("pricing_mode")?.value || "margin");
+    const marginField = form.querySelector("[data-margin-field]");
+    const priceField = form.querySelector("[data-price-field]");
+    if (marginField instanceof HTMLElement) marginField.hidden = mode !== "margin";
+    if (priceField instanceof HTMLElement) priceField.hidden = mode !== "price";
+  };
+
+  const recalculate = () => {
+    updatePricingFieldVisibility();
+    const batch = Math.max(1, Number.parseInt(String(form.elements.namedItem("batch_size")?.value || "1"), 10) || 1);
+    const materialUnit = Number.parseInt(calculator.dataset.materialUnitCents || "0", 10) || 0;
+    const fixedBatch = moneyCents("fixed_batch_cost");
+    const baseUnit = materialUnit + moneyCents("labor_cost") + moneyCents("packaging_cost") + moneyCents("other_unit_cost") + fixedBatch / batch;
+    const feeRate = Math.min(0.95, parseNumber(form.elements.namedItem("sales_fee_percent")?.value) / 100);
+    const marginRate = Math.min(0.95, parseNumber(form.elements.namedItem("margin_percent")?.value) / 100);
+    const mode = String(form.elements.namedItem("pricing_mode")?.value || "margin");
+    const denominator = 1 - feeRate - marginRate;
+    const price = mode === "margin" ? (denominator > 0 ? baseUnit / denominator : 0) : moneyCents("final_price");
+    const profit = price - baseUnit - (price * feeRate);
+    const realMargin = price > 0 ? (profit / price) * 100 : 0;
+    const profitNode = setText("[data-result-profit]", currency(profit, true));
+    const batchProfitNode = setText("[data-result-batch-profit]", currency(profit * batch, true));
+    setText("[data-result-price]", currency(price));
+    setText("[data-result-cost]", currency(baseUnit));
+    setText("[data-result-margin]", `${realMargin.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% de margem real`);
+    setText("[data-result-batch-revenue]", `${currency(price * batch)} em vendas`);
+    setText("[data-result-viability]", price > 0 && profit > 0 ? "Operação positiva" : "Revise os custos");
+    [profitNode, batchProfitNode].forEach((node) => node?.classList.toggle("is-negative", profit < 0));
+  };
+
+  form.addEventListener("input", recalculate);
+  form.addEventListener("change", recalculate);
+  updatePricingFieldVisibility();
+  recalculate();
 });
