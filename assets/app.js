@@ -21668,6 +21668,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let presenceTimer = 0;
   let saving = false;
   let isDirty = false;
+  let changeVersion = 0;
+  let lastSavedSnapshot = "";
+  let inFlightSnapshot = "";
 
   const setSaveState = (label, tone = "") => {
     if (!(saveState instanceof HTMLElement)) return;
@@ -21725,6 +21728,23 @@ document.addEventListener("DOMContentLoaded", () => {
     presenceTimer = window.setInterval(() => void touchDocumentPresence(), 20000);
   };
 
+  const readDocumentState = () => ({
+    title: titleInput instanceof HTMLInputElement ? titleInput.value : "",
+    content_html: editor instanceof HTMLElement ? editor.innerHTML : "",
+    task_group_name: projectField instanceof HTMLSelectElement ? projectField.value : "",
+    linked_task_id: taskField instanceof HTMLSelectElement ? taskField.value : "",
+    is_favorite:
+      favoriteButton instanceof HTMLElement && favoriteButton.getAttribute("aria-pressed") === "true"
+        ? "1"
+        : "",
+  });
+
+  const documentStateSnapshot = (state = readDocumentState()) => JSON.stringify(state);
+
+  if (titleInput instanceof HTMLInputElement && editor instanceof HTMLElement) {
+    lastSavedSnapshot = documentStateSnapshot();
+  }
+
   const saveDocument = async () => {
     if (
       saving ||
@@ -21740,19 +21760,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const csrfToken = String(root.dataset.documentCsrf || "");
     if (documentId <= 0 || revision <= 0 || !csrfToken) return;
 
+    const documentState = readDocumentState();
+    const snapshot = documentStateSnapshot(documentState);
+    if (snapshot === lastSavedSnapshot) {
+      isDirty = false;
+      setSaveState("Salvo");
+      return;
+    }
+
     saving = true;
+    isDirty = false;
+    const savingVersion = changeVersion;
+    inFlightSnapshot = snapshot;
     setSaveState("Salvando…");
     const payload = new URLSearchParams({
       action: "update_workspace_document",
       csrf_token: csrfToken,
       document_id: String(documentId),
       expected_revision: String(revision),
-      title: titleInput.value,
-      content_html: editor.innerHTML,
-      task_group_name: projectField instanceof HTMLSelectElement ? projectField.value : "",
-      linked_task_id: taskField instanceof HTMLSelectElement ? taskField.value : "",
-      is_favorite: favoriteButton instanceof HTMLElement && favoriteButton.getAttribute("aria-pressed") === "true" ? "1" : "",
+      ...documentState,
     });
+
+    let saveSucceeded = false;
 
     try {
       const response = await fetch(window.location.pathname, {
@@ -21777,22 +21806,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const documentData = result.document || {};
       root.dataset.documentRevision = String(documentData.revision || revision + 1);
-      isDirty = false;
-      setSaveState("Salvo");
+      lastSavedSnapshot = snapshot;
+      saveSucceeded = true;
+      isDirty = documentStateSnapshot() !== lastSavedSnapshot;
+      setSaveState(isDirty ? "Alterações não salvas" : "Salvo");
     } catch (error) {
-      setSaveState("Não salvo", "error");
+      isDirty = true;
+      setSaveState("Não foi possível salvar", "error");
       console.error(error);
     } finally {
       saving = false;
-      if (isDirty) scheduleSave();
+      inFlightSnapshot = "";
+      const changedWhileSaving = changeVersion !== savingVersion;
+      if (isDirty && (saveSucceeded || changedWhileSaving)) {
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(() => void saveDocument(), 850);
+      }
     }
   };
 
   const scheduleSave = () => {
     if (!(titleInput instanceof HTMLInputElement) || !(editor instanceof HTMLElement)) return;
+    const snapshot = documentStateSnapshot();
+    const referenceSnapshot = saving ? inFlightSnapshot : lastSavedSnapshot;
+    if (snapshot === referenceSnapshot) return;
+
+    changeVersion += 1;
     isDirty = true;
     window.clearTimeout(saveTimer);
-    setSaveState("Alterações não salvas");
+    if (!saving) setSaveState("Alterações não salvas");
     saveTimer = window.setTimeout(() => void saveDocument(), 850);
   };
 
@@ -21810,7 +21852,16 @@ document.addEventListener("DOMContentLoaded", () => {
     editor.addEventListener("paste", (event) => {
       event.preventDefault();
       const text = event.clipboardData?.getData("text/plain") || "";
-      document.execCommand("insertText", false, text);
+      const lines = text.replace(/\r\n?/g, "\n").split("\n");
+      const html = lines
+        .map((line) => {
+          const container = document.createElement("span");
+          container.textContent = line;
+          return container.innerHTML;
+        })
+        .join("<br>");
+      document.execCommand("insertHTML", false, html);
+      scheduleSave();
     });
     editor.addEventListener("change", (event) => {
       const checkbox = event.target instanceof HTMLInputElement ? event.target : null;

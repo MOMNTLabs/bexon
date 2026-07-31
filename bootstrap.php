@@ -2130,11 +2130,14 @@ function sanitizeWorkspaceDocumentHtml(string $html): string
     }
 
     $html = mb_substr($html, 0, 180000);
-    $allowedTags = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a', 'input'];
+    // Contenteditable uses <div> blocks for regular line breaks in Chromium.
+    // Keeping the tag preserves those breaks after the document is reloaded.
+    $allowedTags = ['div', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote', 'a', 'input'];
     $allowed = '<' . implode('><', $allowedTags) . '>';
     $html = strip_tags($html, $allowed);
     $html = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
     $html = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
+    $html = preg_replace('/<div\b[^>]*>/iu', '<div>', $html) ?? '';
     $html = preg_replace_callback(
         '/<a\b([^>]*)>/iu',
         static function (array $match): string {
