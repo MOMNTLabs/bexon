@@ -65,6 +65,7 @@ $workspacePlanCardToneClass = preg_replace('/[^a-z0-9_-]+/i', '', $workspacePlan
 $workspacePlanCardExtraClass = trim((string) ($workspacePlanCardExtraClass ?? ''));
 $workspacePlanCardHeading = trim((string) ($workspacePlanCardHeading ?? ''));
 $workspacePlanCardAriaLabel = trim((string) ($workspacePlanCardAriaLabel ?? 'Plano ativo'));
+$workspacePlanCardHidden = !empty($workspacePlanCardHidden);
 $workspacePlanCardClasses = trim(sprintf(
     'workspace-sidebar-plan-card workspace-sidebar-plan-card--%s %s',
     $workspacePlanCardToneClass,
@@ -72,7 +73,7 @@ $workspacePlanCardClasses = trim(sprintf(
 ));
 ?>
 
-<section class="<?= e($workspacePlanCardClasses) ?>" aria-label="<?= e($workspacePlanCardAriaLabel) ?>">
+<section class="<?= e($workspacePlanCardClasses) ?>" aria-label="<?= e($workspacePlanCardAriaLabel) ?>"<?= $workspacePlanCardHidden ? ' hidden' : '' ?>>
     <?php if ($workspacePlanCardHeading !== ''): ?>
         <h3 class="workspace-sidebar-plan-heading"><?= e($workspacePlanCardHeading) ?></h3>
     <?php endif; ?>

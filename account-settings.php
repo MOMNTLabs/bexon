@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (string) ($_POST['new_password_confirm'] ?? '')
                 );
                 flash('success', 'Senha atualizada.');
-                redirectTo('account-settings');
+                redirectTo('account-settings#security');
 
             case 'account_delete_workspace':
                 $workspaceId = (int) ($_POST['workspace_id'] ?? 0);
@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         flash('error', $e->getMessage());
-        redirectTo('account-settings');
+        redirectTo($action === 'account_update_password' ? 'account-settings#security' : 'account-settings');
     }
 }
 
@@ -122,7 +122,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
     <div class="bg-layer bg-layer-two" aria-hidden="true"></div>
     <div class="grain" aria-hidden="true"></div>
 
-    <div class="app-shell">
+    <div class="app-shell account-settings-shell">
         <?php if ($flashes): ?>
             <div class="flash-stack" aria-live="polite">
                 <?php foreach ($flashes as $flash): ?>
@@ -133,6 +133,57 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
+
+        <aside class="account-settings-sidebar" aria-label="Navegação das configurações">
+            <a href="<?= e(appPath()) ?>" class="account-settings-sidebar-brand" aria-label="<?= e(APP_NAME) ?>">
+                <img
+                    src="<?= e(appPath('assets/Bexon - Logo Horizontal Negativa.png?v=1')) ?>"
+                    alt="<?= e(APP_NAME) ?>"
+                    width="116"
+                    height="29"
+                >
+            </a>
+
+            <div class="account-settings-sidebar-context">
+                <?php if (is_array($currentWorkspace)): ?>
+                    <?= renderWorkspaceAvatar($currentWorkspace, 'avatar account-settings-workspace-avatar') ?>
+                <?php else: ?>
+                    <?= renderUserAvatar($currentUser, 'avatar account-settings-workspace-avatar') ?>
+                <?php endif; ?>
+                <div>
+                    <strong><?= e((string) ($currentWorkspace['name'] ?? $currentUser['name'] ?? 'Conta')) ?></strong>
+                    <span>Configurações pessoais</span>
+                </div>
+            </div>
+
+            <nav class="account-settings-tabs account-settings-tabs-desktop" role="tablist" aria-label="Seções da conta">
+                <button type="button" class="account-settings-tab is-active" role="tab" aria-selected="true" data-account-settings-tab="profile">
+                    <span class="account-settings-tab-icon" aria-hidden="true">&#9675;</span>
+                    Perfil
+                </button>
+                <button type="button" class="account-settings-tab" role="tab" aria-selected="false" data-account-settings-tab="security">
+                    <span class="account-settings-tab-icon" aria-hidden="true">&#9671;</span>
+                    Segurança
+                </button>
+                <button type="button" class="account-settings-tab" role="tab" aria-selected="false" data-account-settings-tab="plan">
+                    <span class="account-settings-tab-icon" aria-hidden="true">&#9670;</span>
+                    Plano
+                </button>
+            </nav>
+
+            <a href="<?= e(appPath('#tasks')) ?>" class="account-settings-sidebar-back">
+                <span aria-hidden="true">&#8592;</span>
+                Voltar ao workspace
+            </a>
+
+            <div class="account-settings-sidebar-user">
+                <?= renderUserAvatar($currentUser, 'avatar small') ?>
+                <div>
+                    <strong><?= e((string) $currentUser['name']) ?></strong>
+                    <span><?= e((string) $currentUser['email']) ?></span>
+                </div>
+            </div>
+        </aside>
 
         <header class="top-nav dashboard-nav">
             <div class="top-nav-leading">
@@ -181,26 +232,40 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
             <section class="panel workspace-settings-panel">
                 <div class="panel-header workspace-settings-header">
                     <h2>Configurações da conta</h2>
-                    <p>Atualize seus dados e gerencie os workspaces que você participa.</p>
+                    <p>Gerencie seus dados, segurança e assinatura em um só lugar.</p>
                 </div>
 
+                <nav class="account-settings-tabs account-settings-tabs-mobile" role="tablist" aria-label="Seções da conta">
+                    <button type="button" class="account-settings-tab is-active" role="tab" aria-selected="true" data-account-settings-tab="profile">Perfil</button>
+                    <button type="button" class="account-settings-tab" role="tab" aria-selected="false" data-account-settings-tab="security">Segurança</button>
+                    <button type="button" class="account-settings-tab" role="tab" aria-selected="false" data-account-settings-tab="plan">Plano</button>
+                </nav>
+
                 <div class="workspace-settings-grid account-settings-grid">
-                    <section class="workspace-settings-card account-profile-card">
+                    <section class="workspace-settings-card account-profile-card account-settings-panel-item" data-account-settings-panel="profile">
                         <h3>Perfil</h3>
                         <form method="post" class="workspace-settings-form account-profile-form" enctype="multipart/form-data">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                             <input type="hidden" name="action" value="account_update_profile">
                             <div class="account-profile-photo-row">
-                                <?= renderUserAvatar($currentUser, 'avatar account-profile-avatar') ?>
-                                <label class="account-profile-photo-field">
-                                    <span>Foto de perfil</span>
+                                <div class="account-profile-avatar-preview" data-account-avatar-preview>
+                                    <?= renderUserAvatar($currentUser, 'avatar account-profile-avatar') ?>
+                                </div>
+                                <div class="account-profile-photo-field">
+                                    <span class="account-profile-photo-label">Foto de perfil</span>
+                                    <label class="account-profile-upload">
                                     <input
                                         class="account-profile-file-input"
                                         type="file"
                                         name="avatar"
                                         accept="image/png,image/jpeg,image/webp,image/gif"
+                                        data-account-avatar-input
                                     >
-                                </label>
+                                        <span class="account-profile-upload-button">Trocar foto</span>
+                                        <span class="account-profile-upload-name" data-account-avatar-name>Nenhum arquivo selecionado</span>
+                                    </label>
+                                    <small>PNG, JPG, WebP ou GIF.</small>
+                                </div>
                             </div>
                             <label>
                                 <span>Nome</span>
@@ -217,35 +282,45 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                     </section>
 
                     <?php
-                    $workspacePlanCardExtraClass = 'workspace-settings-card account-plan-card';
+                    $workspacePlanCardExtraClass = 'workspace-settings-card account-plan-card account-settings-panel-item account-settings-panel-plan';
                     $workspacePlanCardHeading = 'Plano';
                     $workspacePlanCardContextLabel = 'Plano ativo';
+                    $workspacePlanCardHidden = true;
                     include __DIR__ . '/partials/workspace_plan_card.php';
-                    unset($workspacePlanCardExtraClass, $workspacePlanCardHeading, $workspacePlanCardContextLabel);
+                    unset($workspacePlanCardExtraClass, $workspacePlanCardHeading, $workspacePlanCardContextLabel, $workspacePlanCardHidden);
                     ?>
 
-                    <section class="workspace-settings-card account-password-card">
+                    <section class="workspace-settings-card account-password-card account-settings-panel-item" data-account-settings-panel="security" hidden>
                         <h3>Senha</h3>
                         <form method="post" class="workspace-settings-form">
                             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
                             <input type="hidden" name="action" value="account_update_password">
                             <label>
                                 <span>Senha atual</span>
-                                <input type="password" name="current_password" autocomplete="current-password" required>
+                                <span class="account-password-control">
+                                    <input type="password" name="current_password" autocomplete="current-password" required>
+                                    <button type="button" class="account-password-toggle" data-account-password-toggle aria-label="Mostrar senha" aria-pressed="false">Ver</button>
+                                </span>
                             </label>
                             <label>
                                 <span>Nova senha</span>
-                                <input type="password" name="new_password" autocomplete="new-password" required>
+                                <span class="account-password-control">
+                                    <input type="password" name="new_password" autocomplete="new-password" required>
+                                    <button type="button" class="account-password-toggle" data-account-password-toggle aria-label="Mostrar senha" aria-pressed="false">Ver</button>
+                                </span>
                             </label>
                             <label>
                                 <span>Confirmar nova senha</span>
-                                <input type="password" name="new_password_confirm" autocomplete="new-password" required>
+                                <span class="account-password-control">
+                                    <input type="password" name="new_password_confirm" autocomplete="new-password" required>
+                                    <button type="button" class="account-password-toggle" data-account-password-toggle aria-label="Mostrar senha" aria-pressed="false">Ver</button>
+                                </span>
                             </label>
                             <button type="submit" class="btn btn-mini">Atualizar senha</button>
                         </form>
                     </section>
 
-                    <section class="workspace-settings-card account-install-card" data-pwa-install-entry="settings" hidden>
+                    <section class="workspace-settings-card account-install-card account-settings-panel-item" data-account-settings-panel="profile" data-pwa-install-entry="settings" hidden>
                         <h3>Aplicativo no celular</h3>
                         <p class="account-install-copy" data-pwa-install-message>
                             Adicione o Bexon como aplicativo para abrir mais rapido e usar em tela cheia.
@@ -255,7 +330,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                         </div>
                     </section>
 
-                    <section class="workspace-settings-card account-privacy-card">
+                    <section class="workspace-settings-card account-privacy-card account-settings-panel-item" data-account-settings-panel="profile">
                         <h3>Privacidade e dados</h3>
                         <p class="workspace-settings-member-empty">
                             Consulte suas opcoes de privacidade, direitos LGPD, termos e politica de cookies.
@@ -268,7 +343,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                     </section>
                 </div>
 
-                <section class="workspace-settings-card account-workspaces-card">
+                <section class="workspace-settings-card account-workspaces-card account-settings-panel-item" data-account-settings-panel="profile">
                     <h3>Workspaces</h3>
                     <ul class="workspace-settings-members">
                         <?php if (!$workspaceMemberships): ?>
@@ -336,15 +411,94 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
     </div>
 
     <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var validTabs = ["profile", "security", "plan"];
+            var tabButtons = Array.prototype.slice.call(document.querySelectorAll("[data-account-settings-tab]"));
+            var panelItems = Array.prototype.slice.call(document.querySelectorAll(".account-settings-panel-item"));
+
+            function panelName(item) {
+                if (item.classList.contains("account-settings-panel-plan")) {
+                    return "plan";
+                }
+                return item.getAttribute("data-account-settings-panel") || "profile";
+            }
+
+            function activateTab(tab, updateUrl) {
+                var activeTab = validTabs.indexOf(tab) >= 0 ? tab : "profile";
+                tabButtons.forEach(function (button) {
+                    var isActive = button.getAttribute("data-account-settings-tab") === activeTab;
+                    button.classList.toggle("is-active", isActive);
+                    button.setAttribute("aria-selected", isActive ? "true" : "false");
+                });
+                panelItems.forEach(function (item) {
+                    var isActive = panelName(item) === activeTab;
+                    item.classList.toggle("is-account-panel-hidden", !isActive);
+                    if (isActive && !item.hasAttribute("data-pwa-install-entry")) {
+                        item.hidden = false;
+                    }
+                });
+                document.body.setAttribute("data-account-settings-section", activeTab);
+                if (updateUrl) {
+                    history.replaceState(null, "", "#" + activeTab);
+                }
+            }
+
+            tabButtons.forEach(function (button) {
+                button.addEventListener("click", function () {
+                    activateTab(button.getAttribute("data-account-settings-tab") || "profile", true);
+                });
+            });
+
+            activateTab(window.location.hash.replace("#", ""), false);
+            window.addEventListener("hashchange", function () {
+                activateTab(window.location.hash.replace("#", ""), false);
+            });
+
+            document.querySelectorAll("[data-account-password-toggle]").forEach(function (button) {
+                button.addEventListener("click", function () {
+                    var control = button.closest(".account-password-control");
+                    var input = control ? control.querySelector("input") : null;
+                    if (!input) {
+                        return;
+                    }
+                    var reveal = input.type === "password";
+                    input.type = reveal ? "text" : "password";
+                    button.textContent = reveal ? "Ocultar" : "Ver";
+                    button.setAttribute("aria-label", reveal ? "Ocultar senha" : "Mostrar senha");
+                    button.setAttribute("aria-pressed", reveal ? "true" : "false");
+                });
+            });
+
+            var avatarInput = document.querySelector("[data-account-avatar-input]");
+            var avatarName = document.querySelector("[data-account-avatar-name]");
+            var avatarPreview = document.querySelector("[data-account-avatar-preview]");
+            if (avatarInput) {
+                avatarInput.addEventListener("change", function () {
+                    var file = avatarInput.files && avatarInput.files[0] ? avatarInput.files[0] : null;
+                    if (avatarName) {
+                        avatarName.textContent = file ? file.name : "Nenhum arquivo selecionado";
+                    }
+                    if (!file || !avatarPreview || !file.type.match(/^image\//)) {
+                        return;
+                    }
+                    var reader = new FileReader();
+                    reader.addEventListener("load", function () {
+                        var image = document.createElement("img");
+                        image.className = "avatar account-profile-avatar";
+                        image.alt = "Prévia da foto de perfil";
+                        image.src = String(reader.result || "");
+                        avatarPreview.replaceChildren(image);
+                    });
+                    reader.readAsDataURL(file);
+                });
+            }
+        });
+
         document.addEventListener("click", function (event) {
-            var closeButton = event.target.closest("[data-flash-close]");
-            if (!closeButton) {
-                return;
-            }
-            var flash = closeButton.closest("[data-flash]");
-            if (flash) {
-                flash.remove();
-            }
+            var target = event.target instanceof Element ? event.target : null;
+            var closeButton = target ? target.closest("[data-flash-close]") : null;
+            var flash = closeButton ? closeButton.closest("[data-flash]") : null;
+            if (flash) flash.remove();
         });
     </script>
 </body>
