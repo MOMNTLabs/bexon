@@ -34,10 +34,13 @@
   - Opcional. Quando maior que zero, aplica trial nos planos pagos. O padrao atual e `7`.
 - `APP_DEFAULT_BILLING_INTERVAL=year|month`
   - Define o intervalo visual padrao da home. O padrao atual e `year`.
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`
+  - ID opcional de uma configuracao do Stripe Customer Portal (`bpc_...`).
+  - A configuracao deve permitir atualizar o cartao, consultar faturas e cancelar a assinatura.
 
 ## Planos atuais
 
-| Plano | Mensal | Anual | Usuarios | Metadata esperada |
+| Plano | Mensal | Anual | Capacidade global da conta | Metadata esperada |
 | --- | ---: | ---: | ---: | --- |
 | Solo | R$ 19,90 | R$ 197 | 1 | `plan=solo`, `billing_interval=month|year`, `max_users=1` |
 | Team | R$ 49,90 | R$ 497 | 5 | `plan=team`, `billing_interval=month|year`, `max_users=5` |
@@ -45,6 +48,24 @@
 | Enterprise | Sob consulta | Sob consulta | Mais de 15 | Nao usa Stripe |
 
 O plano Free nao fica publico na home. Para liberar acesso gratuito, adicione o e-mail em `APP_BILLING_GUEST_EMAILS`.
+
+## Regra de titularidade e vagas
+
+- A assinatura pertence ao usuario que contratou, nao ao workspace ativo.
+- O titular ocupa uma vaga do plano.
+- Team comporta o titular e ate 4 pessoas convidadas distintas; Business comporta o titular e ate 14.
+- A mesma pessoa em varios workspaces criados pelo mesmo titular consome uma unica vaga.
+- Convites pendentes reservam vaga ate serem aceitos, cancelados ou expirarem.
+- O convidado usa o workspace pessoal e os workspaces aos quais foi convidado sem precisar assinar outro plano.
+- Para criar e compartilhar workspaces proprios, o convidado precisa contratar um plano proprio com vagas.
+
+## Troca e cancelamento de plano
+
+- Upgrades sao aplicados imediatamente com ajuste proporcional pela Stripe.
+- Downgrades e mudancas do anual para o mensal sao agendados para a proxima renovacao.
+- Um downgrade e bloqueado se a nova capacidade for menor que a quantidade de vagas ocupadas ou reservadas.
+- O usuario pode cancelar uma mudanca agendada antes da renovacao.
+- Cartao, faturas e cancelamento da assinatura sao gerenciados no Stripe Customer Portal pela pagina `account-settings#plan`.
 
 ## Fluxo recomendado de configuracao
 
@@ -67,6 +88,7 @@ O plano Free nao fica publico na home. Para liberar acesso gratuito, adicione o 
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
 10. Copie o segredo webhook (`whsec_...`) para `STRIPE_WEBHOOK_SECRET`.
+11. Ative o Stripe Customer Portal com atualizacao de forma de pagamento, historico de faturas e cancelamento. Se usar uma configuracao especifica, copie seu ID para `STRIPE_BILLING_PORTAL_CONFIGURATION_ID`.
 
 ## Teste local
 
@@ -94,6 +116,7 @@ No Railway, configure no servico web:
 - `STRIPE_BUSINESS_ANNUAL_PRICE_ID`
 - `STRIPE_PRODUCT_ID` (opcional, como fallback)
 - `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` (opcional)
 - `APP_URL`
 - `SITE_URL`
 - `COOKIE_DOMAIN`

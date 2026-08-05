@@ -44,6 +44,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash('success', 'Senha atualizada.');
                 redirectTo('account-settings#security');
 
+            case 'account_open_billing_portal':
+                $subscription = userSubscriptionByUserId((int) $currentUser['id']);
+                if (!$subscription || userHasEnterpriseBillingOverride((int) $currentUser['id'])) {
+                    throw new RuntimeException('O plano Enterprise é gerenciado diretamente com o suporte Bexon.');
+                }
+                $portalUrl = appStripeCreatePortalSession(
+                    (string) ($subscription['stripe_customer_id'] ?? ''),
+                    appUrl('account-settings#plan')
+                );
+                header('Location: ' . $portalUrl);
+                exit;
+
+            case 'account_change_plan':
+                $targetPlanKey = normalizeBillingPlanKey((string) ($_POST['plan_key'] ?? ''), null);
+                $targetInterval = normalizeBillingInterval((string) ($_POST['billing_interval'] ?? ''), null);
+                $targetPlan = $targetPlanKey !== '' ? billingPlan($targetPlanKey) : null;
+                if (!$targetPlan || $targetInterval === '' || ($targetPlan['checkout_enabled'] ?? true) === false) {
+                    throw new RuntimeException('Escolha um plano disponível.');
+                }
+
+                $subscription = userSubscriptionByUserId((int) $currentUser['id']);
+                if (userHasEnterpriseBillingOverride((int) $currentUser['id'])) {
+                    throw new RuntimeException('O plano Enterprise é alterado diretamente com o suporte Bexon.');
+                }
+                $subscriptionId = trim((string) ($subscription['stripe_subscription_id'] ?? ''));
+                if (!$subscription || !str_starts_with($subscriptionId, 'sub_')) {
+                    header('Location: ' . siteUrl(
+                        'home?action=checkout&plan=' . rawurlencode($targetPlanKey)
+                        . '&interval=' . rawurlencode($targetInterval)
+                    ));
+                    exit;
+                }
+
+                $currentPlanKey = billingSubscriptionPlanKey($subscription);
+                $currentInterval = normalizeBillingInterval((string) ($subscription['billing_interval'] ?? 'year'));
+                if ($currentPlanKey === $targetPlanKey && $currentInterval === $targetInterval) {
+                    throw new RuntimeException('Este já é o seu plano atual.');
+                }
+
+                $seatUsage = billingSponsorSeatUsage((int) $currentUser['id']);
+                $targetMaxUsers = max(0, (int) ($targetPlan['max_users'] ?? 0));
+                if ($targetMaxUsers > 0 && (int) ($seatUsage['used_users'] ?? 1) > $targetMaxUsers) {
+                    throw new RuntimeException(sprintf(
+                        'Para mudar para %s, reduza o uso para no máximo %d pessoa%s. Hoje há %d vagas ocupadas ou reservadas.',
+                        (string) ($targetPlan['name'] ?? 'este plano'),
+                        $targetMaxUsers,
+                        $targetMaxUsers === 1 ? '' : 's',
+                        (int) ($seatUsage['used_users'] ?? 1)
+                    ));
+                }
+
+                $isDowngrade = billingPlanRank($targetPlanKey) < billingPlanRank($currentPlanKey)
+                    || ($targetPlanKey === $currentPlanKey && $currentInterval === 'year' && $targetInterval === 'month');
+                if ($isDowngrade) {
+                    appStripeScheduleSubscriptionPlan($subscription, $targetPlan, $targetInterval);
+                    upsertUserSubscription($pdo, (int) $currentUser['id'], [
+                        'pending_plan_key' => $targetPlanKey,
+                        'pending_billing_interval' => $targetInterval,
+                        'pending_change_at' => $subscription['current_period_end'] ?? null,
+                    ]);
+                    flash('success', 'Mudança agendada para o fim do período atual. Até lá, seu plano continua igual.');
+                } else {
+                    $stripeSubscription = appStripeUpdateSubscriptionPlan($subscription, $targetPlan, $targetInterval);
+                    upsertUserSubscription($pdo, (int) $currentUser['id'], array_merge(
+                        appStripeSubscriptionRecordAttributes($stripeSubscription, $targetPlan, $targetInterval),
+                        [
+                            'pending_plan_key' => '',
+                            'pending_billing_interval' => '',
+                            'pending_change_at' => null,
+                        ]
+                    ));
+                    flash('success', 'Plano atualizado. A Stripe aplicará o ajuste proporcional desta cobrança.');
+                }
+                redirectTo('account-settings#plan');
+
+            case 'account_cancel_plan_change':
+                $subscription = userSubscriptionByUserId((int) $currentUser['id']);
+                if (!$subscription || trim((string) ($subscription['pending_plan_key'] ?? '')) === '') {
+                    throw new RuntimeException('Não existe uma mudança de plano agendada.');
+                }
+                appStripeCancelScheduledPlanChange($subscription);
+                upsertUserSubscription($pdo, (int) $currentUser['id'], [
+                    'pending_plan_key' => '',
+                    'pending_billing_interval' => '',
+                    'pending_change_at' => null,
+                ]);
+                flash('success', 'Mudança agendada cancelada. Seu plano atual será mantido.');
+                redirectTo('account-settings#plan');
+
             case 'account_delete_workspace':
                 $workspaceId = (int) ($_POST['workspace_id'] ?? 0);
                 if (workspaceIsPersonal($workspaceId)) {
@@ -69,7 +158,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (Throwable $e) {
         flash('error', $e->getMessage());
-        redirectTo($action === 'account_update_password' ? 'account-settings#security' : 'account-settings');
+        $planActions = ['account_open_billing_portal', 'account_change_plan', 'account_cancel_plan_change'];
+        redirectTo($action === 'account_update_password'
+            ? 'account-settings#security'
+            : (in_array($action, $planActions, true) ? 'account-settings#plan' : 'account-settings'));
     }
 }
 
@@ -78,6 +170,42 @@ $currentWorkspaceId = activeWorkspaceId($currentUser);
 $currentWorkspace = $currentWorkspaceId !== null ? workspaceById((int) $currentWorkspaceId) : null;
 $isPersonalWorkspace = !empty($currentWorkspace['is_personal']);
 $workspaceMemberships = workspaceMembershipsDetailedForUser((int) $currentUser['id']);
+$accountSubscription = userSubscriptionByUserId((int) $currentUser['id']);
+$accountPlanKey = is_array($accountSubscription) ? billingSubscriptionPlanKey($accountSubscription) : 'free';
+$accountPlanKey = $accountPlanKey !== '' ? $accountPlanKey : 'free';
+$accountPlan = billingPlan($accountPlanKey) ?? billingPlan('free') ?? ['key' => 'free', 'name' => 'Free', 'max_users' => 1];
+$accountBillingInterval = is_array($accountSubscription)
+    ? normalizeBillingInterval((string) ($accountSubscription['billing_interval'] ?? 'year'))
+    : '';
+$accountSeatUsage = billingSponsorSeatUsage((int) $currentUser['id']);
+$accountBillingPlans = publicBillingPlanDefinitions();
+$accountSubscriptionStatus = strtolower(trim((string) ($accountSubscription['subscription_status'] ?? 'inactive')));
+$accountHasStripeSubscription = str_starts_with(trim((string) ($accountSubscription['stripe_subscription_id'] ?? '')), 'sub_');
+$accountHasStripeCustomer = str_starts_with(trim((string) ($accountSubscription['stripe_customer_id'] ?? '')), 'cus_');
+$accountIsEnterpriseOverride = userHasEnterpriseBillingOverride((int) $currentUser['id']);
+$accountPendingPlanKey = normalizeBillingPlanKey((string) ($accountSubscription['pending_plan_key'] ?? ''), null);
+$accountPendingPlan = $accountPendingPlanKey !== '' ? billingPlan($accountPendingPlanKey) : null;
+$accountPendingInterval = normalizeBillingInterval((string) ($accountSubscription['pending_billing_interval'] ?? ''), null);
+$accountSponsoredWorkspaces = [];
+foreach ($workspaceMemberships as $membership) {
+    if (!empty($membership['is_personal']) || !empty($membership['is_owner'])) {
+        continue;
+    }
+    $membershipLimit = workspaceBillingLimit((int) ($membership['id'] ?? 0));
+    $membership['sponsor_plan_name'] = (string) ($membershipLimit['plan_name'] ?? '');
+    $accountSponsoredWorkspaces[] = $membership;
+}
+$formatBillingDate = static function ($value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+    try {
+        return (new DateTimeImmutable($value))->format('d/m/Y');
+    } catch (Throwable $e) {
+        return '';
+    }
+};
 $flashes = getFlashes();
 $stylesAssetVersion = is_file(__DIR__ . '/assets/styles.css')
     ? (string) filemtime(__DIR__ . '/assets/styles.css')
@@ -281,14 +409,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                         </form>
                     </section>
 
-                    <?php
-                    $workspacePlanCardExtraClass = 'workspace-settings-card account-plan-card account-settings-panel-item account-settings-panel-plan';
-                    $workspacePlanCardHeading = 'Plano';
-                    $workspacePlanCardContextLabel = 'Plano ativo';
-                    $workspacePlanCardHidden = true;
-                    include __DIR__ . '/partials/workspace_plan_card.php';
-                    unset($workspacePlanCardExtraClass, $workspacePlanCardHeading, $workspacePlanCardContextLabel, $workspacePlanCardHidden);
-                    ?>
+                    <?php include __DIR__ . '/partials/account_billing_center.php'; ?>
 
                     <section class="workspace-settings-card account-password-card account-settings-panel-item" data-account-settings-panel="security" hidden>
                         <h3>Senha</h3>
@@ -491,6 +612,57 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                     });
                     reader.readAsDataURL(file);
                 });
+            }
+
+            var planCompare = document.querySelector("[data-account-plan-compare]");
+            if (planCompare) {
+                var currentPlanKey = <?= json_encode($accountPlanKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+                var currentInterval = <?= json_encode($accountBillingInterval, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+                var planRanks = {free: 0, solo: 1, team: 2, business: 3, enterprise: 4};
+                var intervalButtons = Array.prototype.slice.call(planCompare.querySelectorAll("[data-account-billing-interval]"));
+                var planCards = Array.prototype.slice.call(planCompare.querySelectorAll("[data-account-plan-card]"));
+
+                function applyBillingInterval(interval) {
+                    intervalButtons.forEach(function (button) {
+                        var active = button.getAttribute("data-account-billing-interval") === interval;
+                        button.classList.toggle("is-active", active);
+                        button.setAttribute("aria-pressed", active ? "true" : "false");
+                    });
+                    planCards.forEach(function (card) {
+                        var price = card.querySelector("[data-account-plan-price]");
+                        var note = card.querySelector("[data-account-plan-note]");
+                        var input = card.querySelector("[data-account-plan-interval-input]");
+                        var submit = card.querySelector("[data-account-plan-submit]");
+                        var planKey = card.getAttribute("data-account-plan-key") || "";
+                        if (price) {
+                            var priceValue = card.getAttribute("data-price-" + interval) || "";
+                            price.textContent = priceValue + (planKey === "enterprise" ? "" : "/mês");
+                        }
+                        if (note) {
+                            note.textContent = card.getAttribute("data-note-" + interval) || "";
+                        }
+                        if (input) input.value = interval;
+                        if (!submit) return;
+                        var isCurrent = planKey === currentPlanKey && interval === currentInterval;
+                        submit.disabled = isCurrent;
+                        if (isCurrent) {
+                            submit.textContent = "Plano atual";
+                        } else if ((planRanks[planKey] || 0) > (planRanks[currentPlanKey] || 0)) {
+                            submit.textContent = "Fazer upgrade";
+                        } else if (planKey === currentPlanKey) {
+                            submit.textContent = "Trocar cobrança";
+                        } else {
+                            submit.textContent = "Mudar no próximo ciclo";
+                        }
+                    });
+                }
+
+                intervalButtons.forEach(function (button) {
+                    button.addEventListener("click", function () {
+                        applyBillingInterval(button.getAttribute("data-account-billing-interval") || "year");
+                    });
+                });
+                applyBillingInterval(planCompare.getAttribute("data-default-billing-interval") || "year");
             }
         });
 

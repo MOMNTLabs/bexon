@@ -62,12 +62,13 @@ $profileIconAssetVersion = assetVersion('assets/Bexon---Perfil.png');
 
             <section>
                 <h2>4. Assinaturas, teste e cobran&ccedil;a</h2>
-                <p>Planos pagos podem incluir per&iacute;odo de teste gratuito, cobran&ccedil;a mensal ou anual e limites por quantidade de usu&aacute;rios. A cobran&ccedil;a &eacute; processada por provedor externo de pagamento. Valores, periodicidade, trial e limites s&atilde;o apresentados antes da contrata&ccedil;&atilde;o.</p>
+                <p>O plano &eacute; vinculado &agrave; conta do usu&aacute;rio contratante, e n&atilde;o a um workspace isolado. Planos pagos podem incluir per&iacute;odo de teste gratuito, cobran&ccedil;a mensal ou anual e limites por quantidade de pessoas. A cobran&ccedil;a &eacute; processada por provedor externo de pagamento. Valores, periodicidade, trial e limites s&atilde;o apresentados antes da contrata&ccedil;&atilde;o.</p>
+                <p>Nos planos colaborativos, o titular ocupa uma vaga e cada pessoa distinta convidada ocupa outra, mesmo que participe de mais de um workspace criado pelo mesmo titular. Convites pendentes tamb&eacute;m reservam vaga. A pessoa convidada mant&eacute;m seu workspace pessoal e acessa apenas os workspaces para os quais recebeu permiss&atilde;o; para criar seus pr&oacute;prios workspaces compartilh&aacute;veis, ela precisa de uma assinatura pr&oacute;pria compat&iacute;vel.</p>
             </section>
 
             <section>
                 <h2>5. Cancelamento e arrependimento</h2>
-                <p>O cliente pode solicitar cancelamento pelo suporte. Em contrata&ccedil;&otilde;es realizadas pela internet, o direito de arrependimento poder&aacute; ser exercido nos termos da legisla&ccedil;&atilde;o aplic&aacute;vel. Solicita&ccedil;&otilde;es devem ser enviadas para <a href="mailto:<?= e(legalValue('support_email')) ?>"><?= e(legalValue('support_email')) ?></a>.</p>
+                <p>O cliente pode gerenciar a assinatura, a forma de pagamento, as faturas e o cancelamento na &aacute;rea de configura&ccedil;&otilde;es da conta, quando o plano for processado pela Stripe, ou solicitar atendimento pelo e-mail <a href="mailto:<?= e(legalValue('support_email')) ?>"><?= e(legalValue('support_email')) ?></a>. Upgrades podem entrar em vigor imediatamente com cobran&ccedil;a proporcional; downgrades e mudan&ccedil;as do ciclo anual para mensal s&atilde;o aplicados na renova&ccedil;&atilde;o seguinte. Em contrata&ccedil;&otilde;es realizadas pela internet, o direito de arrependimento poder&aacute; ser exercido nos termos da legisla&ccedil;&atilde;o aplic&aacute;vel.</p>
             </section>
 
             <section>

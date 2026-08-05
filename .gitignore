@@ -1,4 +1,5 @@
 storage/app.sqlite
 storage/vault.key
 storage/*.log
+storage/sess_*
 3mmyYn7qsHE.pt.vtt

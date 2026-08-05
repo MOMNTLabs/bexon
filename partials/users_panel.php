@@ -162,7 +162,7 @@
                     <?php if (!empty($workspaceBillingLimit['limited'])): ?>
                         <p class="workspace-settings-member-empty workspace-settings-inline-note">
                             Plano <?= e((string) ($workspaceBillingLimit['plan_name'] ?? 'atual')) ?>:
-                            <?= e((string) ($workspaceBillingLimit['member_count'] ?? 0)) ?>/<?= e((string) ($workspaceBillingLimit['max_users'] ?? 0)) ?> usuarios.
+                            <?= e((string) ($workspaceBillingLimit['member_count'] ?? 0)) ?>/<?= e((string) ($workspaceBillingLimit['max_users'] ?? 0)) ?> vagas usadas entre todos os seus workspaces.
                         </p>
                     <?php endif; ?>
 
@@ -181,7 +181,7 @@
                     <?php elseif (!empty($canManageWorkspace) && empty($isPersonalWorkspace) && empty($workspaceCanInviteMembers)): ?>
                         <p class="workspace-settings-member-empty workspace-settings-inline-note">Faca upgrade para Team ou superior para convidar usuarios.</p>
                     <?php elseif (!empty($canManageWorkspace) && !empty($workspaceMemberLimitReached)): ?>
-                        <p class="workspace-settings-member-empty workspace-settings-inline-note">Limite do plano atingido. Faca upgrade para convidar mais usuarios.</p>
+                        <p class="workspace-settings-member-empty workspace-settings-inline-note">Todas as vagas do plano estão ocupadas ou reservadas. Cancele um convite, remova um convidado ou faça upgrade.</p>
                     <?php elseif (!empty($isPersonalWorkspace)): ?>
                         <p class="workspace-settings-member-empty workspace-settings-inline-note">Workspace pessoal nao permite convidar usuarios parceiros.</p>
                     <?php endif; ?>

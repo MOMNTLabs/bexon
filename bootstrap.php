@@ -46,6 +46,7 @@ require_once __DIR__ . '/lib/bootstrap/auth-core.php';
 require_once __DIR__ . '/lib/bootstrap/password-reset.php';
 require_once __DIR__ . '/lib/bootstrap/workspace-invitations.php';
 require_once __DIR__ . '/lib/bootstrap/products.php';
+require_once __DIR__ . '/lib/bootstrap/billing-stripe.php';
 
 
 
@@ -381,6 +382,9 @@ function ensureBillingSchema(PDO $pdo): void
                 trial_end TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 current_period_end TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 cancel_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
+                pending_plan_key TEXT NOT NULL DEFAULT \'\',
+                pending_billing_interval TEXT NOT NULL DEFAULT \'\',
+                pending_change_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
                 raw_payload_json TEXT NOT NULL DEFAULT \'{}\',
                 created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
@@ -417,6 +421,9 @@ function ensureBillingSchema(PDO $pdo): void
                 trial_end TEXT DEFAULT NULL,
                 current_period_end TEXT DEFAULT NULL,
                 cancel_at TEXT DEFAULT NULL,
+                pending_plan_key TEXT NOT NULL DEFAULT \'\',
+                pending_billing_interval TEXT NOT NULL DEFAULT \'\',
+                pending_change_at TEXT DEFAULT NULL,
                 raw_payload_json TEXT NOT NULL DEFAULT \'{}\',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -436,6 +443,15 @@ function ensureBillingSchema(PDO $pdo): void
     }
     if (!tableHasColumn($pdo, 'user_subscriptions', 'billing_interval')) {
         $pdo->exec("ALTER TABLE user_subscriptions ADD COLUMN billing_interval TEXT NOT NULL DEFAULT ''");
+    }
+    if (!tableHasColumn($pdo, 'user_subscriptions', 'pending_plan_key')) {
+        $pdo->exec("ALTER TABLE user_subscriptions ADD COLUMN pending_plan_key TEXT NOT NULL DEFAULT ''");
+    }
+    if (!tableHasColumn($pdo, 'user_subscriptions', 'pending_billing_interval')) {
+        $pdo->exec("ALTER TABLE user_subscriptions ADD COLUMN pending_billing_interval TEXT NOT NULL DEFAULT ''");
+    }
+    if (!tableHasColumn($pdo, 'user_subscriptions', 'pending_change_at')) {
+        $pdo->exec('ALTER TABLE user_subscriptions ADD COLUMN pending_change_at TEXT DEFAULT NULL');
     }
 }
 
@@ -470,8 +486,9 @@ function billingPlanDefinitions(): array
             'cta' => 'Assinar Solo',
             'features' => [
                 '1 usuário',
+                'Todas as ferramentas do Bexon',
+                'Workspaces para uso individual',
                 'Organização pessoal e profissional',
-                'Fluxo visual completo',
             ],
         ],
         'team' => [
@@ -486,9 +503,10 @@ function billingPlanDefinitions(): array
             'summary' => 'Para times pequenos que precisam delegar e acompanhar entregas.',
             'cta' => 'Assinar Team',
             'features' => [
-                'Até 5 usuários',
-                'Workspaces de equipe',
-                'Permissões por contexto',
+                'Você + até 4 convidados',
+                'Todas as ferramentas do Bexon',
+                'Convites compartilhados entre seus workspaces',
+                'Permissões e colaboração em equipe',
             ],
         ],
         'business' => [
@@ -503,9 +521,10 @@ function billingPlanDefinitions(): array
             'summary' => 'Para operações com mais pessoas e rotinas compartilhadas.',
             'cta' => 'Assinar Business',
             'features' => [
-                'Até 15 usuários',
-                'Rotina operacional centralizada',
-                'Gestão de demandas com o time',
+                'Você + até 14 convidados',
+                'Todas as ferramentas do Bexon',
+                'Convites compartilhados entre seus workspaces',
+                'Operação e demandas centralizadas',
             ],
         ],
         'enterprise' => [
@@ -523,6 +542,7 @@ function billingPlanDefinitions(): array
             'cta' => 'Falar com suporte',
             'features' => [
                 'Mais de 15 usuários',
+                'Todas as ferramentas do Bexon',
                 'Condições comerciais sob consulta',
                 'Apoio para implantação e expansão',
             ],
@@ -696,7 +716,7 @@ function appBillingPlanPriceLabel(array $plan, string $billingInterval = 'year')
 
 function appBillingPlanPriceSuffix(array $plan): string
 {
-    return trim((string) ($plan['price_label'] ?? '')) !== '' ? '' : '/mes';
+    return trim((string) ($plan['price_label'] ?? '')) !== '' ? '' : '/mês';
 }
 
 function appBillingPlanBillingNote(array $plan, string $billingInterval = 'year'): string
@@ -709,7 +729,7 @@ function appBillingPlanBillingNote(array $plan, string $billingInterval = 'year'
         return 'cobrado anualmente ' . appBillingMoneyLabel(billingPlanChargeCents($plan, 'year'), true);
     }
 
-    return 'cobranca mensal';
+    return 'cobrança mensal';
 }
 
 function appBillingPlanTrialNote(array $plan, string $billingInterval = 'year'): string
@@ -758,9 +778,13 @@ function appBillingPlanMailtoUrl(array $plan): string
         $email = 'suporte@bexon.com.br';
     }
 
-    $subject = rawurlencode('Consulta Enterprise - Bexon');
-    $body = rawurlencode(
-        "Olá, equipe Bexon.\n\nTenho interesse no plano Enterprise para uma equipe com mais de 15 usuários.\n\nNome:\nEmpresa:\nQuantidade aproximada de usuários:\nMensagem:"
+    $planKey = normalizeBillingPlanKey((string) ($plan['key'] ?? ''), null);
+    $planName = trim((string) ($plan['name'] ?? 'Enterprise')) ?: 'Enterprise';
+    $isEnterprise = $planKey === 'enterprise' || ($plan['checkout_enabled'] ?? true) === false;
+    $subject = rawurlencode(($isEnterprise ? 'Consulta Enterprise' : 'Alteração para o plano ' . $planName) . ' - Bexon');
+    $body = rawurlencode($isEnterprise
+        ? "Olá, equipe Bexon.\n\nTenho interesse no plano Enterprise para uma equipe com mais de 15 usuários.\n\nNome:\nEmpresa:\nQuantidade aproximada de usuários:\nMensagem:"
+        : "Olá, equipe Bexon.\n\nQuero alterar meu plano Enterprise para o plano {$planName}.\n\nNome:\nE-mail da conta:\nMensagem:"
     );
 
     return 'mailto:' . $email . '?subject=' . $subject . '&body=' . $body;
@@ -931,6 +955,124 @@ function userCanSponsorWorkspaceMembers(int $userId, ?string $referenceTime = nu
     return billingSubscriptionSupportsWorkspaceSeats($subscription);
 }
 
+function billingSponsorSeatIdentityForUser(int $userId): string
+{
+    $user = $userId > 0 ? userById($userId) : null;
+    $email = strtolower(trim((string) ($user['email'] ?? '')));
+    return $email !== '' ? $email : ($userId > 0 ? 'user:' . $userId : '');
+}
+
+function billingSponsorSeatUsage(int $ownerUserId): array
+{
+    $subscription = $ownerUserId > 0 ? userSubscriptionByUserId($ownerUserId) : null;
+    $planKey = is_array($subscription) ? billingSubscriptionPlanKey($subscription) : '';
+    $plan = $planKey !== '' ? billingPlan($planKey) : null;
+    $maxUsers = is_array($subscription) ? billingSubscriptionMaxUsers($subscription) : 0;
+    $isUnlimited = $planKey === 'enterprise' || ($maxUsers <= 0 && userCanSponsorWorkspaceMembers($ownerUserId));
+    $ownerIdentity = billingSponsorSeatIdentityForUser($ownerUserId);
+    $activeIdentities = [];
+    $pendingIdentities = [];
+
+    if ($ownerUserId > 0) {
+        $pdo = db();
+        ensureWorkspaceSchema($pdo);
+        ensureWorkspaceInvitationSchema($pdo);
+        ensureWorkspaceEmailInvitationSchema($pdo);
+        pruneExpiredWorkspaceEmailInvitations($pdo);
+
+        $activeStmt = $pdo->prepare(
+            'SELECT DISTINCT LOWER(u.email) AS seat_identity
+             FROM workspaces w
+             INNER JOIN workspace_members wm ON wm.workspace_id = w.id
+             INNER JOIN users u ON u.id = wm.user_id
+             WHERE w.created_by = :owner_user_id
+               AND w.is_personal = 0
+               AND wm.user_id <> :member_owner_user_id'
+        );
+        $activeStmt->execute([
+            ':owner_user_id' => $ownerUserId,
+            ':member_owner_user_id' => $ownerUserId,
+        ]);
+        foreach ($activeStmt->fetchAll(PDO::FETCH_COLUMN) as $identity) {
+            $identity = strtolower(trim((string) $identity));
+            if ($identity !== '' && $identity !== $ownerIdentity) {
+                $activeIdentities[$identity] = true;
+            }
+        }
+
+        $pendingUserStmt = $pdo->prepare(
+            'SELECT DISTINCT LOWER(u.email) AS seat_identity
+             FROM workspace_invitations wi
+             INNER JOIN workspaces w ON w.id = wi.workspace_id
+             INNER JOIN users u ON u.id = wi.invited_user_id
+             WHERE w.created_by = :owner_user_id
+               AND w.is_personal = 0
+               AND wi.status = :pending_status'
+        );
+        $pendingUserStmt->execute([
+            ':owner_user_id' => $ownerUserId,
+            ':pending_status' => 'pending',
+        ]);
+        foreach ($pendingUserStmt->fetchAll(PDO::FETCH_COLUMN) as $identity) {
+            $identity = strtolower(trim((string) $identity));
+            if ($identity !== '' && $identity !== $ownerIdentity && !isset($activeIdentities[$identity])) {
+                $pendingIdentities[$identity] = true;
+            }
+        }
+
+        $pendingEmailStmt = $pdo->prepare(
+            'SELECT DISTINCT LOWER(wei.invited_email) AS seat_identity
+             FROM workspace_email_invitations wei
+             INNER JOIN workspaces w ON w.id = wei.workspace_id
+             WHERE w.created_by = :owner_user_id
+               AND w.is_personal = 0
+               AND wei.status = :pending_status'
+        );
+        $pendingEmailStmt->execute([
+            ':owner_user_id' => $ownerUserId,
+            ':pending_status' => 'pending',
+        ]);
+        foreach ($pendingEmailStmt->fetchAll(PDO::FETCH_COLUMN) as $identity) {
+            $identity = strtolower(trim((string) $identity));
+            if ($identity !== '' && $identity !== $ownerIdentity && !isset($activeIdentities[$identity])) {
+                $pendingIdentities[$identity] = true;
+            }
+        }
+    }
+
+    $activeInvitees = count($activeIdentities);
+    $pendingInvitees = count($pendingIdentities);
+    $allocatedInvitees = count($activeIdentities + $pendingIdentities);
+    $usedUsers = 1 + $allocatedInvitees;
+
+    return [
+        'owner_user_id' => $ownerUserId,
+        'plan_key' => $planKey,
+        'plan_name' => (string) ($plan['name'] ?? ''),
+        'max_users' => $maxUsers,
+        'is_unlimited' => $isUnlimited,
+        'active_invitees' => $activeInvitees,
+        'pending_invitees' => $pendingInvitees,
+        'allocated_invitees' => $allocatedInvitees,
+        'used_users' => $usedUsers,
+        'remaining_invites' => $isUnlimited ? null : max(0, $maxUsers - $usedUsers),
+        'active_identities' => array_keys($activeIdentities),
+        'pending_identities' => array_keys($pendingIdentities),
+    ];
+}
+
+function billingSponsorSeatIsAllocated(int $ownerUserId, string $identity): bool
+{
+    $identity = strtolower(trim($identity));
+    if ($identity === '') {
+        return false;
+    }
+
+    $usage = billingSponsorSeatUsage($ownerUserId);
+    return in_array($identity, (array) ($usage['active_identities'] ?? []), true)
+        || in_array($identity, (array) ($usage['pending_identities'] ?? []), true);
+}
+
 function workspaceBillingLimit(int $workspaceId): array
 {
     $workspace = workspaceById($workspaceId);
@@ -947,20 +1089,29 @@ function workspaceBillingLimit(int $workspaceId): array
         ];
     }
 
-    $subscription = userSubscriptionByUserId($ownerUserId);
-    $planKey = $subscription ? billingSubscriptionPlanKey($subscription) : '';
-    $maxUsers = $subscription ? billingSubscriptionMaxUsers($subscription) : 0;
+    $seatUsage = billingSponsorSeatUsage($ownerUserId);
+    $planKey = (string) ($seatUsage['plan_key'] ?? '');
+    $maxUsers = (int) ($seatUsage['max_users'] ?? 0);
     $plan = $planKey !== '' ? billingPlan($planKey) : null;
     $canInviteMembers = userCanSponsorWorkspaceMembers($ownerUserId);
+    $isUnlimited = !empty($seatUsage['is_unlimited']);
+    $remainingInvites = $seatUsage['remaining_invites'] ?? 0;
 
     return [
         'owner_user_id' => $ownerUserId,
         'plan_key' => $planKey,
         'plan_name' => (string) ($plan['name'] ?? ''),
         'max_users' => $maxUsers,
-        'member_count' => workspaceMembershipCount($workspaceId),
+        'member_count' => (int) ($seatUsage['used_users'] ?? 1),
+        'workspace_member_count' => workspaceMembershipCount($workspaceId),
+        'active_invitees' => (int) ($seatUsage['active_invitees'] ?? 0),
+        'pending_invitees' => (int) ($seatUsage['pending_invitees'] ?? 0),
+        'remaining_invites' => $remainingInvites,
         'can_invite_members' => $canInviteMembers,
-        'limited' => $maxUsers > 0 && $canInviteMembers,
+        'has_available_invites' => $canInviteMembers && ($isUnlimited || (int) $remainingInvites > 0),
+        'can_sponsor_members' => $canInviteMembers,
+        'limited' => !$isUnlimited && $maxUsers > 0 && $canInviteMembers,
+        'is_unlimited' => $isUnlimited,
     ];
 }
 
@@ -971,7 +1122,7 @@ function ensureWorkspaceCanInviteMembers(int $workspaceId): void
     }
 
     $limit = workspaceBillingLimit($workspaceId);
-    if (!empty($limit['can_invite_members'])) {
+    if (!empty($limit['can_sponsor_members'])) {
         return;
     }
 
@@ -989,9 +1140,15 @@ function enforceWorkspaceMemberLimit(int $workspaceId, int $memberUserId): void
         return;
     }
 
+    $ownerUserId = (int) ($limit['owner_user_id'] ?? 0);
+    $identity = billingSponsorSeatIdentityForUser($memberUserId);
+    if ($ownerUserId > 0 && billingSponsorSeatIsAllocated($ownerUserId, $identity)) {
+        return;
+    }
+
     $maxUsers = (int) ($limit['max_users'] ?? 0);
     $memberCount = (int) ($limit['member_count'] ?? 0);
-    if ($maxUsers <= 0 || $memberCount < $maxUsers) {
+    if (!empty($limit['is_unlimited']) || $maxUsers <= 0 || $memberCount < $maxUsers) {
         return;
     }
 
@@ -1001,10 +1158,41 @@ function enforceWorkspaceMemberLimit(int $workspaceId, int $memberUserId): void
     }
 
     throw new RuntimeException(sprintf(
-        'O plano %s permite até %d usuário%s neste workspace. Faça upgrade para adicionar mais usuários.',
+        'O plano %s permite até %d usuário%s entre todos os seus workspaces. Remova um convidado ou faça upgrade.',
         $planName,
         $maxUsers,
         $maxUsers === 1 ? '' : 's'
+    ));
+}
+
+function enforceWorkspaceEmailInvitationLimit(int $workspaceId, string $email): void
+{
+    $email = strtolower(trim($email));
+    if ($workspaceId <= 0 || $email === '') {
+        throw new RuntimeException('Convite inválido.');
+    }
+
+    $limit = workspaceBillingLimit($workspaceId);
+    if (empty($limit['limited']) || !empty($limit['is_unlimited'])) {
+        return;
+    }
+
+    $ownerUserId = (int) ($limit['owner_user_id'] ?? 0);
+    if ($ownerUserId > 0 && billingSponsorSeatIsAllocated($ownerUserId, $email)) {
+        return;
+    }
+
+    $maxUsers = (int) ($limit['max_users'] ?? 0);
+    $usedUsers = (int) ($limit['member_count'] ?? 0);
+    if ($maxUsers <= 0 || $usedUsers < $maxUsers) {
+        return;
+    }
+
+    $planName = trim((string) ($limit['plan_name'] ?? '')) ?: 'atual';
+    throw new RuntimeException(sprintf(
+        'O plano %s já utiliza suas %d vagas. Cancele um convite, remova um convidado ou faça upgrade.',
+        $planName,
+        $maxUsers
     ));
 }
 
@@ -4318,6 +4506,11 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
         'trial_end' => $attributes['trial_end'] ?? ($existing['trial_end'] ?? null),
         'current_period_end' => $attributes['current_period_end'] ?? ($existing['current_period_end'] ?? null),
         'cancel_at' => $attributes['cancel_at'] ?? ($existing['cancel_at'] ?? null),
+        'pending_plan_key' => normalizeBillingPlanKey((string) ($attributes['pending_plan_key'] ?? ($existing['pending_plan_key'] ?? '')), null),
+        'pending_billing_interval' => normalizeBillingInterval((string) ($attributes['pending_billing_interval'] ?? ($existing['pending_billing_interval'] ?? '')), null),
+        'pending_change_at' => array_key_exists('pending_change_at', $attributes)
+            ? $attributes['pending_change_at']
+            : ($existing['pending_change_at'] ?? null),
         'raw_payload_json' => trim((string) ($attributes['raw_payload_json'] ?? ($existing['raw_payload_json'] ?? '{}'))),
     ];
 
@@ -4344,6 +4537,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 trial_end,
                 current_period_end,
                 cancel_at,
+                pending_plan_key,
+                pending_billing_interval,
+                pending_change_at,
                 raw_payload_json,
                 created_at,
                 updated_at
@@ -4360,6 +4556,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 :trial_end,
                 :current_period_end,
                 :cancel_at,
+                :pending_plan_key,
+                :pending_billing_interval,
+                :pending_change_at,
                 :raw_payload_json,
                 :created_at,
                 :updated_at
@@ -4377,6 +4576,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 trial_end = EXCLUDED.trial_end,
                 current_period_end = EXCLUDED.current_period_end,
                 cancel_at = EXCLUDED.cancel_at,
+                pending_plan_key = EXCLUDED.pending_plan_key,
+                pending_billing_interval = EXCLUDED.pending_billing_interval,
+                pending_change_at = EXCLUDED.pending_change_at,
                 raw_payload_json = EXCLUDED.raw_payload_json,
                 updated_at = EXCLUDED.updated_at'
         );
@@ -4395,6 +4597,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 trial_end,
                 current_period_end,
                 cancel_at,
+                pending_plan_key,
+                pending_billing_interval,
+                pending_change_at,
                 raw_payload_json,
                 created_at,
                 updated_at
@@ -4411,6 +4616,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 :trial_end,
                 :current_period_end,
                 :cancel_at,
+                :pending_plan_key,
+                :pending_billing_interval,
+                :pending_change_at,
                 :raw_payload_json,
                 :created_at,
                 :updated_at
@@ -4427,6 +4635,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
                 trial_end = excluded.trial_end,
                 current_period_end = excluded.current_period_end,
                 cancel_at = excluded.cancel_at,
+                pending_plan_key = excluded.pending_plan_key,
+                pending_billing_interval = excluded.pending_billing_interval,
+                pending_change_at = excluded.pending_change_at,
                 raw_payload_json = excluded.raw_payload_json,
                 updated_at = excluded.updated_at'
         );
@@ -4445,6 +4656,9 @@ function upsertUserSubscription(PDO $pdo, int $userId, array $attributes): void
         ':trial_end' => $data['trial_end'],
         ':current_period_end' => $data['current_period_end'],
         ':cancel_at' => $data['cancel_at'],
+        ':pending_plan_key' => $data['pending_plan_key'],
+        ':pending_billing_interval' => $data['pending_billing_interval'],
+        ':pending_change_at' => $data['pending_change_at'],
         ':raw_payload_json' => $data['raw_payload_json'],
         ':created_at' => (string) ($existing['created_at'] ?? $now),
         ':updated_at' => $now,

@@ -472,7 +472,7 @@ if ($checkoutAction === 'checkout') {
 
     $checkoutUserId = (int) ($checkoutUser['id'] ?? 0);
     if ($checkoutUserId > 0 && userHasBillingAccess($checkoutUserId)) {
-        redirectTo(appUrl());
+        redirectTo(appUrl('account-settings#plan'));
     }
 
     try {
@@ -522,6 +522,9 @@ if ($checkoutAction === 'checkout') {
             'max_users' => (int) ($planMetadata['bexon_max_users'] ?? 0),
             'subscription_status' => 'inactive',
             'checkout_status' => 'pending_checkout',
+            'pending_plan_key' => '',
+            'pending_billing_interval' => '',
+            'pending_change_at' => null,
             'raw_payload_json' => json_encode($checkoutSession, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
         ]);
 

@@ -136,20 +136,28 @@ switch ($eventType) {
             ? 'expired'
             : trim((string) ($object['status'] ?? 'completed'));
 
-        upsertUserSubscription($pdo, $userId, [
+        $checkoutUpdate = [
             'stripe_customer_id' => trim((string) ($object['customer'] ?? '')),
             'stripe_subscription_id' => $subscriptionId,
             'stripe_checkout_session_id' => trim((string) ($object['id'] ?? '')),
-            'plan_key' => $planAttributes['plan_key'] ?? '',
-            'billing_interval' => $planAttributes['billing_interval'] ?? '',
-            'max_users' => $planAttributes['max_users'] ?? 0,
             'subscription_status' => $subscriptionStatus,
             'checkout_status' => $checkoutStatus,
             'trial_end' => $trialEnd,
             'current_period_end' => $currentPeriodEnd,
             'cancel_at' => $cancelAt,
+            'pending_plan_key' => '',
+            'pending_billing_interval' => '',
+            'pending_change_at' => null,
             'raw_payload_json' => $rawPayload,
-        ]);
+        ];
+        if (!empty($planAttributes['plan_key'])) {
+            $checkoutUpdate['plan_key'] = $planAttributes['plan_key'];
+            $checkoutUpdate['max_users'] = $planAttributes['max_users'] ?? 0;
+        }
+        if (!empty($planAttributes['billing_interval'])) {
+            $checkoutUpdate['billing_interval'] = $planAttributes['billing_interval'];
+        }
+        upsertUserSubscription($pdo, $userId, $checkoutUpdate);
         break;
 
     case 'customer.subscription.created':
@@ -163,19 +171,35 @@ switch ($eventType) {
             is_array($object['metadata'] ?? null) ? $object['metadata'] : []
         );
 
-        upsertUserSubscription($pdo, $userId, [
+        $subscriptionUpdate = [
             'stripe_customer_id' => trim((string) ($object['customer'] ?? '')),
             'stripe_subscription_id' => trim((string) ($object['id'] ?? '')),
-            'plan_key' => $planAttributes['plan_key'] ?? '',
-            'billing_interval' => $planAttributes['billing_interval'] ?? '',
-            'max_users' => $planAttributes['max_users'] ?? 0,
             'subscription_status' => $status,
             'checkout_status' => 'completed',
             'trial_end' => stripeTimestampToIso($object['trial_end'] ?? null),
             'current_period_end' => stripeTimestampToIso($object['current_period_end'] ?? null),
             'cancel_at' => stripeTimestampToIso($object['cancel_at'] ?? null),
             'raw_payload_json' => $rawPayload,
-        ]);
+        ];
+        if (!empty($planAttributes['plan_key'])) {
+            $subscriptionUpdate['plan_key'] = $planAttributes['plan_key'];
+            $subscriptionUpdate['max_users'] = $planAttributes['max_users'] ?? 0;
+        }
+        if (!empty($planAttributes['billing_interval'])) {
+            $subscriptionUpdate['billing_interval'] = $planAttributes['billing_interval'];
+        }
+        $storedSubscription = userSubscriptionByUserId($userId);
+        $pendingPlanKey = normalizeBillingPlanKey((string) ($storedSubscription['pending_plan_key'] ?? ''), null);
+        $pendingInterval = normalizeBillingInterval((string) ($storedSubscription['pending_billing_interval'] ?? ''), null);
+        if ($pendingPlanKey !== ''
+            && $pendingPlanKey === (string) ($planAttributes['plan_key'] ?? '')
+            && ($pendingInterval === '' || $pendingInterval === (string) ($planAttributes['billing_interval'] ?? ''))
+        ) {
+            $subscriptionUpdate['pending_plan_key'] = '';
+            $subscriptionUpdate['pending_billing_interval'] = '';
+            $subscriptionUpdate['pending_change_at'] = null;
+        }
+        upsertUserSubscription($pdo, $userId, $subscriptionUpdate);
         break;
 
     default:

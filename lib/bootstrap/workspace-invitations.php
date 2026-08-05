@@ -333,6 +333,7 @@ function createWorkspaceInvitation(PDO $pdo, int $workspaceId, int $invitedUserI
     }
 
     ensureWorkspaceCanInviteMembers($workspaceId);
+    enforceWorkspaceMemberLimit($workspaceId, $invitedUserId);
     ensureWorkspaceInvitationSchema($pdo);
 
     $existingStmt = $pdo->prepare(
@@ -439,6 +440,7 @@ function createWorkspaceEmailInvitation(PDO $pdo, int $workspaceId, string $invi
     }
 
     ensureWorkspaceCanInviteMembers($workspaceId);
+    enforceWorkspaceEmailInvitationLimit($workspaceId, $invitedEmail);
     ensureWorkspaceEmailInvitationSchema($pdo);
     pruneExpiredWorkspaceEmailInvitations($pdo);
 
