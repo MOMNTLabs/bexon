@@ -22280,3 +22280,22 @@ document.addEventListener("DOMContentLoaded", () => {
   recalculate();
   setProductFormDirty(false);
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof window.matchMedia !== "function" || !window.matchMedia("(max-width: 620px)").matches) {
+    return;
+  }
+
+  document.querySelectorAll(".accounting-weekly-projection-track").forEach((track) => {
+    if (!(track instanceof HTMLElement)) return;
+    const focusWeek = track.querySelector(
+      "[data-accounting-weekly-projection-week].is-current, [data-accounting-weekly-projection-week].is-selected"
+    );
+    if (!(focusWeek instanceof HTMLElement)) return;
+
+    window.requestAnimationFrame(() => {
+      const targetLeft = Math.max(0, focusWeek.offsetLeft - (track.clientWidth - focusWeek.offsetWidth) / 2);
+      track.scrollTo({ left: targetLeft, behavior: "auto" });
+    });
+  });
+});

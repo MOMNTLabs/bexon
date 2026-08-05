@@ -12251,3 +12251,505 @@ body.is-dashboard .documents-empty-state p {
         gap: 5px;
     }
 }
+
+/* Mobile usability pass: predictable navigation, comfortable touch targets and less dense cards. */
+body.is-dashboard .document-mobile-back {
+    display: none;
+}
+
+body.is-dashboard .task-filters-close {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    body.is-dashboard.dashboard-sidebar-open,
+    body.is-dashboard:has(.task-filters.is-mobile-open) {
+        overflow: hidden !important;
+    }
+
+    body.is-dashboard:has(.task-filters.is-mobile-open) .tasklist-wrap {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+
+    body.is-dashboard .workspace-mobile-menu-button,
+    body.is-dashboard.dashboard-header-actions-inline .workspace-mobile-header-actions .top-nav-actions .header-notification-button,
+    body.is-dashboard.dashboard-header-actions-inline .workspace-mobile-header-actions .top-nav-actions .icon-gear-button {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+
+    body.is-dashboard.dashboard-header-actions-inline .workspace-mobile-header-actions .top-nav-actions .btn-logout {
+        min-height: 44px;
+        padding-inline: 13px;
+    }
+
+    body.is-dashboard.dashboard-mobile-nav-collapsible .users-sidebar .sidebar-view-menu {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        top: max(118px, calc(env(safe-area-inset-top) + 104px));
+        width: auto;
+        max-height: min(68dvh, 560px);
+        grid-template-columns: 1fr;
+        gap: 5px;
+        padding: 10px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border-radius: 18px;
+        box-shadow:
+            0 20px 48px rgba(12, 18, 28, 0.26),
+            0 0 0 100vmax rgba(8, 12, 18, 0.28);
+        z-index: 70;
+    }
+
+    body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-view-toggle,
+    body.is-dashboard .users-sidebar .sidebar-view-menu .sidebar-task-project-link {
+        min-height: 44px;
+        padding-block: 9px;
+        font-size: 0.82rem;
+    }
+
+    body.is-dashboard .task-filters-mobile-toggle,
+    body.is-dashboard .task-filters:not(.task-filters-has-inline-mobile-actions) > .task-filters-mobile-toggle,
+    body.is-dashboard .task-filters:not(.task-filters-has-inline-mobile-actions) .task-view-toggle,
+    body.is-dashboard .task-filters:not(.task-filters-has-inline-mobile-actions) .task-filters-create-group,
+    body.is-dashboard .task-filters .row-inline-picker > summary,
+    body.is-dashboard .task-filters select {
+        min-height: 44px;
+    }
+
+    body.is-dashboard .task-filters-fields {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        width: auto;
+        max-height: min(72dvh, 520px);
+        padding: 16px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border-color: var(--mobile-border-strong);
+        border-radius: 22px;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+            #1b1f23;
+        box-shadow:
+            0 -18px 48px rgba(0, 0, 0, 0.36),
+            0 0 0 100vmax rgba(7, 9, 14, 0.66);
+        z-index: 95;
+    }
+
+    body.is-dashboard .task-filters-panel-head {
+        min-height: 44px;
+        padding: 0 0 10px;
+    }
+
+    body.is-dashboard .task-filters-panel-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    body.is-dashboard .task-filters-close {
+        display: inline-grid;
+        place-items: center;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 1px solid var(--mobile-border);
+        border-radius: 13px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--mobile-text-soft);
+        font-size: 1.35rem;
+        line-height: 1;
+    }
+
+    body.is-dashboard .task-filters-clear,
+    body.is-dashboard .task-filter-active-chip {
+        min-height: 36px;
+    }
+
+    body.is-dashboard .task-line-row,
+    body.is-dashboard .task-line-row.has-workspace-source {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    body.is-dashboard .task-line-title,
+    body.is-dashboard .task-line-row.has-workspace-source .task-line-title {
+        grid-column: 1 / -1;
+        grid-row: 1;
+    }
+
+    body.is-dashboard .status-stepper {
+        grid-column: 1;
+        grid-row: 2;
+        width: 100%;
+    }
+
+    body.is-dashboard .due-tag-field {
+        grid-column: 2;
+        grid-row: 2;
+        width: 100%;
+    }
+
+    body.is-dashboard .assignee-tag-field {
+        grid-column: 1;
+        grid-row: 3;
+        width: 100%;
+        max-width: none;
+    }
+
+    body.is-dashboard .tag-field-priority.row-inline-picker-wrap {
+        grid-column: 2;
+        grid-row: 3;
+        width: 100%;
+        min-width: 0;
+    }
+
+    body.is-dashboard .status-stepper .row-inline-picker > summary,
+    body.is-dashboard .row-assignee-picker > summary,
+    body.is-dashboard .due-date-display,
+    body.is-dashboard .priority-inline-picker > summary {
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    body.is-dashboard .row-assignee-picker > summary {
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 4px 10px;
+        border-color: rgba(255, 255, 255, 0.095);
+        background: rgba(255, 255, 255, 0.045);
+    }
+
+    body.is-dashboard .assignee-tag-field .assignee-summary {
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body.is-dashboard .assignee-tag-field .assignee-summary-text,
+    body.is-dashboard .assignee-tag-field .assignee-summary-text.is-empty {
+        display: block;
+        min-width: 0;
+        width: auto;
+        overflow: hidden;
+        color: var(--mobile-text-soft);
+        font-size: 0.72rem;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.is-dashboard .assignee-tag-field .assignee-summary-text.is-empty::after {
+        content: "Responsável";
+        font-size: 0.72rem;
+    }
+
+    body.is-dashboard .priority-inline-picker > summary {
+        justify-content: flex-start;
+        gap: 7px;
+        padding: 6px 10px;
+    }
+
+    body.is-dashboard .priority-inline-picker > summary .row-inline-picker-summary-text.sr-only {
+        position: static !important;
+        width: auto !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        clip: auto !important;
+        clip-path: none !important;
+        color: var(--mobile-text-soft);
+        font-size: 0.72rem;
+        white-space: nowrap !important;
+    }
+
+    body.is-dashboard .task-line-title::before,
+    body.is-dashboard .task-line-title::after {
+        content: none;
+    }
+}
+
+@media (max-width: 760px) {
+    body.is-dashboard .documents-header .btn,
+    body.is-dashboard .documents-scope-link,
+    body.is-dashboard .documents-search,
+    body.is-dashboard .document-favorite-button,
+    body.is-dashboard .document-trash-button,
+    body.is-dashboard .document-link-fields select,
+    body.is-dashboard .document-editor-toolbar button,
+    body.is-dashboard .document-history-item button {
+        min-height: 44px;
+    }
+
+    body.is-dashboard .documents-layout {
+        display: block;
+        overflow: visible;
+        border-radius: 14px;
+    }
+
+    body.is-dashboard .documents-sidebar {
+        max-height: none;
+        min-height: min(62dvh, 520px);
+        padding: 12px;
+        border: 0;
+        overflow: visible;
+    }
+
+    body.is-dashboard .documents-list {
+        gap: 8px;
+    }
+
+    body.is-dashboard .documents-list-item {
+        min-height: 72px;
+        padding: 11px 12px;
+    }
+
+    body.is-dashboard .documents-layout:not(.has-document) .document-editor-card {
+        display: none;
+    }
+
+    body.is-dashboard .documents-layout.has-document .documents-sidebar {
+        display: none;
+    }
+
+    body.is-dashboard .document-editor-card {
+        min-height: calc(100dvh - 176px);
+        padding: 12px;
+    }
+
+    body.is-dashboard .document-mobile-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+        min-height: 44px;
+        margin: -4px 0 4px;
+        padding: 0 8px;
+        color: var(--bexon-text-soft);
+        font-size: 0.82rem;
+        font-weight: 750;
+        text-decoration: none;
+    }
+
+    body.is-dashboard .document-mobile-back > span:first-child {
+        font-size: 1.5rem;
+        line-height: 1;
+    }
+
+    body.is-dashboard .document-editor-topbar {
+        min-height: 44px;
+    }
+
+    body.is-dashboard .document-link-fields {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    body.is-dashboard .document-link-fields label {
+        grid-template-columns: 64px minmax(0, 1fr);
+        min-width: 0;
+        font-size: 0.76rem;
+    }
+
+    body.is-dashboard .document-editor-toolbar {
+        flex-wrap: nowrap;
+        gap: 7px;
+        margin-inline: -12px;
+        padding: 8px 12px 11px;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: none;
+    }
+
+    body.is-dashboard .document-editor-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.is-dashboard .document-editor-toolbar button {
+        flex: 0 0 auto;
+        padding-inline: 12px;
+        font-size: 0.78rem;
+    }
+
+    body.is-dashboard .document-editor-toolbar > span {
+        flex: 0 0 1px;
+    }
+
+    body.is-dashboard .document-editor {
+        min-height: 54dvh;
+        margin-top: 12px;
+        font-size: 1rem;
+        line-height: 1.65;
+    }
+}
+
+@media (max-width: 420px) {
+    body.is-dashboard .tasklist-layout > .documents-wrap,
+    body.is-dashboard .tasklist-layout > .products-wrap {
+        padding-inline: 10px;
+    }
+}
+
+@media (max-width: 768px) {
+    body.is-dashboard .btn,
+    body.is-dashboard button.btn,
+    body.is-dashboard a.btn,
+    body.is-dashboard .modal-close-button {
+        min-height: 44px;
+    }
+
+    body.is-dashboard input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    body.is-dashboard select,
+    body.is-dashboard textarea {
+        min-height: 44px;
+    }
+
+    body.is-dashboard input[type="checkbox"],
+    body.is-dashboard input[type="radio"] {
+        min-width: 22px;
+        min-height: 22px;
+    }
+
+    body.is-dashboard .products-catalog {
+        scroll-snap-type: inline mandatory;
+        scroll-padding-inline: 2px;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: none;
+    }
+
+    body.is-dashboard .products-catalog::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.is-dashboard .product-catalog-card {
+        scroll-snap-align: start;
+    }
+
+    body.is-dashboard .product-field > span,
+    body.is-dashboard .product-material-image-picker small,
+    body.is-dashboard .product-result-card span,
+    body.is-dashboard .product-result-card small,
+    body.is-dashboard .product-material-name small,
+    body.is-dashboard .product-material-cost small,
+    body.is-dashboard .product-purchase-row small,
+    body.is-dashboard .products-inline-empty span {
+        font-size: 0.75rem;
+        line-height: 1.35;
+    }
+
+    body.is-dashboard .product-result-card strong,
+    body.is-dashboard .product-purchase-row strong,
+    body.is-dashboard .product-material-name strong,
+    body.is-dashboard .product-material-cost strong {
+        font-size: 0.88rem;
+    }
+
+    body.is-dashboard .product-material-form-actions .btn {
+        flex: 1 1 140px;
+    }
+}
+
+@media (max-width: 480px) {
+    body.is-dashboard .product-cost-fields,
+    body.is-dashboard .product-cost-fields.is-pricing,
+    body.is-dashboard .product-material-form-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.is-dashboard .product-material-form-fields .is-grow {
+        grid-column: 1;
+    }
+
+    body.is-dashboard .product-field-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.is-dashboard .product-results {
+        gap: 7px;
+    }
+
+    body.is-dashboard .product-result-card {
+        min-height: 88px;
+        padding: 11px;
+    }
+}
+
+@media (max-width: 620px) {
+    body.is-dashboard .accounting-weekly-projection-track {
+        display: flex;
+        gap: 8px;
+        padding: 2px 2px 7px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: inline mandatory;
+        scroll-padding-inline: 2px;
+        overscroll-behavior-inline: contain;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        scrollbar-width: none;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-track::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-week {
+        flex: 0 0 min(72vw, 260px);
+        min-height: 74px;
+        padding: 11px 12px 9px;
+        scroll-snap-align: center;
+        border: 1px solid rgba(123, 159, 196, 0.34);
+        border-radius: 12px;
+        text-align: left;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-week.is-current {
+        padding-top: 20px;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-label {
+        font-size: 0.75rem;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-week strong {
+        font-size: 0.9rem;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-week small {
+        font-size: 0.7rem;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-week.is-current::after {
+        top: 5px;
+        right: 7px;
+        padding: 2px 6px;
+        font-size: 0.6rem;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-detail {
+        padding: 10px;
+        border-radius: 12px;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-event {
+        min-height: 36px;
+        font-size: 0.76rem;
+    }
+
+    body.is-dashboard .accounting-weekly-projection-event-date,
+    body.is-dashboard .accounting-weekly-projection-event strong {
+        font-size: 0.72rem;
+    }
+}

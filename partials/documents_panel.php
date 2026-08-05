@@ -22,7 +22,7 @@ $selectedTaskId = (int) ($selectedDocument['linked_task_id'] ?? 0);
     </header>
 
     <div
-        class="documents-layout"
+        class="documents-layout<?= $selectedDocument ? ' has-document' : '' ?>"
         data-documents-root
         data-document-id="<?= e((string) $selectedDocumentId) ?>"
         data-document-revision="<?= e((string) ($selectedDocument['revision'] ?? 0)) ?>"
@@ -77,6 +77,12 @@ $selectedTaskId = (int) ($selectedDocument['linked_task_id'] ?? 0);
         </aside>
 
         <article class="document-editor-card<?= $selectedDocument ? '' : ' is-empty' ?><?= !empty($selectedDocument['deleted_at']) ? ' is-trashed' : '' ?>">
+            <?php if ($selectedDocument): ?>
+                <a href="<?= e($documentsBasePath) ?>" class="document-mobile-back" aria-label="Voltar para a lista de documentos">
+                    <span aria-hidden="true">&#8249;</span>
+                    <span>Documentos</span>
+                </a>
+            <?php endif; ?>
             <?php if ($selectedDocument && !empty($selectedDocument['deleted_at'])): ?>
                 <div class="documents-empty-state">
                     <h3><?= e(normalizeWorkspaceDocumentTitle((string) ($selectedDocument['title'] ?? ''))) ?></h3>

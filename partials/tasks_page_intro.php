@@ -291,9 +291,17 @@ $taskCalendarViewPath = dashboardPath('tasks', array_merge(
         <div class="task-filters-fields" id="task-filters-panel" data-task-filters-panel>
             <div class="task-filters-panel-head">
                 <strong>Filtrar tarefas</strong>
-                <?php if ($taskActiveFilterCount > 0): ?>
-                    <button type="button" class="task-filters-clear" data-task-filters-clear>Limpar</button>
-                <?php endif; ?>
+                <span class="task-filters-panel-actions">
+                    <?php if ($taskActiveFilterCount > 0): ?>
+                        <button type="button" class="task-filters-clear" data-task-filters-clear>Limpar</button>
+                    <?php endif; ?>
+                    <button
+                        type="button"
+                        class="task-filters-close"
+                        data-task-filters-toggle
+                        aria-label="Fechar filtros"
+                    ><span aria-hidden="true">&times;</span></button>
+                </span>
             </div>
 
             <?php if ($taskPageShowsProjectFilter): ?>
