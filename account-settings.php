@@ -46,7 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             case 'account_open_billing_portal':
                 $subscription = userSubscriptionByUserId((int) $currentUser['id']);
-                if (!$subscription || userHasEnterpriseBillingOverride((int) $currentUser['id'])) {
+                $subscriptionId = trim((string) ($subscription['stripe_subscription_id'] ?? ''));
+                if (!$subscription || !str_starts_with($subscriptionId, 'sub_')) {
                     throw new RuntimeException('O plano Enterprise é gerenciado diretamente com o suporte Bexon.');
                 }
                 $portalUrl = appStripeCreatePortalSession(
@@ -65,9 +66,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 $subscription = userSubscriptionByUserId((int) $currentUser['id']);
-                if (userHasEnterpriseBillingOverride((int) $currentUser['id'])) {
-                    throw new RuntimeException('O plano Enterprise é alterado diretamente com o suporte Bexon.');
-                }
                 $subscriptionId = trim((string) ($subscription['stripe_subscription_id'] ?? ''));
                 if (!$subscription || !str_starts_with($subscriptionId, 'sub_')) {
                     header('Location: ' . siteUrl(
@@ -182,7 +180,8 @@ $accountBillingPlans = publicBillingPlanDefinitions();
 $accountSubscriptionStatus = strtolower(trim((string) ($accountSubscription['subscription_status'] ?? 'inactive')));
 $accountHasStripeSubscription = str_starts_with(trim((string) ($accountSubscription['stripe_subscription_id'] ?? '')), 'sub_');
 $accountHasStripeCustomer = str_starts_with(trim((string) ($accountSubscription['stripe_customer_id'] ?? '')), 'cus_');
-$accountIsEnterpriseOverride = userHasEnterpriseBillingOverride((int) $currentUser['id']);
+$accountIsEnterpriseOverride = userHasEnterpriseBillingOverride((int) $currentUser['id'])
+    && !$accountHasStripeSubscription;
 $accountPendingPlanKey = normalizeBillingPlanKey((string) ($accountSubscription['pending_plan_key'] ?? ''), null);
 $accountPendingPlan = $accountPendingPlanKey !== '' ? billingPlan($accountPendingPlanKey) : null;
 $accountPendingInterval = normalizeBillingInterval((string) ($accountSubscription['pending_billing_interval'] ?? ''), null);
@@ -618,6 +617,7 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
             if (planCompare) {
                 var currentPlanKey = <?= json_encode($accountPlanKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
                 var currentInterval = <?= json_encode($accountBillingInterval, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+                var hasStripeSubscription = <?= $accountHasStripeSubscription ? 'true' : 'false' ?>;
                 var planRanks = {free: 0, solo: 1, team: 2, business: 3, enterprise: 4};
                 var intervalButtons = Array.prototype.slice.call(planCompare.querySelectorAll("[data-account-billing-interval]"));
                 var planCards = Array.prototype.slice.call(planCompare.querySelectorAll("[data-account-plan-card]"));
@@ -647,6 +647,8 @@ $pwaIcon192AssetVersion = assetVersion('assets/pwa-icon-192.png');
                         submit.disabled = isCurrent;
                         if (isCurrent) {
                             submit.textContent = "Plano atual";
+                        } else if (!hasStripeSubscription) {
+                            submit.textContent = "Mudar de plano";
                         } else if ((planRanks[planKey] || 0) > (planRanks[currentPlanKey] || 0)) {
                             submit.textContent = "Fazer upgrade";
                         } else if (planKey === currentPlanKey) {

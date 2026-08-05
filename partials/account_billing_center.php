@@ -87,9 +87,9 @@ $billingDefaultComparisonInterval = $accountBillingInterval !== '' ? $accountBil
                     <button type="submit" class="btn btn-mini">Gerenciar cobrança</button>
                 </form>
                 <small>Cartão, faturas e cancelamento</small>
-            <?php elseif ($accountIsEnterpriseOverride || $accountPlanKey === 'enterprise'): ?>
-                <a href="<?= e(appBillingPlanMailtoUrl($accountPlan)) ?>" class="btn btn-mini">Falar com suporte</a>
-                <small>Plano gerenciado com a equipe Bexon</small>
+            <?php elseif ($accountPlanKey === 'enterprise'): ?>
+                <a href="#comparar-planos" class="btn btn-mini">Trocar plano</a>
+                <small>Compare os planos disponíveis</small>
             <?php else: ?>
                 <a href="#comparar-planos" class="btn btn-mini">Escolher plano</a>
                 <small>Ative uma assinatura para criar workspaces</small>
@@ -196,7 +196,7 @@ $billingDefaultComparisonInterval = $accountBillingInterval !== '' ? $accountBil
                         <?php endforeach; ?>
                     </ul>
 
-                    <?php if ($isEnterprisePlan || $accountIsEnterpriseOverride): ?>
+                    <?php if ($isEnterprisePlan): ?>
                         <a href="<?= e(appBillingPlanMailtoUrl($billingPlan)) ?>" class="btn btn-mini btn-block">Falar com suporte</a>
                     <?php else: ?>
                         <form method="post" data-account-plan-form>

@@ -876,6 +876,14 @@ function enterpriseBillingOverrideSubscription(int $userId, ?array $existingSubs
         return null;
     }
 
+    // A cortesia Enterprise deixa de prevalecer assim que o usuário contrata
+    // uma assinatura real. Sem isso, o checkout seria concluído pela Stripe,
+    // mas a conta continuaria sendo exibida como Enterprise para sempre.
+    $stripeSubscriptionId = trim((string) ($existingSubscription['stripe_subscription_id'] ?? ''));
+    if (str_starts_with($stripeSubscriptionId, 'sub_')) {
+        return null;
+    }
+
     $now = nowIso();
     return array_merge($existingSubscription ?? [], [
         'id' => (int) ($existingSubscription['id'] ?? 0),
