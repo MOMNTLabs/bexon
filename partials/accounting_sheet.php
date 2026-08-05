@@ -938,9 +938,9 @@
                                                 <label class="accounting-check">
                                                     <input
                                                         type="checkbox"
-                                                        <?= $accountingEntryHasSubitems ? '' : 'name="is_settled" value="1"' ?>
+                                                        name="is_settled"
+                                                        value="1"
                                                         <?= $accountingEntryIsSettled ? 'checked' : '' ?>
-                                                        <?= $accountingEntryHasSubitems ? 'disabled aria-disabled="true"' : '' ?>
                                                     >
                                                     <span>Pago</span>
                                                 </label>
@@ -1043,9 +1043,9 @@
                                                     <label class="accounting-check">
                                                         <input
                                                             type="checkbox"
-                                                            <?= $accountingEntryHasSubitems ? '' : 'name="is_settled" value="1"' ?>
+                                                            name="is_settled"
+                                                            value="1"
                                                             <?= $accountingEntryIsSettled ? 'checked' : '' ?>
-                                                            <?= $accountingEntryHasSubitems ? 'disabled aria-disabled="true"' : '' ?>
                                                         >
                                                         <span>Pago</span>
                                                     </label>
@@ -1677,9 +1677,9 @@
                                             <label class="accounting-check">
                                                 <input
                                                     type="checkbox"
-                                                    <?= $accountingEntryHasSubitems ? '' : 'name="is_settled" value="1"' ?>
+                                                    name="is_settled"
+                                                    value="1"
                                                     <?= $accountingEntryIsSettled ? 'checked' : '' ?>
-                                                    <?= $accountingEntryHasSubitems ? 'disabled aria-disabled="true"' : '' ?>
                                                 >
                                                 <span>Recebido</span>
                                             </label>
@@ -1788,9 +1788,9 @@
                                                 <label class="accounting-check">
                                                     <input
                                                         type="checkbox"
-                                                        <?= $accountingEntryHasSubitems ? '' : 'name="is_settled" value="1"' ?>
+                                                        name="is_settled"
+                                                        value="1"
                                                         <?= $accountingEntryIsSettled ? 'checked' : '' ?>
-                                                        <?= $accountingEntryHasSubitems ? 'disabled aria-disabled="true"' : '' ?>
                                                     >
                                                     <span>Recebido</span>
                                                 </label>

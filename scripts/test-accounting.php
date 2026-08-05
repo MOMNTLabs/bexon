@@ -114,4 +114,44 @@ $weeklyProjection = accountingWeeklyBalanceProjection([
 ]);
 accountingTestAssertSame(20000, $weeklyProjection['final_balance_cents'], 'O saldo final semanal deve coincidir com o saldo projetado do período.');
 
+// Uma ramificação antiga da mesma pendência não pode duplicar o item nem os totais.
+$collapsedCarryEntries = workspaceAccountingCollapseDuplicateCarryEntriesWithProfiles([
+    accountingTestEntry([
+        'id' => 20,
+        'carry_source_entry_id' => 10,
+        'is_carried' => 1,
+        'amount_cents' => 17000,
+        'due_date' => '2026-06-25',
+        'label' => 'Pendência duplicada',
+    ]),
+    accountingTestEntry([
+        'id' => 21,
+        'carry_source_entry_id' => 11,
+        'is_carried' => 1,
+        'amount_cents' => 17000,
+        'due_date' => '2026-06-25',
+        'label' => 'Pendência duplicada',
+    ]),
+], [
+    20 => ['key' => 'entry:10', 'root_id' => 10, 'depth' => 1],
+    21 => ['key' => 'entry:10', 'root_id' => 10, 'depth' => 2],
+]);
+accountingTestAssertSame(1, count($collapsedCarryEntries), 'A mesma pendência deve aparecer uma única vez no período.');
+accountingTestAssertSame(21, (int) ($collapsedCarryEntries[0]['id'] ?? 0), 'A cadeia mais completa deve prevalecer sobre a ramificação antiga.');
+
+$distinctMonthlyCarries = workspaceAccountingCollapseDuplicateCarryEntriesWithProfiles([
+    $collapsedCarryEntries[0],
+    accountingTestEntry([
+        'id' => 22,
+        'carry_source_entry_id' => 12,
+        'is_carried' => 1,
+        'amount_cents' => 17000,
+        'label' => 'Pendência de outra competência',
+    ]),
+], [
+    21 => ['key' => 'entry:10', 'root_id' => 10, 'depth' => 2],
+    22 => ['key' => 'entry:12', 'root_id' => 12, 'depth' => 1],
+]);
+accountingTestAssertSame(2, count($distinctMonthlyCarries), 'Pendências de competências diferentes devem continuar separadas.');
+
 echo "Accounting checks passed.\n";

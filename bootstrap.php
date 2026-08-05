@@ -9160,8 +9160,9 @@ function workspaceAccountingEntriesListRaw(
     $rows = workspaceAccountingApplyAutomations($pdo, $rows);
     $rows = workspaceAccountingAttachSubitems($pdo, $workspaceId, $rows);
     $rows = workspaceAccountingAttachDiscounts($pdo, $workspaceId, $rows);
+    $rows = workspaceAccountingAttachGoalPaymentHistory($pdo, $workspaceId, $rows);
 
-    return workspaceAccountingAttachGoalPaymentHistory($pdo, $workspaceId, $rows);
+    return workspaceAccountingCollapseDuplicateCarryEntries($pdo, $workspaceId, $rows);
 }
 
 function workspaceAccountingEntryById(PDO $pdo, int $workspaceId, int $entryId): ?array
@@ -10473,6 +10474,181 @@ function workspaceAccountingDescendantEntries(PDO $pdo, int $workspaceId, int $e
     );
 
     return $descendants;
+}
+
+/**
+ * Resolve a origem comum de pendências transportadas sem depender apenas do
+ * pai imediato. Versões antigas podiam deixar duas ramificações da mesma
+ * pendência no mesmo período depois de uma exclusão intermediária.
+ *
+ * @return array<int, array{key: string, root_id: int, depth: int}>
+ */
+function workspaceAccountingCarryLineageProfiles(PDO $pdo, int $workspaceId, array $entries): array
+{
+    if ($workspaceId <= 0 || !$entries || !workspaceAccountingHasCarrySourceColumn($pdo)) {
+        return [];
+    }
+
+    $nodes = [];
+    $pendingIds = [];
+    foreach ($entries as $entry) {
+        $entryId = max(0, (int) ($entry['id'] ?? 0));
+        if ($entryId <= 0) {
+            continue;
+        }
+        $nodes[$entryId] = [
+            'id' => $entryId,
+            'carry_source_entry_id' => max(0, (int) ($entry['carry_source_entry_id'] ?? 0)),
+        ];
+        if ($nodes[$entryId]['carry_source_entry_id'] > 0) {
+            $pendingIds[$nodes[$entryId]['carry_source_entry_id']] = true;
+        }
+    }
+
+    while ($pendingIds) {
+        $ids = array_values(array_filter(
+            array_map('intval', array_keys($pendingIds)),
+            static fn (int $id): bool => $id > 0 && !isset($nodes[$id])
+        ));
+        $pendingIds = [];
+        if (!$ids) {
+            break;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare(
+            "SELECT id, carry_source_entry_id
+             FROM workspace_accounting_entries
+             WHERE workspace_id = ? AND id IN ({$placeholders})"
+        );
+        $stmt->execute(array_merge([$workspaceId], $ids));
+        foreach ($stmt->fetchAll() ?: [] as $row) {
+            $nodeId = max(0, (int) ($row['id'] ?? 0));
+            if ($nodeId <= 0) {
+                continue;
+            }
+            $nodes[$nodeId] = [
+                'id' => $nodeId,
+                'carry_source_entry_id' => max(0, (int) ($row['carry_source_entry_id'] ?? 0)),
+            ];
+            if ($nodes[$nodeId]['carry_source_entry_id'] > 0
+                && !isset($nodes[$nodes[$nodeId]['carry_source_entry_id']])
+            ) {
+                $pendingIds[$nodes[$nodeId]['carry_source_entry_id']] = true;
+            }
+        }
+    }
+
+    $profiles = [];
+    foreach ($entries as $entry) {
+        $entryId = max(0, (int) ($entry['id'] ?? 0));
+        $carrySourceEntryId = max(0, (int) ($entry['carry_source_entry_id'] ?? 0));
+        if ($entryId <= 0 || $carrySourceEntryId <= 0) {
+            continue;
+        }
+
+        $cursorId = $entryId;
+        $rootId = $entryId;
+        $depth = 0;
+        $visited = [];
+        while ($cursorId > 0 && isset($nodes[$cursorId]) && !isset($visited[$cursorId])) {
+            $visited[$cursorId] = true;
+            $node = $nodes[$cursorId];
+            $rootId = $cursorId;
+            $parentId = max(0, (int) ($node['carry_source_entry_id'] ?? 0));
+            if ($parentId <= 0) {
+                break;
+            }
+            $depth++;
+            $rootId = $parentId;
+            $cursorId = $parentId;
+        }
+
+        $profiles[$entryId] = [
+            // Ocorrências mensais distintas podem compartilhar a mesma
+            // recorrência. Só a raiz concreta da pendência identifica uma
+            // duplicação real com segurança.
+            'key' => 'entry:' . $rootId,
+            'root_id' => $rootId,
+            'depth' => $depth,
+        ];
+    }
+
+    return $profiles;
+}
+
+function workspaceAccountingCollapseDuplicateCarryEntries(PDO $pdo, int $workspaceId, array $entries): array
+{
+    if (!$entries) {
+        return [];
+    }
+
+    $profiles = workspaceAccountingCarryLineageProfiles($pdo, $workspaceId, $entries);
+    if (!$profiles) {
+        return $entries;
+    }
+
+    return workspaceAccountingCollapseDuplicateCarryEntriesWithProfiles($entries, $profiles);
+}
+
+function workspaceAccountingCollapseDuplicateCarryEntriesWithProfiles(array $entries, array $profiles): array
+{
+    if (!$entries || !$profiles) {
+        return $entries;
+    }
+
+    $winnerIndexes = [];
+    $hiddenIndexes = [];
+    $scores = [];
+    foreach ($entries as $index => $entry) {
+        if (!workspaceAccountingIsPendingCarryoverEntry($entry)) {
+            continue;
+        }
+        $entryId = max(0, (int) ($entry['id'] ?? 0));
+        $profile = $profiles[$entryId] ?? null;
+        $lineageKey = is_array($profile) ? (string) ($profile['key'] ?? '') : '';
+        if ($lineageKey === '') {
+            continue;
+        }
+
+        $realizedCents = max(
+            0,
+            (int) ($entry['discount_total_cents'] ?? 0),
+            (int) ($entry['subitem_paid_cents'] ?? 0),
+            (int) ($entry['paid_amount_cents'] ?? 0)
+        );
+        $score = [
+            ((int) ($entry['is_settled'] ?? 0)) === 1 ? 1 : 0,
+            $realizedCents,
+            max(0, (int) ($profile['depth'] ?? 0)),
+            strtotime((string) ($entry['updated_at'] ?? '')) ?: 0,
+            $entryId,
+        ];
+
+        if (!isset($winnerIndexes[$lineageKey])) {
+            $winnerIndexes[$lineageKey] = $index;
+            $scores[$lineageKey] = $score;
+            continue;
+        }
+
+        if ($score > $scores[$lineageKey]) {
+            $hiddenIndexes[$winnerIndexes[$lineageKey]] = true;
+            $winnerIndexes[$lineageKey] = $index;
+            $scores[$lineageKey] = $score;
+        } else {
+            $hiddenIndexes[$index] = true;
+        }
+    }
+
+    if (!$hiddenIndexes) {
+        return $entries;
+    }
+
+    return array_values(array_filter(
+        $entries,
+        static fn (array $entry, $index): bool => !isset($hiddenIndexes[$index]),
+        ARRAY_FILTER_USE_BOTH
+    ));
 }
 
 function workspaceAccountingSetCarryStopPeriodKey(PDO $pdo, int $workspaceId, int $entryId, string $periodKey): void
@@ -13306,10 +13482,71 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
         $carrySourceEntryId = max(0, (int) ($existingEntry['carry_source_entry_id'] ?? 0));
         $sourceDueEntryId = max(0, (int) ($existingEntry['source_due_entry_id'] ?? 0));
         $weeklyRecurrenceId = max(0, (int) ($existingEntry['weekly_recurrence_id'] ?? 0));
+        $dueDate = dueDateForStorage((string) ($existingEntry['due_date'] ?? ''));
         if ($scope === 'single') {
             // A ocorrência permanece como exceção no banco para que a rotina
             // de recorrência não a recrie no próximo carregamento.
             workspaceAccountingMarkEntryRemoved($pdo, $workspaceId, $entryId);
+        } elseif ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
+            $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
+            $profile = workspaceAccountingCarryLineageProfiles($pdo, $workspaceId, [$existingEntry])[$entryId] ?? null;
+            $rootEntryId = is_array($profile)
+                ? max(0, (int) ($profile['root_id'] ?? 0))
+                : $carrySourceEntryId;
+            $rootEntry = $rootEntryId > 0
+                ? workspaceAccountingEntryById($pdo, $workspaceId, $rootEntryId)
+                : null;
+            $rootDueEntryId = max(0, (int) ($rootEntry['source_due_entry_id'] ?? 0));
+
+            if ($scope === 'all') {
+                if ($rootDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
+                    workspaceAccountingDeleteRecurringEntriesAll($pdo, $workspaceId, 'source_due_entry_id', $rootDueEntryId);
+                    deleteWorkspaceDueEntry($pdo, $workspaceId, $rootDueEntryId);
+                } elseif ($rootEntryId > 0) {
+                    workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $rootEntryId, true);
+                }
+            } elseif ($scope === 'past') {
+                // Mantém o item atual e seus futuros como uma cadeia própria.
+                workspaceAccountingDetachCarriedEntry($pdo, $workspaceId, $entryId);
+                $pastEntriesRemoved = false;
+                if ($rootDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
+                    $dueEntry = workspaceDueEntryById($pdo, $workspaceId, $rootDueEntryId);
+                    $monthlyDay = normalizeDueMonthlyDay($dueEntry['monthly_day'] ?? null);
+                    $nextAnchorDate = $monthlyDay !== null
+                        ? accountingDueDateForPeriod(
+                            $entryPeriodKey,
+                            $monthlyDay,
+                            workspaceAccountingCycleCloseDay($workspaceId)
+                        )
+                        : null;
+                    if ($nextAnchorDate !== null) {
+                        $pdo->prepare(
+                            'UPDATE workspace_due_entries
+                             SET due_date = :due_date, updated_at = :updated_at
+                             WHERE id = :id AND workspace_id = :workspace_id'
+                        )->execute([
+                            ':due_date' => $nextAnchorDate,
+                            ':updated_at' => nowIso(),
+                            ':id' => $rootDueEntryId,
+                            ':workspace_id' => $workspaceId,
+                        ]);
+                        workspaceAccountingDeleteRecurringEntriesBefore(
+                            $pdo,
+                            $workspaceId,
+                            'source_due_entry_id',
+                            $rootDueEntryId,
+                            $nextAnchorDate
+                        );
+                        $pastEntriesRemoved = true;
+                    }
+                }
+                if (!$pastEntriesRemoved && $rootEntryId > 0 && $rootEntryId !== $entryId) {
+                    workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $rootEntryId, true);
+                }
+            } else {
+                workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
+                workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, true);
+            }
         } elseif ($scope === 'past' && $weeklyRecurrenceId > 0 && $dueDate !== null) {
             $pdo->prepare(
                 'UPDATE workspace_accounting_weekly_recurrences
@@ -13343,10 +13580,6 @@ function deleteWorkspaceAccountingEntryWithCarrySync(PDO $pdo, int $workspaceId,
             deleteWorkspaceDueEntry($pdo, $workspaceId, $sourceDueEntryId);
         } elseif ($weeklyRecurrenceId > 0) {
             stopWorkspaceAccountingWeeklyRecurrenceFromEntry($pdo, $workspaceId, $existingEntry);
-        } elseif ($carrySourceEntryId > 0 && workspaceAccountingHasCarrySourceColumn($pdo)) {
-            $entryPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
-            workspaceAccountingSetCarryStopPeriodKey($pdo, $workspaceId, $carrySourceEntryId, $entryPeriodKey);
-            workspaceAccountingDeleteEntryChain($pdo, $workspaceId, $entryId, true);
         } elseif ($sourceDueEntryId > 0 && workspaceAccountingSupportsDueLinking($pdo)) {
             $currentPeriodKey = normalizeAccountingPeriodKey((string) ($existingEntry['period_key'] ?? ''));
             workspaceAccountingDetachDueLinkedEntriesBeforePeriod($pdo, $workspaceId, $sourceDueEntryId, $currentPeriodKey);

@@ -407,9 +407,10 @@ function handleAccountingPostAction(PDO $pdo, string $action): bool
                         $_POST['entry_date'] ?? null
                     );
                 }
-                if (workspaceAccountingSubitemTotalCents($pdo, $workspaceId, $entryId) !== null) {
-                    workspaceAccountingSyncEntrySettlementFromSubitems($pdo, $workspaceId, $entryId);
-                }
+                // O checkbox do item pai representa uma confirmação manual de
+                // pagamento/recebimento. Os subitens compõem o valor, mas não
+                // devem mais sobrescrever essa escolha. Abatimentos e
+                // recebimentos sincronizam o status nas próprias ações.
 
                 if (requestExpectsJson()) {
                     $response = [
