@@ -1,7 +1,8 @@
 (() => {
   const DEFAULT_LABEL = "Carregando...";
   const SUBMIT_LABEL = "Processando...";
-  const SHOW_DELAY_MS = 140;
+  const SHOW_DELAY_MS = 120;
+  const TOUCH_SHOW_DELAY_MS = 70;
   const HIDE_DELAY_MS = 180;
   const MAX_VISIBLE_MS = 30000;
   const PUBLIC_ROUTE_SLUGS = new Set(["home", "privacidade", "termos", "cookies", "dados", "vendas"]);
@@ -12,6 +13,7 @@
   let hideTimer = 0;
   let failSafeTimer = 0;
   let isVisible = false;
+  let pendingInteraction = null;
   const activeTokens = new Set();
 
   const ensureOverlay = () => {
@@ -21,6 +23,13 @@
 
     if (!document.body) {
       return null;
+    }
+
+    const existingOverlay = document.querySelector("[data-app-loading-overlay]");
+    if (existingOverlay instanceof HTMLElement) {
+      overlay = existingOverlay;
+      labelNode = overlay.querySelector("[data-app-loading-label]");
+      return overlay;
     }
 
     overlay = document.createElement("div");
@@ -65,11 +74,9 @@
     root.setAttribute("aria-hidden", "false");
     document.body.classList.add("is-app-loading");
 
-    window.requestAnimationFrame(() => {
-      if (activeTokens.size > 0) {
-        root.classList.add("is-visible");
-      }
-    });
+    if (activeTokens.size > 0) {
+      root.classList.add("is-visible");
+    }
   };
 
   const conceal = () => {
@@ -137,12 +144,21 @@
     }
 
     if (!isVisible && !showTimer) {
-      showTimer = window.setTimeout(() => {
-        showTimer = 0;
-        if (activeTokens.size <= 0) return;
+      const delay = Number.isFinite(options.delay)
+        ? Math.max(0, options.delay)
+        : SHOW_DELAY_MS;
+
+      if (delay === 0) {
         isVisible = true;
         reveal();
-      }, Number.isFinite(options.delay) ? Math.max(0, options.delay) : SHOW_DELAY_MS);
+      } else {
+        showTimer = window.setTimeout(() => {
+          showTimer = 0;
+          if (activeTokens.size <= 0) return;
+          isVisible = true;
+          reveal();
+        }, delay);
+      }
     }
 
     let isDone = false;
@@ -168,6 +184,10 @@
   };
 
   const reset = () => {
+    if (pendingInteraction?.clearTimer) {
+      window.clearTimeout(pendingInteraction.clearTimer);
+    }
+    pendingInteraction = null;
     activeTokens.clear();
     if (showTimer) {
       window.clearTimeout(showTimer);
@@ -244,12 +264,109 @@
     return false;
   };
 
+  const clearPendingInteraction = () => {
+    if (!pendingInteraction) return;
+    if (pendingInteraction.clearTimer) {
+      window.clearTimeout(pendingInteraction.clearTimer);
+    }
+    pendingInteraction.token.done();
+    pendingInteraction = null;
+  };
+
+  const startPendingInteraction = (kind, element, label) => {
+    clearPendingInteraction();
+    pendingInteraction = {
+      kind,
+      element,
+      confirmed: false,
+      clearTimer: 0,
+      token: show({ label, delay: TOUCH_SHOW_DELAY_MS }),
+    };
+  };
+
+  const confirmPendingInteraction = (kind, element, label) => {
+    if (
+      pendingInteraction &&
+      pendingInteraction.kind === kind &&
+      pendingInteraction.element === element
+    ) {
+      pendingInteraction.confirmed = true;
+      if (pendingInteraction.clearTimer) {
+        window.clearTimeout(pendingInteraction.clearTimer);
+        pendingInteraction.clearTimer = 0;
+      }
+      return;
+    }
+
+    clearPendingInteraction();
+    pendingInteraction = {
+      kind,
+      element,
+      confirmed: true,
+      clearTimer: 0,
+      token: show({ label, delay: 0 }),
+    };
+  };
+
+  const scheduleUnconfirmedInteractionCleanup = () => {
+    if (!pendingInteraction || pendingInteraction.confirmed) return;
+    pendingInteraction.clearTimer = window.setTimeout(() => {
+      if (pendingInteraction && !pendingInteraction.confirmed) {
+        clearPendingInteraction();
+      }
+    }, 700);
+  };
+
+  const eligibleForm = (form) => {
+    if (!(form instanceof HTMLFormElement) || form.hasAttribute("data-no-loading")) {
+      return false;
+    }
+
+    const method = String(form.getAttribute("method") || "get").trim().toLowerCase();
+    const target = String(form.getAttribute("target") || "").trim().toLowerCase();
+    return method !== "dialog" && (!target || target === "_self");
+  };
+
   const bindPageLoadingFeedback = () => {
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button !== 0 || !event.isPrimary) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+
+        const anchor = target.closest("a[href]");
+        if (anchor instanceof HTMLAnchorElement && !shouldIgnoreAnchor(anchor)) {
+          startPendingInteraction(
+            "anchor",
+            anchor,
+            anchor.getAttribute("data-loading-label") || DEFAULT_LABEL
+          );
+          return;
+        }
+
+        const submitControl = target.closest(
+          'button:not([type]), button[type="submit"], input[type="submit"], input[type="image"]'
+        );
+        const form = submitControl?.form;
+        if (eligibleForm(form)) {
+          startPendingInteraction(
+            "form",
+            form,
+            form.getAttribute("data-loading-label") || SUBMIT_LABEL
+          );
+        }
+      },
+      { capture: true, passive: true }
+    );
+
+    document.addEventListener("pointercancel", clearPendingInteraction, true);
+    document.addEventListener("pointerup", scheduleUnconfirmedInteractionCleanup, true);
+
     document.addEventListener(
       "click",
       (event) => {
-        if (event.defaultPrevented || event.button !== 0) return;
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (event.button !== 0) return;
 
         const target =
           event.target instanceof Element ? event.target : event.target?.parentElement;
@@ -257,8 +374,22 @@
         if (!anchor) return;
 
         window.setTimeout(() => {
-          if (event.defaultPrevented || shouldIgnoreAnchor(anchor)) return;
-          show({ label: anchor.getAttribute("data-loading-label") || DEFAULT_LABEL });
+          if (
+            event.defaultPrevented ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            shouldIgnoreAnchor(anchor)
+          ) {
+            clearPendingInteraction();
+            return;
+          }
+          confirmPendingInteraction(
+            "anchor",
+            anchor,
+            anchor.getAttribute("data-loading-label") || DEFAULT_LABEL
+          );
         }, 0);
       },
       true
@@ -268,17 +399,18 @@
       "submit",
       (event) => {
         const form = event.target instanceof HTMLFormElement ? event.target : null;
-        if (!form || form.hasAttribute("data-no-loading")) return;
+        if (!form) return;
 
         window.setTimeout(() => {
-          if (event.defaultPrevented || form.hasAttribute("data-no-loading")) return;
-
-          const method = String(form.getAttribute("method") || "get").trim().toLowerCase();
-          const target = String(form.getAttribute("target") || "").trim().toLowerCase();
-          if (method === "dialog") return;
-          if (target && target !== "_self") return;
-
-          show({ label: form.getAttribute("data-loading-label") || SUBMIT_LABEL });
+          if (event.defaultPrevented || !eligibleForm(form)) {
+            clearPendingInteraction();
+            return;
+          }
+          confirmPendingInteraction(
+            "form",
+            form,
+            form.getAttribute("data-loading-label") || SUBMIT_LABEL
+          );
         }, 0);
       },
       true
@@ -293,6 +425,7 @@
     withLoading,
   };
 
+  ensureOverlay();
   bindPageLoadingFeedback();
   window.addEventListener("pageshow", reset);
 })();

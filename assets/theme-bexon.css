@@ -24,8 +24,9 @@
     place-items: center;
     padding: 24px;
     background:
-        radial-gradient(circle at 50% 48%, rgba(var(--color-accent-500-rgb), 0.08), transparent 34%),
+        radial-gradient(circle at 50% 48%, rgba(var(--color-accent-500-rgb, 218, 144, 24), 0.08), transparent 34%),
         rgba(31, 34, 39, 0.42);
+    -webkit-backdrop-filter: blur(7px) saturate(112%);
     backdrop-filter: blur(7px) saturate(112%);
     opacity: 0;
     pointer-events: none;
@@ -61,13 +62,14 @@
     height: 38px;
     flex: 0 0 auto;
     border-radius: 999px;
-    border: 3px solid rgba(var(--color-accent-500-rgb), 0.18);
-    border-top-color: var(--color-accent-300);
-    border-right-color: var(--color-accent-400);
-    border-bottom-color: var(--color-accent-500);
+    border: 3px solid rgba(var(--color-accent-500-rgb, 218, 144, 24), 0.2);
+    border-top-color: var(--color-accent-300, #f5c76b);
+    border-right-color: var(--color-accent-400, #eba634);
+    border-bottom-color: var(--color-accent-500, #da9018);
     background: transparent;
     box-shadow: none;
     animation: appLoadingSpin 820ms linear infinite;
+    will-change: transform;
 }
 
 .app-loading-spinner::before {
@@ -177,26 +179,15 @@ html[data-pwa-launch-splash="closing"] .pwa-launch-splash {
 
 .pwa-launch-splash__indicator {
     position: relative;
-    width: 92px;
-    height: 4px;
-    overflow: hidden;
-    border: 1px solid rgba(var(--color-accent-500-rgb), 0.14);
+    width: 34px;
+    height: 34px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow:
-        inset 0 0 0 1px rgba(255, 255, 255, 0.03),
-        0 0 14px rgba(var(--color-accent-500-rgb), 0.08);
-}
-
-.pwa-launch-splash__indicator::before {
-    content: "";
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 42%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, rgba(var(--color-accent-400-rgb), 0.08), rgba(var(--color-accent-500-rgb), 0.98), rgba(var(--color-accent-400-rgb), 0.16));
-    box-shadow: 0 0 12px rgba(var(--color-accent-500-rgb), 0.24);
-    animation: pwaLaunchSplashSweep 1.15s cubic-bezier(0.55, 0.08, 0.44, 0.95) infinite;
+    border: 3px solid rgba(var(--color-accent-500-rgb, 218, 144, 24), 0.2);
+    border-top-color: var(--color-accent-300, #f5c76b);
+    border-right-color: var(--color-accent-400, #eba634);
+    border-bottom-color: var(--color-accent-500, #da9018);
+    animation: pwaLaunchSplashSpin 820ms linear infinite;
+    will-change: transform;
 }
 
 @keyframes pwaLaunchSplashPulse {
@@ -212,13 +203,9 @@ html[data-pwa-launch-splash="closing"] .pwa-launch-splash {
     }
 }
 
-@keyframes pwaLaunchSplashSweep {
-    0% {
-        transform: translateX(-118%);
-    }
-
-    100% {
-        transform: translateX(238%);
+@keyframes pwaLaunchSplashSpin {
+    to {
+        transform: rotate(360deg);
     }
 }
 
@@ -227,13 +214,12 @@ html[data-pwa-launch-splash="closing"] .pwa-launch-splash {
         transition: none;
     }
 
-    .pwa-launch-splash__halo,
-    .pwa-launch-splash__indicator::before {
+    .pwa-launch-splash__halo {
         animation: none;
     }
 
-    .pwa-launch-splash__indicator::before {
-        transform: translateX(78%);
+    .pwa-launch-splash__indicator {
+        animation: pwaLaunchSplashSpin 1.15s linear infinite !important;
     }
 }
 
@@ -12385,6 +12371,68 @@ body.is-dashboard .task-filters-close {
     body.is-dashboard .task-line-row.has-workspace-source .task-line-title {
         grid-column: 1 / -1;
         grid-row: 1;
+        min-height: 52px;
+        height: auto;
+        padding-right: 48px;
+        overflow: hidden;
+    }
+
+    /* Keep personal-inbox source artwork from influencing the card's grid height. */
+    body.is-dashboard .task-line-row.has-workspace-source .task-inbox-workspace-source {
+        position: absolute;
+        top: 50%;
+        right: 4px;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        width: 36px;
+        min-width: 36px;
+        max-width: 36px;
+        height: 36px;
+        min-height: 36px;
+        max-height: 36px;
+        margin: 0;
+        padding: 0;
+        gap: 0;
+        overflow: hidden;
+        border-radius: 999px;
+        transform: translateY(-50%);
+    }
+
+    body.is-dashboard .task-inbox-workspace-source .task-inbox-workspace-avatar {
+        width: 28px !important;
+        min-width: 28px !important;
+        max-width: 28px !important;
+        height: 28px !important;
+        min-height: 28px !important;
+        max-height: 28px !important;
+        margin: 0;
+        overflow: hidden;
+        border-radius: 999px;
+    }
+
+    body.is-dashboard .task-inbox-workspace-source .task-inbox-workspace-avatar img {
+        display: block;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        object-fit: cover;
+    }
+
+    body.is-dashboard .task-inbox-workspace-source > span:not(.avatar),
+    body.is-dashboard .task-inbox-workspace-source > small,
+    body.is-dashboard .task-inbox-workspace-source > .task-project-visual-inbox {
+        display: none;
+    }
+
+    body.is-dashboard .task-list-item,
+    body.is-dashboard .task-list-form,
+    body.is-dashboard .task-row-fieldset,
+    body.is-dashboard .task-line-row {
+        min-height: 0;
+        height: auto;
+        max-width: 100%;
     }
 
     body.is-dashboard .status-stepper {
@@ -12420,6 +12468,12 @@ body.is-dashboard .task-filters-close {
         width: 100%;
         min-width: 0;
         min-height: 44px;
+        border-radius: 999px;
+    }
+
+    body.is-dashboard .status-stepper .row-inline-picker,
+    body.is-dashboard .status-stepper .row-inline-picker > summary {
+        border-radius: 999px;
     }
 
     body.is-dashboard .row-assignee-picker > summary {

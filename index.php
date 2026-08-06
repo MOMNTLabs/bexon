@@ -1078,6 +1078,12 @@ $defaultTaskGroupName = $taskGroups[0] ?? 'Geral';
             <span class="pwa-launch-splash__indicator" aria-hidden="true"></span>
         </div>
     </div>
+    <div class="app-loading-overlay" data-app-loading-overlay aria-hidden="true" hidden>
+        <div class="app-loading-panel" role="status" aria-live="polite">
+            <span class="app-loading-spinner" aria-hidden="true"></span>
+            <span class="app-loading-copy" data-app-loading-label>Carregando...</span>
+        </div>
+    </div>
     <div class="bg-layer bg-layer-one" aria-hidden="true"></div>
     <div class="bg-layer bg-layer-two" aria-hidden="true"></div>
     <div class="grain" aria-hidden="true"></div>
