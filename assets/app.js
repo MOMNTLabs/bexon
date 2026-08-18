@@ -21664,10 +21664,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const taskField = root.querySelector("[data-document-task]");
   const favoriteButton = root.querySelector("[data-document-favorite]");
   const editorsState = root.querySelector("[data-document-editors]");
+  const refreshButton = root.querySelector("[data-document-refresh]");
   let saveTimer = 0;
   let presenceTimer = 0;
   let saving = false;
   let isDirty = false;
+  let saveConflict = false;
   let changeVersion = 0;
   let lastSavedSnapshot = "";
   let inFlightSnapshot = "";
@@ -21678,21 +21680,42 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState.dataset.tone = tone;
   };
 
-  const requestDocumentAction = async (fields) => {
-    const response = await fetch(window.location.pathname, {
+  const documentActionUrl = () => `${window.location.pathname}${window.location.search || ""}`;
+
+  const requestDocumentAction = async (fields, { keepalive = false } = {}) => {
+    const requestFields = { ...(fields || {}) };
+    const appReleaseId = String(document.body?.dataset?.appReleaseId || "").trim();
+    if (appReleaseId) {
+      requestFields.__app_release_id = appReleaseId;
+    }
+    const response = await fetch(documentActionUrl(), {
       method: "POST",
       credentials: "same-origin",
+      keepalive,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
+        ...(appReleaseId ? { "X-App-Release-Id": appReleaseId } : {}),
       },
-      body: new URLSearchParams(fields).toString(),
+      body: new URLSearchParams(requestFields).toString(),
     });
-    const result = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    const result = (() => {
+      try {
+        return JSON.parse(responseText);
+      } catch (_error) {
+        return {};
+      }
+    })();
     if (!response.ok || !result?.ok) {
-      const error = new Error(String(result?.error || "Nao foi possivel atualizar o documento."));
+      const error = new Error(String(result?.error || "Não foi possível atualizar o documento."));
       error.code = String(result?.code || "");
+      error.status = response.status;
+      error.payload = result;
+      error.responseText = responseText;
+      error.responseUrl = response.url;
+      error.redirected = response.redirected;
       throw error;
     }
     return result;
@@ -21741,14 +21764,59 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const documentStateSnapshot = (state = readDocumentState()) => JSON.stringify(state);
 
+  const updateSelectedListItem = (documentData, documentState) => {
+    const item = root.querySelector("[data-document-list-item].is-active");
+    if (!(item instanceof HTMLElement)) return;
+    const title = String(documentData?.title || documentState?.title || "Documento sem título").trim();
+    const preview = String(documentData?.content_text || "").trim();
+    const favorite = Boolean(Number(documentData?.is_favorite ?? documentState?.is_favorite ?? 0));
+    const titleElement = item.querySelector("[data-document-list-title]");
+    const previewElement = item.querySelector("[data-document-list-preview]");
+    if (titleElement instanceof HTMLElement) titleElement.textContent = `${favorite ? "★ " : ""}${title}`;
+    if (previewElement instanceof HTMLElement) previewElement.textContent = preview || "Documento vazio";
+    item.dataset.documentSearchText = `${title} ${preview}`.toLocaleLowerCase();
+  };
+
+  const checkDocumentSync = async () => {
+    if (root.dataset.documentShared !== "1" || document.visibilityState === "hidden") return;
+    const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
+    const csrfToken = String(root.dataset.documentCsrf || "");
+    if (documentId <= 0 || !csrfToken) return;
+    try {
+      const result = await requestDocumentAction({
+        action: "get_workspace_document_status",
+        csrf_token: csrfToken,
+        document_id: String(documentId),
+      });
+      if (result.deleted) {
+        window.location.assign("?view=documents");
+        return;
+      }
+      const localRevision = Number.parseInt(root.dataset.documentRevision || "0", 10) || 0;
+      const remoteRevision = Number.parseInt(String(result.document_revision || "0"), 10) || 0;
+      if (remoteRevision <= localRevision) return;
+      saveConflict = true;
+      if (isDirty || saving) {
+        isDirty = true;
+        setSaveState("Nova versão disponível: copie suas alterações antes de atualizar", "error");
+      } else {
+        setSaveState("Nova versão disponível");
+      }
+      if (refreshButton instanceof HTMLButtonElement) refreshButton.hidden = false;
+    } catch (_error) {
+      // A sincronização é silenciosa e tenta novamente no próximo intervalo.
+    }
+  };
+
   if (titleInput instanceof HTMLInputElement && editor instanceof HTMLElement) {
     lastSavedSnapshot = documentStateSnapshot();
   }
 
-  const saveDocument = async () => {
+  const saveDocument = async ({ keepalive = false } = {}) => {
     if (
       saving ||
       !isDirty ||
+      saveConflict ||
       !(titleInput instanceof HTMLInputElement) ||
       !(editor instanceof HTMLElement)
     ) {
@@ -21773,52 +21841,41 @@ document.addEventListener("DOMContentLoaded", () => {
     const savingVersion = changeVersion;
     inFlightSnapshot = snapshot;
     setSaveState("Salvando…");
-    const payload = new URLSearchParams({
-      action: "update_workspace_document",
-      csrf_token: csrfToken,
-      document_id: String(documentId),
-      expected_revision: String(revision),
-      ...documentState,
-    });
-
     let saveSucceeded = false;
 
     try {
-      const response = await fetch(window.location.pathname, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        body: payload.toString(),
+      const result = await requestDocumentAction({
+        action: "update_workspace_document",
+        csrf_token: csrfToken,
+        document_id: String(documentId),
+        expected_revision: String(revision),
+        ...documentState,
+      }, {
+        keepalive,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result?.ok) {
-        if (result?.code === "document_conflict") {
-          isDirty = false;
-          setSaveState("Alterado por outra pessoa", "error");
-          return;
-        }
-        throw new Error(String(result?.error || "Não foi possível salvar o documento."));
-      }
 
       const documentData = result.document || {};
       root.dataset.documentRevision = String(documentData.revision || revision + 1);
       lastSavedSnapshot = snapshot;
+      updateSelectedListItem(documentData, documentState);
       saveSucceeded = true;
       isDirty = documentStateSnapshot() !== lastSavedSnapshot;
       setSaveState(isDirty ? "Alterações não salvas" : "Salvo");
     } catch (error) {
       isDirty = true;
-      setSaveState("Não foi possível salvar", "error");
+      if (error?.code === "document_conflict") {
+        saveConflict = true;
+        setSaveState("Conflito: copie suas alterações e recarregue", "error");
+        if (refreshButton instanceof HTMLButtonElement) refreshButton.hidden = false;
+      } else {
+        setSaveState("Não foi possível salvar", "error");
+      }
       console.error(error);
     } finally {
       saving = false;
       inFlightSnapshot = "";
       const changedWhileSaving = changeVersion !== savingVersion;
-      if (isDirty && (saveSucceeded || changedWhileSaving)) {
+      if (!saveConflict && isDirty && (saveSucceeded || changedWhileSaving)) {
         window.clearTimeout(saveTimer);
         saveTimer = window.setTimeout(() => void saveDocument(), 850);
       }
@@ -21827,6 +21884,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const scheduleSave = () => {
     if (!(titleInput instanceof HTMLInputElement) || !(editor instanceof HTMLElement)) return;
+    if (saveConflict) {
+      isDirty = true;
+      setSaveState("Conflito: copie suas alterações e recarregue", "error");
+      return;
+    }
     const snapshot = documentStateSnapshot();
     const referenceSnapshot = saving ? inFlightSnapshot : lastSavedSnapshot;
     if (snapshot === referenceSnapshot) return;
@@ -21956,6 +22018,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const refreshDocument = target.closest("[data-document-refresh]");
+    if (refreshDocument instanceof HTMLElement) {
+      event.preventDefault();
+      window.location.reload();
+      return;
+    }
+
     const createButton = target.closest("[data-document-create]");
     if (createButton instanceof HTMLElement) {
       event.preventDefault();
@@ -21963,24 +22032,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!csrfToken) return;
       createButton.setAttribute("aria-busy", "true");
       try {
-        const response = await fetch(window.location.pathname, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: new URLSearchParams({ action: "create_workspace_document", csrf_token: csrfToken }).toString(),
+        const result = await requestDocumentAction({
+          action: "create_workspace_document",
+          csrf_token: csrfToken,
         });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result?.ok || !result.redirect_path) {
-          throw new Error(String(result?.error || "Não foi possível criar o documento."));
+        if (!result.redirect_path) {
+          throw new Error("Não foi possível abrir o documento criado.");
         }
         window.location.assign(String(result.redirect_path));
       } catch (error) {
         console.error(error);
-        window.alert("Não foi possível criar o documento agora.");
+        window.alert(String(error?.message || "Não foi possível criar o documento agora."));
       } finally {
         createButton.removeAttribute("aria-busy");
       }
@@ -21995,24 +22057,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const csrfToken = String(root.dataset.documentCsrf || "");
       if (documentId <= 0 || !csrfToken) return;
       try {
-        const response = await fetch(window.location.pathname, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-          },
-          body: new URLSearchParams({
-            action: "trash_workspace_document",
-            csrf_token: csrfToken,
-            document_id: String(documentId),
-          }).toString(),
+        const result = await requestDocumentAction({
+          action: "trash_workspace_document",
+          csrf_token: csrfToken,
+          document_id: String(documentId),
         });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result?.ok || !result.redirect_path) {
-          throw new Error(String(result?.error || "Não foi possível mover o documento."));
-        }
+        if (!result.redirect_path) throw new Error("Não foi possível mover o documento.");
         window.location.assign(String(result.redirect_path));
       } catch (error) {
         console.error(error);
@@ -22035,7 +22085,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (result.redirect_path) window.location.assign(String(result.redirect_path));
       } catch (error) {
         console.error(error);
-        window.alert("Nao foi possivel restaurar o documento.");
+        window.alert("Não foi possível restaurar o documento.");
       }
       return;
     }
@@ -22043,7 +22093,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const restoreRevisionButton = target.closest("[data-document-restore-revision]");
     if (restoreRevisionButton instanceof HTMLElement) {
       event.preventDefault();
-      if (!window.confirm("Restaurar esta versao? A versao atual ficara no historico.")) return;
+      if (!window.confirm("Restaurar esta versão? A versão atual ficará no histórico.")) return;
       const documentId = Number.parseInt(root.dataset.documentId || "0", 10) || 0;
       const revisionId = Number.parseInt(restoreRevisionButton.dataset.documentRevisionId || "0", 10) || 0;
       const revision = Number.parseInt(root.dataset.documentRevision || "0", 10) || 0;
@@ -22060,7 +22110,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (result.redirect_path) window.location.assign(String(result.redirect_path));
       } catch (error) {
         console.error(error);
-        window.alert("Nao foi possivel restaurar esta versao.");
+        window.alert("Não foi possível restaurar esta versão.");
       }
     }
   });
@@ -22083,9 +22133,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  window.addEventListener("beforeunload", () => {
-    if (isDirty) void saveDocument();
+  const flushDocumentOnExit = () => {
+    if (isDirty && !saving && !saveConflict) void saveDocument({ keepalive: true });
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushDocumentOnExit();
+      return;
+    }
+    void checkDocumentSync();
   });
+  window.addEventListener("pagehide", flushDocumentOnExit);
+  if (titleInput instanceof HTMLInputElement && editor instanceof HTMLElement && root.dataset.documentShared === "1") {
+    window.setInterval(() => void checkDocumentSync(), 20000);
+  }
 });
 
 document.addEventListener("DOMContentLoaded", () => {

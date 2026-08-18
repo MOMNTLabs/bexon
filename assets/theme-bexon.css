@@ -11936,6 +11936,21 @@ body.is-dashboard .document-save-state[data-tone="error"] {
     color: #b65050;
 }
 
+body.is-dashboard .document-refresh-button {
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 1px solid rgba(var(--color-accent-500-rgb), 0.32);
+    border-radius: 8px;
+    background: rgba(var(--color-accent-500-rgb), 0.08);
+    color: var(--color-accent-700);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+body.is-dashboard .document-refresh-button[hidden] {
+    display: none;
+}
+
 body.is-dashboard .document-trash-button {
     width: 26px;
     height: 26px;

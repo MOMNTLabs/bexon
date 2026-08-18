@@ -23,13 +23,13 @@ function workspaceDocumentLinkMetadata(PDO $pdo, int $workspaceId, int $userId):
         $taskStmt->execute([':task_id' => $linkedTaskId, ':workspace_id' => $workspaceId]);
         $task = $taskStmt->fetch();
         if (!$task) {
-            throw new RuntimeException('A tarefa vinculada nÃ£o existe neste workspace.');
+            throw new RuntimeException('A tarefa vinculada não existe neste workspace.');
         }
         $projectName = normalizeTaskGroupName((string) ($task['group_name'] ?? 'Geral'));
     }
 
     if ($projectName !== '' && !userCanViewTaskGroup($userId, $workspaceId, $projectName)) {
-        throw new RuntimeException('VocÃª nÃ£o possui acesso a esse projeto.');
+        throw new RuntimeException('Você não possui acesso a esse projeto.');
     }
 
     return [
@@ -48,6 +48,7 @@ function handleDocumentsPostAction(PDO $pdo, string $action): bool
         'restore_workspace_document',
         'restore_workspace_document_revision',
         'touch_workspace_document_presence',
+        'get_workspace_document_status',
     ], true)) {
         return false;
     }
@@ -107,7 +108,7 @@ function handleDocumentsPostAction(PDO $pdo, string $action): bool
 
     if ($action === 'restore_workspace_document') {
         if (!restoreWorkspaceDocument($pdo, $workspaceId, $documentId)) {
-            throw new RuntimeException('O documento nÃ£o estÃ¡ na lixeira.');
+            throw new RuntimeException('O documento não está na lixeira.');
         }
         if (requestExpectsJson()) {
             respondJson([
@@ -128,6 +129,18 @@ function handleDocumentsPostAction(PDO $pdo, string $action): bool
         redirectTo(documentsRedirectPath($documentId));
     }
 
+    if ($action === 'get_workspace_document_status') {
+        $latest = workspaceDocumentById($workspaceId, $documentId, true);
+        if (requestExpectsJson()) {
+            respondJson([
+                'ok' => true,
+                'document_revision' => (int) ($latest['revision'] ?? 0),
+                'deleted' => $latest === null || !empty($latest['deleted_at']),
+            ]);
+        }
+        redirectTo(documentsRedirectPath($documentId));
+    }
+
     $expectedRevision = max(0, (int) ($_POST['expected_revision'] ?? 0));
     if ($action === 'restore_workspace_document_revision') {
         $revisionId = max(0, (int) ($_POST['revision_id'] ?? 0));
@@ -140,7 +153,7 @@ function handleDocumentsPostAction(PDO $pdo, string $action): bool
             $expectedRevision
         );
         if ($document === null) {
-            throw new RuntimeException('NÃ£o foi possÃ­vel restaurar esta versÃ£o. Recarregue o documento e tente novamente.');
+            throw new RuntimeException('Não foi possível restaurar esta versão. Recarregue o documento e tente novamente.');
         }
         if (requestExpectsJson()) {
             respondJson([

@@ -2179,6 +2179,12 @@ function ensureWorkspaceVaultSchema(PDO $pdo): void
 
 function ensureWorkspaceDocumentsSchema(PDO $pdo): void
 {
+    static $ensuredConnections = [];
+    $connectionKey = spl_object_id($pdo);
+    if (!empty($ensuredConnections[$connectionKey])) {
+        return;
+    }
+
     if (dbDriverName($pdo) === 'pgsql') {
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS workspace_documents (
@@ -2306,13 +2312,14 @@ function ensureWorkspaceDocumentsSchema(PDO $pdo): void
     }
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_workspace_document_revisions_document ON workspace_document_revisions(document_id, document_revision DESC)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_workspace_document_presence_document ON workspace_document_presence(document_id, updated_at DESC)');
+    $ensuredConnections[$connectionKey] = true;
 }
 
 function normalizeWorkspaceDocumentTitle(string $value): string
 {
     $value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
     if ($value === '') {
-        return 'Documento sem titulo';
+        return 'Documento sem título';
     }
 
     return mb_substr($value, 0, 160);
@@ -2334,6 +2341,11 @@ function sanitizeWorkspaceDocumentHtml(string $html): string
     $html = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
     $html = preg_replace('/\s+style\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/iu', '', $html) ?? '';
     $html = preg_replace('/<div\b[^>]*>/iu', '<div>', $html) ?? '';
+    $html = preg_replace(
+        '/<(p|br|strong|b|em|i|u|h2|h3|ul|ol|li|blockquote)\b[^>]*>/iu',
+        '<$1>',
+        $html
+    ) ?? '';
     $html = preg_replace_callback(
         '/<a\b([^>]*)>/iu',
         static function (array $match): string {
@@ -2367,6 +2379,7 @@ function sanitizeWorkspaceDocumentHtml(string $html): string
 
 function workspaceDocumentTextFromHtml(string $html): string
 {
+    $html = preg_replace('/<(?:br\s*\/?|\/(?:div|p|li|h2|h3|blockquote))>/iu', ' ', $html) ?? $html;
     $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $text = trim(preg_replace('/\s+/u', ' ', $text) ?? '');
     return mb_substr($text, 0, 180000);

@@ -27,6 +27,7 @@ $selectedTaskId = (int) ($selectedDocument['linked_task_id'] ?? 0);
         data-document-id="<?= e((string) $selectedDocumentId) ?>"
         data-document-revision="<?= e((string) ($selectedDocument['revision'] ?? 0)) ?>"
         data-document-csrf="<?= e(csrfToken()) ?>"
+        data-document-shared="<?= empty($isPersonalWorkspace) ? '1' : '0' ?>"
     >
         <aside class="documents-sidebar" aria-label="Lista de documentos">
             <div class="documents-sidebar-head">
@@ -66,8 +67,8 @@ $selectedTaskId = (int) ($selectedDocument['linked_task_id'] ?? 0);
                             data-document-list-item
                             data-document-search-text="<?= e(mb_strtolower($documentTitle . ' ' . $documentPreview)) ?>"
                         >
-                            <strong><?= !empty($document['is_favorite']) ? '★ ' : '' ?><?= e($documentTitle) ?></strong>
-                            <span><?= e($documentPreview !== '' ? mb_substr($documentPreview, 0, 78) : 'Documento vazio') ?></span>
+                            <strong data-document-list-title><?= !empty($document['is_favorite']) ? '★ ' : '' ?><?= e($documentTitle) ?></strong>
+                            <span data-document-list-preview><?= e($documentPreview !== '' ? mb_substr($documentPreview, 0, 78) : 'Documento vazio') ?></span>
                             <?php if ($documentProjectName !== ''): ?><small class="documents-list-project"><?= e($documentProjectName) ?></small><?php endif; ?>
                             <small><?= e($documentUpdatedAt !== '' ? date('d/m H:i', strtotime($documentUpdatedAt)) : '') ?></small>
                         </a>
@@ -100,6 +101,7 @@ $selectedTaskId = (int) ($selectedDocument['linked_task_id'] ?? 0);
                         title="Favoritar documento"
                     >★</button>
                     <span class="document-save-state" data-document-save-state aria-live="polite">Salvo</span>
+                    <button type="button" class="document-refresh-button" data-document-refresh hidden>Atualizar</button>
                     <button type="button" class="document-trash-button" data-document-trash aria-label="Mover documento para a lixeira" title="Mover para a lixeira">&times;</button>
                 </div>
                 <input
