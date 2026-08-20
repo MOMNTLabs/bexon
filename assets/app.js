@@ -7708,6 +7708,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const typeSelect = form.querySelector("[data-accounting-type-select]");
     const automationTypeField = form.querySelector("[data-accounting-automation-type]");
     const cashflowNote = form.querySelector("[data-accounting-cashflow-note]");
+    const wasInstallment = form.dataset.accountingInstallmentActive === "1";
 
     if (!(installmentToggle instanceof HTMLInputElement)) return;
     if (!(installmentFields instanceof HTMLElement)) return;
@@ -7895,13 +7896,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (!isInstallment) {
       installmentProgressField.value = "";
-      if (String(totalAmountField.value || "").trim() !== "") {
+      // Reuse the total only when the user has actually left installment mode.
+      // Routine syncs must not overwrite edits to single, monthly or weekly values.
+      if (wasInstallment && String(totalAmountField.value || "").trim() !== "") {
         primaryAmountField.value = totalAmountField.value;
       }
+      form.dataset.accountingInstallmentActive = "0";
       syncAccountingCreateSubitems(form);
       return;
     }
 
+    form.dataset.accountingInstallmentActive = "1";
     installmentProgressField.value = `${installmentNumber}/${installmentTotal}`;
 
     if (String(totalAmountField.value || "").trim() === "") {
@@ -21317,18 +21322,6 @@ window.addEventListener("DOMContentLoaded", () => {
       labelField.focus();
       labelField.select();
     }
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = getEventTargetElement(event);
-    if (!(target instanceof HTMLElement)) return;
-
-    document.querySelectorAll(".accounting-entry-row.is-editing").forEach((openRow) => {
-      if (!(openRow instanceof HTMLElement)) return;
-      if (openRow.contains(target)) return;
-      if (openRow.querySelector(".accounting-entry-subitem-row.is-editing")) return;
-      closeAccountingEntryEditor(openRow);
-    });
   });
 
   document.addEventListener("click", (event) => {
