@@ -15652,6 +15652,35 @@ select option:checked,
     max-width: 100%;
 }
 
+.accounting-occurrence-group-shell {
+    position: relative;
+    min-width: 0;
+    max-width: 100%;
+    margin: 7px 0;
+}
+
+.accounting-occurrence-group-shell > .accounting-occurrence-group {
+    margin: 0;
+}
+
+.accounting-occurrence-group-shell.is-weekly > .accounting-occurrence-group > summary {
+    padding-right: 42px;
+}
+
+.accounting-occurrence-group-delete-form {
+    position: absolute;
+    top: 8px;
+    right: 7px;
+    z-index: 2;
+}
+
+.accounting-occurrence-group-delete-form .vault-entry-delete-button {
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    min-height: 26px;
+}
+
 .accounting-occurrence-group.is-carried {
     border-color: rgba(214, 163, 72, 0.34);
     background: rgba(255, 250, 240, 0.72);

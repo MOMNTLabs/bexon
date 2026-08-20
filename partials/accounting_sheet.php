@@ -497,44 +497,46 @@
                 $weeklyStartDate = dueDateForStorage((string) ($firstEntry['weekly_anchor_date'] ?? ''))
                     ?? dueDateForStorage((string) ($firstEntry['due_date'] ?? ''))
                     ?? '';
+                $firstEntryId = max(0, (int) ($firstEntry['id'] ?? 0));
                 ob_start();
                 ?>
-                <details class="accounting-occurrence-group<?= $isWeekly ? ' is-weekly' : ' is-carried' ?>">
-                    <summary>
-                        <span class="accounting-occurrence-group-title">
-                            <strong><?= e($label) ?></strong>
-                            <span><?= $isWeekly ? e($count . ' semanas') : e($count . ' itens') ?></span>
+                <div class="accounting-occurrence-group-shell<?= $isWeekly ? ' is-weekly' : ' is-carried' ?>">
+                    <details class="accounting-occurrence-group<?= $isWeekly ? ' is-weekly' : ' is-carried' ?>">
+                        <summary>
+                            <span class="accounting-occurrence-group-title">
+                                <strong><?= e($label) ?></strong>
+                                <span><?= $isWeekly ? e($count . ' semanas') : e($count . ' itens') ?></span>
+                                <?php if ($isWeekly): ?>
+                                    <span><?= e($settledCount . '/' . $count . ' ' . strtolower($typeLabel)) ?></span>
+                                <?php endif; ?>
+                            </span>
+                            <span class="accounting-occurrence-group-total"><?= $renderAccountingMoney($totalDisplay) ?></span>
+                        </summary>
+                        <div class="accounting-occurrence-group-body">
                             <?php if ($isWeekly): ?>
-                                <span><?= e($settledCount . '/' . $count . ' ' . strtolower($typeLabel)) ?></span>
+                                <form method="post" class="accounting-occurrence-group-edit" data-accounting-form autocomplete="off">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                                    <input type="hidden" name="action" value="update_accounting_entry">
+                                    <input type="hidden" name="entry_id" value="<?= e((string) $firstEntryId) ?>">
+                                    <input type="hidden" name="period_key" value="<?= e($periodKey) ?>">
+                                    <input type="hidden" name="entry_type" value="<?= e($entryType) ?>">
+                                    <input type="hidden" name="accounting_type_choice" value="weekly">
+                                    <input type="hidden" name="weekly_day" value="<?= e((string) $weeklyDay) ?>">
+                                    <input type="hidden" name="preserve_settlement" value="1">
+                                    <input type="text" name="label" value="<?= e((string) ($firstEntry['label'] ?? '')) ?>" class="accounting-input accounting-input-label" maxlength="120" required>
+                                    <label class="accounting-occurrence-group-value">
+                                        <span>Por semana</span>
+                                        <input type="text" name="amount_value" value="<?= e($weeklyAmountInput) ?>" class="accounting-input accounting-input-amount" inputmode="numeric" required>
+                                    </label>
+                                    <label class="accounting-occurrence-group-value">
+                                        <span>Começa em</span>
+                                        <input type="date" name="weekly_start_date" value="<?= e($weeklyStartDate) ?>" class="accounting-input" required>
+                                    </label>
+                                    <button type="submit" class="btn btn-mini btn-ghost">Salvar recorrência</button>
+                                </form>
                             <?php endif; ?>
-                        </span>
-                        <span class="accounting-occurrence-group-total"><?= $renderAccountingMoney($totalDisplay) ?></span>
-                    </summary>
-                    <div class="accounting-occurrence-group-body">
-                        <?php if ($isWeekly): ?>
-                            <form method="post" class="accounting-occurrence-group-edit" data-accounting-form autocomplete="off">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
-                                <input type="hidden" name="action" value="update_accounting_entry">
-                                <input type="hidden" name="entry_id" value="<?= e((string) ((int) ($firstEntry['id'] ?? 0))) ?>">
-                                <input type="hidden" name="period_key" value="<?= e($periodKey) ?>">
-                                <input type="hidden" name="entry_type" value="<?= e($entryType) ?>">
-                                <input type="hidden" name="accounting_type_choice" value="weekly">
-                                <input type="hidden" name="weekly_day" value="<?= e((string) $weeklyDay) ?>">
-                                <input type="hidden" name="preserve_settlement" value="1">
-                                <input type="text" name="label" value="<?= e((string) ($firstEntry['label'] ?? '')) ?>" class="accounting-input accounting-input-label" maxlength="120" required>
-                                <label class="accounting-occurrence-group-value">
-                                    <span>Por semana</span>
-                                    <input type="text" name="amount_value" value="<?= e($weeklyAmountInput) ?>" class="accounting-input accounting-input-amount" inputmode="numeric" required>
-                                </label>
-                                <label class="accounting-occurrence-group-value">
-                                    <span>Começa em</span>
-                                    <input type="date" name="weekly_start_date" value="<?= e($weeklyStartDate) ?>" class="accounting-input" required>
-                                </label>
-                                <button type="submit" class="btn btn-mini btn-ghost">Salvar recorrência</button>
-                            </form>
-                        <?php endif; ?>
-                        <div class="accounting-occurrence-list">
-                            <?php foreach ($entries as $occurrence): ?>
+                            <div class="accounting-occurrence-list">
+                                <?php foreach ($entries as $occurrence): ?>
                                 <?php
                                 $occurrenceId = (int) ($occurrence['id'] ?? 0);
                                 $occurrenceLabel = (string) ($occurrence['label'] ?? '');
@@ -576,10 +578,34 @@
                                         </label>
                                     <?php endif; ?>
                                 </form>
-                            <?php endforeach; ?>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
-                    </div>
-                </details>
+                    </details>
+                    <?php if ($isWeekly && $firstEntryId > 0): ?>
+                        <form
+                            method="post"
+                            class="accounting-entry-delete-form accounting-occurrence-group-delete-form"
+                            data-accounting-delete-impact="Escolha se deseja excluir uma semana, parte da recorrência ou todos os lançamentos semanais."
+                            data-accounting-delete-scopes="single,future,past,all"
+                        >
+                            <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                            <input type="hidden" name="action" value="delete_accounting_entry">
+                            <input type="hidden" name="entry_id" value="<?= e((string) $firstEntryId) ?>">
+                            <input type="hidden" name="period_key" value="<?= e($periodKey) ?>">
+                            <input type="hidden" name="delete_confirmed" value="0">
+                            <input type="hidden" name="delete_scope" value="single">
+                            <button
+                                type="submit"
+                                class="vault-entry-delete-button"
+                                aria-label="Excluir recorrência semanal de <?= e($label) ?>"
+                                title="Excluir"
+                            >
+                                <span aria-hidden="true">&#10005;</span>
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                </div>
                 <?php
                 return (string) ob_get_clean();
             };
